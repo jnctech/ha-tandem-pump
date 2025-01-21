@@ -254,27 +254,28 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             "timeToNextCalibHours", UNAVAILABLE
         )
 
-        if recent_data["activeInsulin"] and "amount" in recent_data["activeInsulin"]:
-            # Active insulin sensor
-            active_insulin = recent_data["activeInsulin"]
+        if recent_data["activeInsulin"]:
+            if "amount" in recent_data["activeInsulin"]:
+                # Active insulin sensor
+                active_insulin = recent_data["activeInsulin"]
 
-            amount = recent_data["activeInsulin"].setdefault(
-                "amount", UNAVAILABLE
-            )
-            if amount is not None and float(amount) >= 0:
-                data[SENSOR_KEY_ACTIVE_INSULIN] = round(float(amount), 2)
+                amount = recent_data["activeInsulin"].setdefault(
+                    "amount", UNAVAILABLE
+                )
+                if amount is not None and float(amount) >= 0:
+                    data[SENSOR_KEY_ACTIVE_INSULIN] = round(float(amount), 2)
 
-                if "datetime" in active_insulin:
-                    date_time_local = convert_date_to_isodate(active_insulin["datetime"])
+                    if "datetime" in active_insulin:
+                        date_time_local = convert_date_to_isodate(active_insulin["datetime"])
 
-                    data[SENSOR_KEY_ACTIVE_INSULIN_ATTRS] = {
-                        "last_update": date_time_local.replace(tzinfo=timezone)
-                    }
+                        data[SENSOR_KEY_ACTIVE_INSULIN_ATTRS] = {
+                            "last_update": date_time_local.replace(tzinfo=timezone)
+                        }
         else:
             data[SENSOR_KEY_ACTIVE_INSULIN] = UNAVAILABLE
             data[SENSOR_KEY_ACTIVE_INSULIN_ATTRS] = {}
 
-        if "dateTime" in recent_data["lastAlarm"]:
+        if recent_data["lastAlarm"] and "dateTime" in recent_data["lastAlarm"]:
             # Last alarm sensor
             last_alarm = recent_data["lastAlarm"]
 
@@ -312,11 +313,13 @@ class CarelinkCoordinator(DataUpdateCoordinator):
         averageSGRaw = recent_data.setdefault("averageSG", UNAVAILABLE)
         if averageSGRaw is not None:
             data[SENSOR_KEY_AVG_GLUCOSE_MMOL] = float(
-                round(recent_data.setdefault("averageSG", UNAVAILABLE) * 0.0555, 2)
+                round(averageSGRaw * 0.0555, 2)
             )
-        data[SENSOR_KEY_AVG_GLUCOSE_MGDL] = recent_data.setdefault(
-            "averageSG", UNAVAILABLE
-        )
+            data[SENSOR_KEY_AVG_GLUCOSE_MGDL] = averageSGRaw
+        else:
+            data[SENSOR_KEY_AVG_GLUCOSE_MMOL] = UNAVAILABLE
+            data[SENSOR_KEY_AVG_GLUCOSE_MGDL] = UNAVAILABLE
+            
         data[SENSOR_KEY_BELOW_HYPO_LIMIT] = recent_data.setdefault(
             "belowHypoLimit", UNAVAILABLE
         )

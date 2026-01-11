@@ -1,0 +1,15 @@
+services:
+  carelink-token-tool:
+    build: .
+    image: carelink-token-tool:latest
+    container_name: carelink-token-tool
+    ports:
+      # Bind to localhost only for security
+      - "127.0.0.1:6080:6080"
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./output:/output
+    env_file:
+      - .env
+    # Needed for browser rendering
+    shm_size: "2gb"

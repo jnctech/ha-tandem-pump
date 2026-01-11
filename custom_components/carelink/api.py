@@ -99,6 +99,12 @@ class CarelinkClient:
             self._async_client = httpx.AsyncClient()
         return self._async_client
 
+    async def close(self):
+        """Close the HTTP client."""
+        if self._async_client:
+            await self._async_client.aclose()
+            self._async_client = None
+
     async def fetch_async(self, url, headers, params=None):
         """Perform an async get request."""
         response = await self.async_client.get(
@@ -267,7 +273,7 @@ class CarelinkClient:
         printdbg("_get_access_token_payload()")
         try:
             token = token_data["access_token"]
-        except:
+        except (KeyError, TypeError):
             printdbg("no access token found")
             return None
         try:
@@ -284,8 +290,8 @@ class CarelinkClient:
             # Get expiration time stamp
             token_validto = payload_json["exp"]
             token_validto -= 600
-        except:
-            printdbg("Malformed access token")
+        except (KeyError, IndexError, ValueError, json.JSONDecodeError) as error:
+            printdbg(f"Malformed access token: {error}")
             return None
         # Save expiration time
         self.__auth_token_validto = datetime.fromtimestamp(token_validto, tz=timezone.utc).strftime('%a %b %d %H:%M:%S UTC %Y')
@@ -315,7 +321,7 @@ class CarelinkClient:
                         patient = self.__selectPatient(sessionPatients)
                         if patient:
                             self.__carelink_patient_id = patient["username"]
-                            printdbg("Found patient %s %s (%s)" % (patient["firstName"],patient["lastName"],self.__carelink_patient_id))
+                            printdbg("Found patient [REDACTED] [REDACTED] ([REDACTED])")
                         else:
                             printdbg("No patient found.")
             except Exception as error:
@@ -404,35 +410,43 @@ class CarelinkClient:
 
     async def _write_token_file(self, obj, filename):
         printdbg("_write_token_file()")
-        with open(filename, 'w') as f:
-            json.dump(obj, f, indent=4)
+        directory = os.path.dirname(filename)
+        if directory:
+            await asyncio.to_thread(os.makedirs, directory, exist_ok=True)
+        async with aiofiles.open(filename, 'w') as f:
+            await f.write(json.dumps(obj, indent=4))
 
     async def _process_token_file(self, filename):
         printdbg("_process_token_file()")
         token_data = None
-        if os.path.isfile(filename):
-            try:
-                async with aiofiles.open(filename,  mode="r") as f:
-                    token_data = json.loads(await f.read())
-            except:
-                printdbg("ERROR: failed parsing token file %s" % filename)
-            cfg_complete=True
+        file_exists = False
+        try:
+            async with aiofiles.open(filename, mode="r") as f:
+                token_data = json.loads(await f.read())
+                file_exists = True
+        except FileNotFoundError:
+            printdbg(f"Authentification file {filename} does not exist.")
+        except (OSError, json.JSONDecodeError) as error:
+            printdbg(f"ERROR: failed parsing token file {filename}: {error}")
+            file_exists = True  # File exists but failed to parse
+
+        if file_exists:
+            cfg_complete = True
             if token_data is not None:
                 required_fields = ["access_token", "refresh_token", "client_id"]
                 for f in required_fields:
                     if f not in token_data:
                         printdbg("ERROR: field %s is missing from token file" % f)
-                        cfg_complete=False
+                        cfg_complete = False
             if not cfg_complete:
-                token_data=None
+                token_data = None
         else:
-            printdbg(f"Authentification file {filename} does not exist.")
             if self.__carelink_access_token and self.__carelink_refresh_token and self.__client_id:
-                printdbg(f"Found static configuration. Create Authentificaiton file.")
-                token_data = {"access_token" : self.__carelink_access_token,
-                            "refresh_token" : self.__carelink_refresh_token,
-                            "client_id" : self.__client_id,
-                            }
+                printdbg("Found static configuration. Create Authentificaiton file.")
+                token_data = {"access_token": self.__carelink_access_token,
+                             "refresh_token": self.__carelink_refresh_token,
+                             "client_id": self.__client_id,
+                             }
                 if self.__client_secret:
                     token_data["client_secret"] = self.__client_secret
                 if self.__mag_identifier:

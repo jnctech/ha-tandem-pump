@@ -78,12 +78,28 @@ class CarelinkAuth:
 
         sso_config = requests.get(sso_url).json()
 
+        logger.debug(f"SSO config keys: {sso_config.keys()}")
+
         if is_auth0:
-            api_base_url = sso_config.get("issuer", "").rstrip("/")
+            # Auth0 config may have issuer at top level or we need to construct from server
+            if "issuer" in sso_config and sso_config["issuer"]:
+                api_base_url = sso_config["issuer"].rstrip("/")
+            elif "server" in sso_config:
+                api_base_url = f"https://{sso_config['server']['hostname']}:{sso_config['server']['port']}/{sso_config['server']['prefix']}"
+            else:
+                # Fallback: construct from authorization endpoint
+                auth_endpoint = sso_config.get("system_endpoints", {}).get("authorization_endpoint_path", "")
+                if auth_endpoint.startswith("http"):
+                    api_base_url = auth_endpoint.rsplit("/", 1)[0]
+                else:
+                    raise Exception(f"Cannot determine API base URL from SSO config: {list(sso_config.keys())}")
         else:
             api_base_url = f"https://{sso_config['server']['hostname']}:{sso_config['server']['port']}/{sso_config['server']['prefix']}"
-            if api_base_url.endswith("/"):
-                api_base_url = api_base_url[:-1]
+
+        if api_base_url.endswith("/"):
+            api_base_url = api_base_url[:-1]
+
+        logger.info(f"API base URL: {api_base_url}")
 
         return sso_config, api_base_url, is_auth0
 

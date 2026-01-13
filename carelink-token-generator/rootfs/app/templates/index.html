@@ -246,6 +246,29 @@
         .btn-small:hover {
             background-color: #0288d1;
         }
+
+        .proxy-warning {
+            margin-top: 16px;
+            padding: 12px;
+            background-color: rgba(255, 152, 0, 0.2);
+            border: 1px solid rgba(255, 152, 0, 0.5);
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .proxy-warning p {
+            margin: 4px 0;
+        }
+
+        .proxy-warning code {
+            display: block;
+            margin-top: 8px;
+            padding: 8px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            font-family: monospace;
+            word-break: break-all;
+        }
     </style>
 </head>
 <body>
@@ -273,10 +296,16 @@
             </button>
 
             <div id="vnc-link" class="vnc-container" style="display: none;">
-                <a id="vnc-btn" href="#" target="_blank" class="btn btn-vnc">
+                <button id="vnc-btn" class="btn btn-vnc" onclick="openVncWindow()">
                     Open Browser Window
-                </a>
+                </button>
                 <p class="vnc-hint">Click to see the login page and enter your credentials</p>
+
+                <div id="proxy-warning" class="proxy-warning" style="display: none;">
+                    <p><strong>Using a reverse proxy?</strong></p>
+                    <p>Port 6080 may not be accessible. Try this URL instead:</p>
+                    <code id="local-vnc-url"></code>
+                </div>
 
                 <div class="clipboard-helper">
                     <input type="text" id="clipboard-text" placeholder="Paste text here to send to browser" />
@@ -375,6 +404,7 @@
                     startBtn.style.display = 'none';
                     resetBtn.style.display = 'block';
                     vncLink.style.display = 'none';
+                    closeVncWindow();
                     break;
 
                 case 'error':
@@ -413,10 +443,51 @@
             .catch(error => console.error('Error:', error));
         }
 
-        // Set VNC URL based on current hostname
-        const vncBtn = document.getElementById('vnc-btn');
+        // VNC window management
+        let vncWindow = null;
         const hostname = window.location.hostname;
-        vncBtn.href = `http://${hostname}:6080/vnc.html?autoconnect=true`;
+        const vncUrl = `http://${hostname}:6080/vnc.html?autoconnect=true`;
+
+        function openVncWindow() {
+            vncWindow = window.open(vncUrl, 'carelink_vnc', 'width=1040,height=800');
+
+            // Show proxy warning if not a local IP
+            if (!isLocalIP(hostname)) {
+                showProxyWarning();
+            }
+        }
+
+        function closeVncWindow() {
+            if (vncWindow && !vncWindow.closed) {
+                vncWindow.close();
+                vncWindow = null;
+            }
+        }
+
+        function isLocalIP(host) {
+            // Check if hostname is a local IP address
+            return /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|localhost|127\.)/.test(host);
+        }
+
+        function showProxyWarning() {
+            const warning = document.getElementById('proxy-warning');
+            const urlCode = document.getElementById('local-vnc-url');
+            warning.style.display = 'block';
+
+            // Fetch local IP from server
+            fetch('./local-ip')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.ip) {
+                        urlCode.textContent = `http://${data.ip}:6080/vnc.html?autoconnect=true`;
+                    } else {
+                        urlCode.textContent = 'http://[YOUR-HA-IP]:6080/vnc.html?autoconnect=true';
+                    }
+                })
+                .catch(() => {
+                    urlCode.textContent = 'http://[YOUR-HA-IP]:6080/vnc.html?autoconnect=true';
+                });
+        }
 
         // Initial status check
         fetch('./status')

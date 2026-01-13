@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import socket
 import subprocess
 import threading
 from flask import Flask, render_template, jsonify, request
@@ -139,6 +140,20 @@ def send_text():
     except Exception as e:
         logger.exception("Failed to send text")
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/local-ip")
+def local_ip():
+    """Get the local IP address of the container/host."""
+    try:
+        # Try to get local IP by connecting to an external address
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return jsonify({"ip": ip})
+    except Exception:
+        return jsonify({"ip": None})
 
 
 if __name__ == "__main__":

@@ -36,14 +36,9 @@ def get_region():
 # Output path for logindata.json
 def get_output_path():
     """Get the output path for logindata.json."""
-    # Save to HA config directory
+    # Save directly to HA config directory (where integration looks first)
     ha_config = "/homeassistant"
-    legacy_path = os.path.join(ha_config, "custom_components", "carelink")
-
-    # Create directory if it doesn't exist
-    os.makedirs(legacy_path, exist_ok=True)
-
-    return os.path.join(legacy_path, "logindata.json")
+    return os.path.join(ha_config, "carelink_logindata.json")
 
 
 @app.route("/")

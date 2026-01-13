@@ -237,7 +237,7 @@
             btn.disabled = true;
             btn.textContent = 'Starting...';
 
-            fetch('/start', { method: 'POST' })
+            fetch('./start', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'started') {
@@ -255,7 +255,7 @@
             if (pollInterval) clearInterval(pollInterval);
 
             pollInterval = setInterval(() => {
-                fetch('/status')
+                fetch('./status')
                     .then(response => response.json())
                     .then(data => {
                         updateUI(data);
@@ -314,7 +314,7 @@
         }
 
         function resetAuth() {
-            fetch('/reset', { method: 'POST' })
+            fetch('./reset', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
                     updateUI({ status: 'idle', message: '' });
@@ -322,7 +322,7 @@
         }
 
         // Initial status check
-        fetch('/status')
+        fetch('./status')
             .then(response => response.json())
             .then(data => updateUI(data));
     </script>

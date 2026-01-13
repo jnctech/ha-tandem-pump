@@ -18,7 +18,7 @@ options:
   region: eu
 
 schema:
-  region: list(eu|us)
+  region: str
 
 # Enable web UI via ingress
 ingress: true
@@ -32,11 +32,8 @@ panel_icon: mdi:key-variant
 map:
   - homeassistant_config:rw
 
-# Required for running Firefox/Selenium
-privileged: true
-
 # Host network for browser
 host_network: false
 
-# Init system
+# Init system (use s6-overlay from base image)
 init: false

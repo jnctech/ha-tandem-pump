@@ -109,11 +109,12 @@ class CarelinkAuth:
         """Create a Firefox browser instance."""
         options = Options()
 
-        # Run in headless mode for the add-on
-        # Users won't see the browser, but Selenium will handle the flow
-        options.add_argument("--headless")
+        # Run in visible mode so users can interact via noVNC
+        # Do NOT use headless - users need to see and interact with the login
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--width=1024")
+        options.add_argument("--height=768")
 
         # Set preferences
         options.set_preference("browser.download.folderList", 2)

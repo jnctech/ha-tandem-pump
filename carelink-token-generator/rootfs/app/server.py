@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+import subprocess
 import threading
 from flask import Flask, render_template, jsonify, request
 
@@ -118,6 +119,26 @@ def reset():
         "token_file": None
     }
     return jsonify({"status": "reset"})
+
+
+@app.route("/send-text", methods=["POST"])
+def send_text():
+    """Send text to the active window using xdotool."""
+    try:
+        data = request.get_json()
+        text = data.get("text", "")
+        if not text:
+            return jsonify({"status": "error", "message": "No text provided"}), 400
+
+        # Use xdotool to type the text into the active window
+        env = os.environ.copy()
+        env["DISPLAY"] = ":99"
+        subprocess.run(["xdotool", "type", "--", text], env=env, check=True)
+
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        logger.exception("Failed to send text")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 if __name__ == "__main__":

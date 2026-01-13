@@ -216,6 +216,36 @@
             font-size: 12px;
             margin-top: 8px;
         }
+
+        .clipboard-helper {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .clipboard-helper input {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            background-color: rgba(0, 0, 0, 0.3);
+            color: var(--text-color);
+            font-size: 14px;
+        }
+
+        .btn-small {
+            padding: 10px 16px;
+            font-size: 14px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .btn-small:hover {
+            background-color: #0288d1;
+        }
     </style>
 </head>
 <body>
@@ -247,6 +277,12 @@
                     Open Browser Window
                 </a>
                 <p class="vnc-hint">Click to see the login page and enter your credentials</p>
+
+                <div class="clipboard-helper">
+                    <input type="text" id="clipboard-text" placeholder="Paste text here to send to browser" />
+                    <button type="button" class="btn btn-small" onclick="sendClipboard()">Send</button>
+                </div>
+                <p class="vnc-hint">Can't paste? Use this field to send text to the active input field</p>
             </div>
 
             <div class="instructions">
@@ -357,6 +393,24 @@
                 .then(data => {
                     updateUI({ status: 'idle', message: '' });
                 });
+        }
+
+        function sendClipboard() {
+            const text = document.getElementById('clipboard-text').value;
+            if (!text) return;
+
+            fetch('./send-text', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    document.getElementById('clipboard-text').value = '';
+                }
+            })
+            .catch(error => console.error('Error:', error));
         }
 
         // Set VNC URL based on current hostname

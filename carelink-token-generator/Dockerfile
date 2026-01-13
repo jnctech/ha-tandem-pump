@@ -10,6 +10,7 @@ RUN apk add --no-cache \
     x11vnc \
     novnc \
     websockify \
+    xdotool \
     dbus \
     ttf-freefont \
     font-noto \

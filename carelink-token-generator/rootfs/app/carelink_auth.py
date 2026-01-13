@@ -76,9 +76,11 @@ class CarelinkAuth:
         if sso_url is None:
             raise Exception("Could not get SSO config url")
 
+        logger.info(f"SSO URL: {sso_url}")
+        logger.info(f"Is Auth0: {is_auth0}")
         sso_config = requests.get(sso_url).json()
 
-        logger.debug(f"SSO config keys: {sso_config.keys()}")
+        logger.info(f"SSO config keys: {list(sso_config.keys())}")
 
         if is_auth0:
             # Auth0 config may have issuer at top level or we need to construct from server

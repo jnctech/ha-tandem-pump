@@ -1,5 +1,5 @@
 name: Carelink Token Generator
-version: 1.0.3
+version: 1.0.4
 slug: carelink-token-generator
 description: Generate Carelink login tokens for the Carelink integration
 url: https://github.com/yo-han/Home-Assistant-Carelink

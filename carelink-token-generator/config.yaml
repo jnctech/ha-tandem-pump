@@ -1,5 +1,5 @@
 name: Carelink Token Generator
-version: 1.0.1
+version: 1.0.2
 slug: carelink-token-generator
 description: Generate Carelink login tokens for the Carelink integration
 url: https://github.com/yo-han/Home-Assistant-Carelink
@@ -10,6 +10,10 @@ init: false
 ingress: true
 ingress_port: 8099
 panel_icon: mdi:key-variant
+ports:
+  6080/tcp: 6080
+ports_description:
+  6080/tcp: noVNC browser view
 map:
   - homeassistant_config:rw
 options:

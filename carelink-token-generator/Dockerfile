@@ -1,12 +1,15 @@
 ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
-# Install system dependencies
+# Install system dependencies including VNC
 RUN apk add --no-cache \
     python3 \
     py3-pip \
     firefox \
     xvfb \
+    x11vnc \
+    novnc \
+    websockify \
     dbus \
     ttf-freefont \
     font-noto \
@@ -43,11 +46,11 @@ COPY rootfs /
 # Set working directory
 WORKDIR /app
 
-# Set display for headless Firefox
+# Set display for Firefox
 ENV DISPLAY=:99
 
-# Expose ingress port
-EXPOSE 8099
+# Expose ports: 8099 for Flask, 6080 for noVNC
+EXPOSE 8099 6080
 
 # Run script
 CMD ["/run.sh"]

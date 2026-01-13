@@ -190,6 +190,32 @@
             color: var(--error-color);
             margin-right: 8px;
         }
+
+        .vnc-container {
+            margin: 16px 0;
+            text-align: center;
+        }
+
+        .btn-vnc {
+            display: inline-block;
+            background-color: var(--success-color);
+            color: white;
+            text-decoration: none;
+            padding: 14px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .btn-vnc:hover {
+            background-color: #43a047;
+        }
+
+        .vnc-hint {
+            color: var(--text-secondary);
+            font-size: 12px;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
@@ -216,13 +242,20 @@
                 Start Over
             </button>
 
+            <div id="vnc-link" class="vnc-container" style="display: none;">
+                <a id="vnc-btn" href="#" target="_blank" class="btn btn-vnc">
+                    Open Browser Window
+                </a>
+                <p class="vnc-hint">Click to see the login page and enter your credentials</p>
+            </div>
+
             <div class="instructions">
                 <h3>How it works:</h3>
                 <ol>
                     <li>Click "Start Login Process"</li>
-                    <li>A browser window will open automatically</li>
-                    <li>Log in with your Carelink credentials</li>
-                    <li>The tokens will be saved automatically</li>
+                    <li>Click "Open Browser Window" to see the Carelink login page</li>
+                    <li>Log in with your Carelink credentials and solve the CAPTCHA</li>
+                    <li>The tokens will be saved automatically when login completes</li>
                     <li>Add the Carelink integration with empty fields</li>
                 </ol>
             </div>
@@ -274,6 +307,7 @@
             const statusMessage = document.getElementById('status-message');
             const startBtn = document.getElementById('start-btn');
             const resetBtn = document.getElementById('reset-btn');
+            const vncLink = document.getElementById('vnc-link');
 
             // Remove all status classes
             statusDiv.className = 'status-container';
@@ -286,6 +320,7 @@
                     startBtn.textContent = 'Start Login Process';
                     startBtn.style.display = 'block';
                     resetBtn.style.display = 'none';
+                    vncLink.style.display = 'none';
                     break;
 
                 case 'running':
@@ -293,8 +328,9 @@
                     statusMessage.innerHTML = '<span class="spinner"></span>' + data.message;
                     startBtn.disabled = true;
                     startBtn.textContent = 'Authentication in progress...';
-                    startBtn.style.display = 'block';
+                    startBtn.style.display = 'none';
                     resetBtn.style.display = 'none';
+                    vncLink.style.display = 'block';
                     break;
 
                 case 'success':
@@ -302,6 +338,7 @@
                     statusMessage.innerHTML = '<span class="success-icon">✓</span>' + data.message;
                     startBtn.style.display = 'none';
                     resetBtn.style.display = 'block';
+                    vncLink.style.display = 'none';
                     break;
 
                 case 'error':
@@ -309,6 +346,7 @@
                     statusMessage.innerHTML = '<span class="error-icon">✗</span>' + data.message;
                     startBtn.style.display = 'none';
                     resetBtn.style.display = 'block';
+                    vncLink.style.display = 'none';
                     break;
             }
         }
@@ -320,6 +358,11 @@
                     updateUI({ status: 'idle', message: '' });
                 });
         }
+
+        // Set VNC URL based on current hostname
+        const vncBtn = document.getElementById('vnc-btn');
+        const hostname = window.location.hostname;
+        vncBtn.href = `http://${hostname}:6080/vnc.html?autoconnect=true`;
 
         // Initial status check
         fetch('./status')

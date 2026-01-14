@@ -388,6 +388,7 @@ class CarelinkClient:
         printdbg("__refresh_token")
         success = False
         token_url = config["token_url"]
+        printdbg(f"Token refresh URL: {token_url}")
 
         user_data = {
                 "refresh_token": token_data["refresh_token"],
@@ -400,7 +401,7 @@ class CarelinkClient:
             headers = {}
             if "mag-identifier" in token_data:
                 headers["mag-identifier"] = token_data["mag-identifier"]
-            printdbg("Trying to refresh token")
+            printdbg(f"Trying to refresh token with client_id: {token_data['client_id']}")
             response = await self.post_async(url=token_url, headers=headers, data=user_data)
             self.__last_response_code = response.status_code
             if self.__last_response_code == 200:
@@ -410,6 +411,7 @@ class CarelinkClient:
                 self.__token_data["refresh_token"] = response_data["refresh_token"]
                 success = True
             else:
+                printdbg(f"Token refresh response body: {response.text}")
                 raise ValueError(f"Failed to refresh token ({self.__last_response_code})")
         except httpx.TimeoutException as error:
             printdbg(f"Token refresh failed: request timeout - {error}")

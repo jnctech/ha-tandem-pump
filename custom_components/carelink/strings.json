@@ -1,35 +1,48 @@
 {
   "config": {
-    "flow_title": "Setup your Carelink account",
+    "flow_title": "Setup your diabetes pump",
     "step": {
       "user": {
-        "title": "Setup your Carelink account",
-        "description": "Provide your session token. Please ensure that you enter the 2-letter ISO code corresponding to the country in which your account was registered. If you are logging in with a Carelink Care Partner account, please include the patient ID, which should be the username of the main Carelink account.",
+        "title": "Choose your pump platform",
+        "description": "Select the diabetes pump platform you want to connect.",
         "data": {
-          "scan_interval": "[%key:common::config_flow::data::scan_interval%]",
-          "cl_token": "[%key:common::config_flow::data::cl_token%]",
-          "cl_refresh_token": "[%key:common::config_flow::data::cl_refresh_token%]",
-          "cl_client_id": "[%key:common::config_flow::data::cl_client_id%]",
-          "cl_client_secret": "[%key:common::config_flow::data::cl_client_secret%]",
-          "cl_mag_identifier": "[%key:common::config_flow::data::cl_mag_identifier%]",
-          "patientId": "[%key:common::config_flow::data::patientId%]",
-          "nightscout_url": "[%key:common::config_flow::data::nightscout_url%]",
-          "nightscout_api": "[%key:common::config_flow::data::nightscout_api%]"
+          "platform_type": "Pump platform"
         }
       },
-	  "reconfigure": {
+      "carelink": {
         "title": "Setup your Carelink account",
         "description": "Provide your session token. Please ensure that you enter the 2-letter ISO code corresponding to the country in which your account was registered. If you are logging in with a Carelink Care Partner account, please include the patient ID, which should be the username of the main Carelink account.",
         "data": {
-          "scan_interval": "[%key:common::config_flow::data::scan_interval%]",
-          "cl_token": "[%key:common::config_flow::data::cl_token%]",
-          "cl_refresh_token": "[%key:common::config_flow::data::cl_refresh_token%]",
-          "cl_client_id": "[%key:common::config_flow::data::cl_client_id%]",
-          "cl_client_secret": "[%key:common::config_flow::data::cl_client_secret%]",
-          "cl_mag_identifier": "[%key:common::config_flow::data::cl_mag_identifier%]",
-          "patientId": "[%key:common::config_flow::data::patientId%]",
-          "nightscout_url": "[%key:common::config_flow::data::nightscout_url%]",
-          "nightscout_api": "[%key:common::config_flow::data::nightscout_api%]"
+          "scan_interval": "Scan interval (seconds)",
+          "cl_token": "Access token",
+          "cl_refresh_token": "Refresh token",
+          "cl_client_id": "Client ID",
+          "cl_client_secret": "Client secret",
+          "cl_mag_identifier": "MAG identifier",
+          "patientId": "Patient ID",
+          "nightscout_url": "Nightscout URL",
+          "nightscout_api": "Nightscout API secret"
+        }
+      },
+      "tandem": {
+        "title": "Setup your Tandem Source account",
+        "description": "Enter your Tandem Diabetes Source account credentials. This connects to source.tandemdiabetes.com (US) or source.eu.tandemdiabetes.com (EU) to fetch data from your Tandem t:slim pump.",
+        "data": {
+          "tandem_email": "Email address",
+          "tandem_password": "Password",
+          "tandem_region": "Region",
+          "scan_interval": "Scan interval (seconds)",
+          "nightscout_url": "Nightscout URL",
+          "nightscout_api": "Nightscout API secret"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure integration",
+        "description": "Update your integration settings. Authentication credentials are preserved from the original setup.",
+        "data": {
+          "scan_interval": "Scan interval (seconds)",
+          "nightscout_url": "Nightscout URL",
+          "nightscout_api": "Nightscout API secret"
         }
       }
     },

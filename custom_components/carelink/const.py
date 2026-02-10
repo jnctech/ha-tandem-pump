@@ -16,9 +16,15 @@ UNAVAILABLE = None
 
 DOMAIN = "carelink"
 CLIENT = "carelink_client"
+TANDEM_CLIENT = "tandem_client"
 COORDINATOR = "coordinator"
 UPLOADER = "nightscout_uploader"
 SCAN_INTERVAL = "scan_interval"
+
+# Platform type: "carelink" (Medtronic) or "tandem" (Tandem t:slim)
+PLATFORM_TYPE = "platform_type"
+PLATFORM_CARELINK = "carelink"
+PLATFORM_TANDEM = "tandem"
 
 SENSOR_KEY_LASTSG_MMOL = "last_sg_mmol"
 SENSOR_KEY_LASTSG_MGDL = "last_sg_mgdl"
@@ -84,6 +90,7 @@ BINARY_SENSOR_KEY_CONDUIT_SENSOR_IN_RANGE = "binary_sensor_conduit_sensor_in_ran
 DEVICE_PUMP_SERIAL = "pump serial"
 DEVICE_PUMP_NAME = "pump name"
 DEVICE_PUMP_MODEL = "pump model"
+DEVICE_PUMP_MANUFACTURER = "pump manufacturer"
 
 MMOL = "mmol/L"
 MGDL = "mg/dL"
@@ -475,6 +482,207 @@ BINARY_SENSORS = (
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )
+
+# ── Tandem t:slim sensor keys ────────────────────────────────────────────
+
+TANDEM_SENSOR_KEY_LASTSG_MMOL = "tandem_last_sg_mmol"
+TANDEM_SENSOR_KEY_LASTSG_MGDL = "tandem_last_sg_mgdl"
+TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP = "tandem_last_sg_timestamp"
+TANDEM_SENSOR_KEY_SG_DELTA = "tandem_last_sg_delta"
+TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS = "tandem_last_bolus_units"
+TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP = "tandem_last_bolus_timestamp"
+TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS = "tandem_last_bolus_attributes"
+TANDEM_SENSOR_KEY_BASAL_RATE = "tandem_basal_rate"
+TANDEM_SENSOR_KEY_ACTIVE_INSULIN = "tandem_active_insulin"
+TANDEM_SENSOR_KEY_LAST_UPLOAD = "tandem_last_upload"
+TANDEM_SENSOR_KEY_SOFTWARE_VERSION = "tandem_software_version"
+TANDEM_SENSOR_KEY_PUMP_SERIAL_INFO = "tandem_pump_serial_info"
+TANDEM_SENSOR_KEY_PUMP_MODEL_INFO = "tandem_pump_model_info"
+TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL = "tandem_average_glucose_mmol"
+TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL = "tandem_average_glucose_mgdl"
+TANDEM_SENSOR_KEY_TIME_IN_RANGE = "tandem_time_in_range"
+TANDEM_SENSOR_KEY_CGM_USAGE = "tandem_cgm_usage"
+TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS = "tandem_control_iq_status"
+TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP = "tandem_last_update_timestamp"
+TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS = "tandem_last_meal_bolus"
+TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS = "tandem_last_meal_bolus_attributes"
+
+TANDEM_SENSORS = (
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LASTSG_MMOL,
+        name="Last glucose level mmol",
+        native_unit_of_measurement=MMOL,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION,
+        icon="mdi:water",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LASTSG_MGDL,
+        name="Last glucose level mg/dl",
+        native_unit_of_measurement=MGDL,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION,
+        icon="mdi:water",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
+        name="Last glucose update",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:clock",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_SG_DELTA,
+        name="Last glucose delta",
+        native_unit_of_measurement=None,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:plus-minus-variant",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP,
+        name="Last update",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:clock",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_ACTIVE_INSULIN,
+        name="Active insulin (IOB)",
+        native_unit_of_measurement=UNITS,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:water-alert",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_BASAL_RATE,
+        name="Basal rate",
+        native_unit_of_measurement="U/hr",
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:chart-line",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS,
+        name="Last bolus",
+        native_unit_of_measurement=UNITS,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:needle",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP,
+        name="Last bolus time",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:clock",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS,
+        name="Last meal bolus",
+        native_unit_of_measurement=UNITS,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:food",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_UPLOAD,
+        name="Last pump upload",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:cloud-upload",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL,
+        name="Average glucose level mmol",
+        native_unit_of_measurement=MMOL,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION,
+        icon="mdi:chart-line",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL,
+        name="Average glucose level mg/dl",
+        native_unit_of_measurement=MGDL,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION,
+        icon="mdi:chart-line",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_TIME_IN_RANGE,
+        name="Time in range",
+        native_unit_of_measurement=PERCENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon=None,
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CGM_USAGE,
+        name="CGM usage",
+        native_unit_of_measurement=PERCENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:percent",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS,
+        name="Control-IQ status",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:robot",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
+        name="Software version",
+        device_class=None,
+        native_unit_of_measurement=None,
+        state_class=None,
+        icon="mdi:code-tags",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_PUMP_SERIAL_INFO,
+        name="Pump serial number",
+        device_class=None,
+        native_unit_of_measurement=None,
+        state_class=None,
+        icon="mdi:identifier",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_PUMP_MODEL_INFO,
+        name="Pump model",
+        device_class=None,
+        native_unit_of_measurement=None,
+        state_class=None,
+        icon="mdi:code-tags",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+)
+
+# Tandem has no binary sensors (no real-time connectivity data available)
+TANDEM_BINARY_SENSORS = ()
 
 CARELINK_CODE_MAP = {
     817 : "BC_SID_SG_APPROACH_HIGH_LIMIT_CHECK_BG",

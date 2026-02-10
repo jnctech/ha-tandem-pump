@@ -1,4 +1,4 @@
-"""Medtronic arelink integration."""
+"""Medtronic Carelink / Tandem t:slim integration."""
 from __future__ import annotations
 
 import logging
@@ -17,18 +17,24 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .api import CarelinkClient, LEGACY_AUTH_FILE, AUTH_FILE_PREFIX, SHARED_AUTH_FILE
+from .tandem_api import TandemSourceClient, parse_dotnet_date
 from .nightscout_uploader import NightscoutUploader
 
 from .const import (
     CLIENT,
+    TANDEM_CLIENT,
     UPLOADER,
     DOMAIN,
     SCAN_INTERVAL,
     COORDINATOR,
     UNAVAILABLE,
+    PLATFORM_TYPE,
+    PLATFORM_CARELINK,
+    PLATFORM_TANDEM,
     DEVICE_PUMP_MODEL,
     DEVICE_PUMP_NAME,
     DEVICE_PUMP_SERIAL,
+    DEVICE_PUMP_MANUFACTURER,
     SENSOR_KEY_PUMP_BATTERY_LEVEL,
     SENSOR_KEY_CONDUIT_BATTERY_LEVEL,
     SENSOR_KEY_SENSOR_BATTERY_LEVEL,
@@ -82,6 +88,28 @@ from .const import (
     MS_TIMEZONE_TO_IANA_MAP,
     SENSOR_KEY_TIME_TO_NEXT_CALIB_HOURS,
     CARELINK_CODE_MAP,
+    # Tandem sensor keys
+    TANDEM_SENSOR_KEY_LASTSG_MMOL,
+    TANDEM_SENSOR_KEY_LASTSG_MGDL,
+    TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
+    TANDEM_SENSOR_KEY_SG_DELTA,
+    TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS,
+    TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP,
+    TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS,
+    TANDEM_SENSOR_KEY_BASAL_RATE,
+    TANDEM_SENSOR_KEY_ACTIVE_INSULIN,
+    TANDEM_SENSOR_KEY_LAST_UPLOAD,
+    TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
+    TANDEM_SENSOR_KEY_PUMP_SERIAL_INFO,
+    TANDEM_SENSOR_KEY_PUMP_MODEL_INFO,
+    TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL,
+    TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL,
+    TANDEM_SENSOR_KEY_TIME_IN_RANGE as TANDEM_TIME_IN_RANGE,
+    TANDEM_SENSOR_KEY_CGM_USAGE,
+    TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS,
+    TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP,
+    TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS,
+    TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS,
 )
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
@@ -94,6 +122,7 @@ PII_FIELDS = {
     "firstName", "lastName", "username", "patientId", "conduitSerialNumber",
     "medicalDeviceSerialNumber", "systemId", "email", "phone", "emailAddress",
     "phoneNumber", "address", "dateOfBirth", "dob", "deviceSerialNumber",
+    "patientName", "patientDateOfBirth", "patientCareGiver",
 }
 
 
@@ -184,10 +213,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
 
+    config = entry.data
+    platform_type = config.get(PLATFORM_TYPE, PLATFORM_CARELINK)
+
+    if platform_type == PLATFORM_TANDEM:
+        return await _async_setup_tandem_entry(hass, entry, config)
+    else:
+        return await _async_setup_carelink_entry(hass, entry, config)
+
+
+async def _async_setup_carelink_entry(
+    hass: HomeAssistant, entry: ConfigEntry, config: dict
+) -> bool:
+    """Set up a Medtronic Carelink config entry."""
     # Migrate logindata from old location if needed
     _migrate_legacy_logindata(hass.config.path(), entry.entry_id)
-
-    config = entry.data
 
     carelink_client = CarelinkClient(
         config["cl_refresh_token"],
@@ -200,16 +240,56 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry_id=entry.entry_id
     )
 
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {CLIENT: carelink_client}
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        CLIENT: carelink_client,
+        PLATFORM_TYPE: PLATFORM_CARELINK,
+    }
 
-    if config["nightscout_url"] and config["nightscout_api"]:
+    if config.get("nightscout_url") and config.get("nightscout_api"):
         nightscout_uploader = NightscoutUploader(
             config["nightscout_url"],
             config["nightscout_api"]
         )
-        hass.data.setdefault(DOMAIN, {})[entry.entry_id].update({UPLOADER: nightscout_uploader})
+        hass.data[DOMAIN][entry.entry_id][UPLOADER] = nightscout_uploader
 
-    coordinator = CarelinkCoordinator(hass, entry, update_interval=timedelta(seconds=config[SCAN_INTERVAL]))
+    coordinator = CarelinkCoordinator(
+        hass, entry, update_interval=timedelta(seconds=config[SCAN_INTERVAL])
+    )
+
+    await coordinator.async_config_entry_first_refresh()
+
+    hass.data[DOMAIN][entry.entry_id][COORDINATOR] = coordinator
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    return True
+
+
+async def _async_setup_tandem_entry(
+    hass: HomeAssistant, entry: ConfigEntry, config: dict
+) -> bool:
+    """Set up a Tandem t:slim Source config entry."""
+    tandem_client = TandemSourceClient(
+        email=config["tandem_email"],
+        password=config["tandem_password"],
+        region=config.get("tandem_region", "EU"),
+    )
+
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        TANDEM_CLIENT: tandem_client,
+        PLATFORM_TYPE: PLATFORM_TANDEM,
+    }
+
+    if config.get("nightscout_url") and config.get("nightscout_api"):
+        nightscout_uploader = NightscoutUploader(
+            config["nightscout_url"],
+            config["nightscout_api"]
+        )
+        hass.data[DOMAIN][entry.entry_id][UPLOADER] = nightscout_uploader
+
+    coordinator = TandemCoordinator(
+        hass, entry, update_interval=timedelta(seconds=config[SCAN_INTERVAL])
+    )
 
     await coordinator.async_config_entry_first_refresh()
 
@@ -231,6 +311,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await entry_data[CLIENT].close()
             except Exception as error:
                 _LOGGER.warning("Failed to close Carelink client: %s", error)
+        if TANDEM_CLIENT in entry_data:
+            try:
+                await entry_data[TANDEM_CLIENT].close()
+            except Exception as error:
+                _LOGGER.warning("Failed to close Tandem client: %s", error)
         if UPLOADER in entry_data:
             try:
                 await entry_data[UPLOADER].close()
@@ -240,8 +325,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Carelink (Medtronic) Coordinator
+# ═══════════════════════════════════════════════════════════════════════════
+
 class CarelinkCoordinator(DataUpdateCoordinator):
-    """Class to manage fetching data from the API."""
+    """Class to manage fetching data from the Carelink API."""
 
     def __init__(self, hass: HomeAssistant, entry, update_interval: timedelta):
 
@@ -392,7 +481,7 @@ class CarelinkCoordinator(DataUpdateCoordinator):
                     last_alarm["messageId"] = str(fault_id)
             else:
                 last_alarm["messageId"] = "UNKNOWN"
-            
+
             data[SENSOR_KEY_LAST_ALARM] = date_time_local.replace(tzinfo=timezone)
             data[SENSOR_KEY_LAST_ALARM_ATTRS] = last_alarm
             active_notification = get_active_notification(last_alarm, recent_data["notificationHistory"])
@@ -428,7 +517,7 @@ class CarelinkCoordinator(DataUpdateCoordinator):
         else:
             data[SENSOR_KEY_AVG_GLUCOSE_MMOL] = UNAVAILABLE
             data[SENSOR_KEY_AVG_GLUCOSE_MGDL] = UNAVAILABLE
-            
+
         data[SENSOR_KEY_BELOW_HYPO_LIMIT] = recent_data.setdefault(
             "belowHypoLimit", UNAVAILABLE
         )
@@ -536,6 +625,7 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             + recent_data.setdefault("lastName", "Unvailable")
         )
         data[DEVICE_PUMP_MODEL] = recent_data.setdefault("pumpModelNumber", UNAVAILABLE)
+        data[DEVICE_PUMP_MANUFACTURER] = "Medtronic"
 
         data[SENSOR_KEY_APP_MODEL_TYPE] = recent_data.setdefault(
             "appModelType", UNAVAILABLE
@@ -567,6 +657,326 @@ class CarelinkCoordinator(DataUpdateCoordinator):
         _LOGGER.debug("_async_update_data: %s", sanitize_for_logging(data))
 
         return data
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Tandem t:slim Coordinator
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TandemCoordinator(DataUpdateCoordinator):
+    """Class to manage fetching data from the Tandem Source API."""
+
+    def __init__(self, hass: HomeAssistant, entry, update_interval: timedelta):
+        super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=update_interval)
+
+        self.uploader = None
+        self.client = hass.data[DOMAIN][entry.entry_id][TANDEM_CLIENT]
+        self.timezone = hass.config.time_zone
+        self._prev_sg_mgdl: float | None = None
+
+        if UPLOADER in hass.data[DOMAIN][entry.entry_id]:
+            self.uploader = hass.data[DOMAIN][entry.entry_id][UPLOADER]
+
+    async def _async_update_data(self):
+        data = {}
+
+        await self.client.login()
+        recent_data = await self.client.get_recent_data()
+
+        _LOGGER.debug(
+            "Tandem before data parsing: %s", sanitize_for_logging(recent_data)
+        )
+
+        # ── Device info from pump metadata ───────────────────────────────
+        metadata = recent_data.get("pump_metadata")
+        pumper_info = recent_data.get("pumper_info")
+
+        if metadata:
+            data[DEVICE_PUMP_SERIAL] = metadata.get("serialNumber", "unknown")
+            data[DEVICE_PUMP_MODEL] = metadata.get("modelNumber", "t:slim X2")
+            data[DEVICE_PUMP_NAME] = metadata.get("patientName", "Tandem Pump")
+            data[TANDEM_SENSOR_KEY_PUMP_SERIAL_INFO] = metadata.get("serialNumber")
+            data[TANDEM_SENSOR_KEY_PUMP_MODEL_INFO] = metadata.get("modelNumber")
+            data[TANDEM_SENSOR_KEY_SOFTWARE_VERSION] = metadata.get("softwareVersion")
+
+            # Parse last upload timestamp
+            last_upload = metadata.get("lastUpload")
+            if last_upload:
+                upload_dt = parse_dotnet_date(last_upload)
+                if upload_dt:
+                    data[TANDEM_SENSOR_KEY_LAST_UPLOAD] = upload_dt.replace(
+                        tzinfo=ZoneInfo(self.timezone)
+                    )
+                    data[TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP] = upload_dt.replace(
+                        tzinfo=ZoneInfo(self.timezone)
+                    )
+                else:
+                    data[TANDEM_SENSOR_KEY_LAST_UPLOAD] = UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP] = UNAVAILABLE
+            else:
+                data[TANDEM_SENSOR_KEY_LAST_UPLOAD] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP] = UNAVAILABLE
+        else:
+            data[DEVICE_PUMP_SERIAL] = "unknown"
+            data[DEVICE_PUMP_MODEL] = "t:slim X2"
+            data[DEVICE_PUMP_NAME] = "Tandem Pump"
+            data[TANDEM_SENSOR_KEY_PUMP_SERIAL_INFO] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_PUMP_MODEL_INFO] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_SOFTWARE_VERSION] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_UPLOAD] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP] = UNAVAILABLE
+
+        data[DEVICE_PUMP_MANUFACTURER] = "Tandem Diabetes Care"
+
+        # Override name from pumper info if available
+        if pumper_info:
+            first = pumper_info.get("firstName", "")
+            last = pumper_info.get("lastName", "")
+            name = f"{first} {last}".strip()
+            if name:
+                data[DEVICE_PUMP_NAME] = name
+
+        # ── Therapy timeline (CGM, bolus, basal) ────────────────────────
+        timeline = recent_data.get("therapy_timeline")
+        self._parse_therapy_timeline(timeline, data)
+
+        # ── Dashboard summary (statistics) ───────────────────────────────
+        summary = recent_data.get("dashboard_summary")
+        self._parse_dashboard_summary(summary, data)
+
+        _LOGGER.debug(
+            "Tandem _async_update_data: %s", sanitize_for_logging(data)
+        )
+
+        return data
+
+    def _parse_therapy_timeline(self, timeline: dict | None, data: dict) -> None:
+        """Parse therapy timeline data into sensor values."""
+        if not timeline:
+            data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS] = {}
+            data[TANDEM_SENSOR_KEY_BASAL_RATE] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {}
+            data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
+            return
+
+        # ── CGM readings ─────────────────────────────────────────────
+        try:
+            cgm_entries = timeline.get("cgm", [])
+            if cgm_entries:
+                # Find the most recent CGM reading
+                latest_reading = None
+                latest_dt = None
+                for entry in cgm_entries:
+                    readings = entry.get("Readings", [])
+                    entry_dt = parse_dotnet_date(entry.get("EventDateTime"))
+                    for reading in readings:
+                        val = reading.get("Value")
+                        rtype = reading.get("Type", "")
+                        if val and val > 0 and rtype == "EGV":
+                            if latest_dt is None or (entry_dt and entry_dt > latest_dt):
+                                latest_reading = val
+                                latest_dt = entry_dt
+
+                if latest_reading is not None:
+                    sg_mgdl = float(latest_reading)
+                    data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = int(sg_mgdl)
+                    data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = round(sg_mgdl * 0.0555, 2)
+
+                    if latest_dt:
+                        data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = latest_dt.replace(
+                            tzinfo=ZoneInfo(self.timezone)
+                        )
+
+                    # Calculate delta from previous reading
+                    if self._prev_sg_mgdl is not None:
+                        data[TANDEM_SENSOR_KEY_SG_DELTA] = sg_mgdl - self._prev_sg_mgdl
+                    else:
+                        data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
+                    self._prev_sg_mgdl = sg_mgdl
+                else:
+                    data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
+            else:
+                data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
+        except Exception as e:
+            _LOGGER.warning("Error parsing CGM data: %s", e)
+            data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
+
+        # ── Bolus events ─────────────────────────────────────────────
+        try:
+            bolus_entries = timeline.get("bolus", [])
+            if bolus_entries:
+                # Sort by completion time, most recent first
+                sorted_boluses = sorted(
+                    bolus_entries,
+                    key=lambda b: parse_dotnet_date(
+                        b.get("CompletionDateTime") or b.get("RequestDateTime", 0)
+                    ) or datetime.min,
+                    reverse=True,
+                )
+
+                last_bolus = sorted_boluses[0]
+                insulin = last_bolus.get("InsulinDelivered", 0)
+                data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = round(float(insulin), 2) if insulin else UNAVAILABLE
+
+                bolus_dt = parse_dotnet_date(
+                    last_bolus.get("CompletionDateTime")
+                    or last_bolus.get("RequestDateTime")
+                )
+                if bolus_dt:
+                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = bolus_dt.replace(
+                        tzinfo=ZoneInfo(self.timezone)
+                    )
+                else:
+                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = UNAVAILABLE
+
+                # Extra attributes
+                data[TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS] = {
+                    "description": last_bolus.get("Description", ""),
+                    "requested_insulin": last_bolus.get("RequestedInsulin"),
+                    "carbs": last_bolus.get("CarbSize"),
+                    "bg": last_bolus.get("BG"),
+                    "iob": last_bolus.get("IOB"),
+                    "completion_status": last_bolus.get("CompletionStatusID", ""),
+                }
+
+                # IOB from the last bolus entry
+                iob = last_bolus.get("IOB")
+                if iob is not None:
+                    data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = round(float(iob), 2)
+                else:
+                    data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = UNAVAILABLE
+
+                # Find last meal bolus (with carbs)
+                meal_bolus = None
+                for b in sorted_boluses:
+                    carbs = b.get("CarbSize")
+                    if carbs and float(carbs) > 0:
+                        meal_bolus = b
+                        break
+
+                if meal_bolus:
+                    meal_insulin = meal_bolus.get("InsulinDelivered", 0)
+                    data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = round(float(meal_insulin), 2) if meal_insulin else UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {
+                        "carbs": meal_bolus.get("CarbSize"),
+                        "bg": meal_bolus.get("BG"),
+                        "description": meal_bolus.get("Description", ""),
+                    }
+                else:
+                    data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {}
+            else:
+                data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS] = {}
+                data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {}
+        except Exception as e:
+            _LOGGER.warning("Error parsing bolus data: %s", e)
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS] = {}
+            data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {}
+
+        # ── Basal events ─────────────────────────────────────────────
+        try:
+            basal_entries = timeline.get("basal", [])
+            if basal_entries:
+                sorted_basals = sorted(
+                    basal_entries,
+                    key=lambda b: parse_dotnet_date(b.get("EventDateTime", 0)) or datetime.min,
+                    reverse=True,
+                )
+                last_basal = sorted_basals[0]
+                rate = last_basal.get("BasalRate")
+                if rate is not None:
+                    data[TANDEM_SENSOR_KEY_BASAL_RATE] = round(float(rate), 3)
+                else:
+                    data[TANDEM_SENSOR_KEY_BASAL_RATE] = UNAVAILABLE
+
+                # Determine Control-IQ status from basal type
+                basal_type = last_basal.get("Type", "")
+                if basal_type:
+                    data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = basal_type
+                else:
+                    data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
+            else:
+                data[TANDEM_SENSOR_KEY_BASAL_RATE] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
+        except Exception as e:
+            _LOGGER.warning("Error parsing basal data: %s", e)
+            data[TANDEM_SENSOR_KEY_BASAL_RATE] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
+
+    def _parse_dashboard_summary(self, summary: dict | None, data: dict) -> None:
+        """Parse dashboard summary into sensor values."""
+        if not summary:
+            data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] = UNAVAILABLE
+            data[TANDEM_TIME_IN_RANGE] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_CGM_USAGE] = UNAVAILABLE
+            return
+
+        try:
+            avg_reading = summary.get("averageReading")
+            if avg_reading is not None:
+                data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] = int(avg_reading)
+                data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL] = round(
+                    float(avg_reading) * 0.0555, 2
+                )
+            else:
+                data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] = UNAVAILABLE
+
+            # Time in range - calculate from CGM data percentages
+            tir = summary.get("timeInRangePercent")
+            if tir is not None:
+                data[TANDEM_TIME_IN_RANGE] = round(float(tir), 1)
+            else:
+                data[TANDEM_TIME_IN_RANGE] = UNAVAILABLE
+
+            # CGM usage
+            cgm_inactive = summary.get("cgmInactivePercent")
+            if cgm_inactive is not None:
+                data[TANDEM_SENSOR_KEY_CGM_USAGE] = round(100.0 - float(cgm_inactive), 1)
+            else:
+                time_in_use = summary.get("timeInUsePercent")
+                if time_in_use is not None:
+                    data[TANDEM_SENSOR_KEY_CGM_USAGE] = round(float(time_in_use), 1)
+                else:
+                    data[TANDEM_SENSOR_KEY_CGM_USAGE] = UNAVAILABLE
+
+        except Exception as e:
+            _LOGGER.warning("Error parsing dashboard summary: %s", e)
+            data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] = UNAVAILABLE
+            data[TANDEM_TIME_IN_RANGE] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_CGM_USAGE] = UNAVAILABLE
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Helper functions (Carelink)
+# ═══════════════════════════════════════════════════════════════════════════
 
 def get_sg(sgs: list, pos: int) -> dict:
     """Retrieve previous sg from list"""

@@ -11,8 +11,15 @@
         },
         "step": {
             "user": {
+                "title": "Choose your pump platform",
+                "description": "Select the diabetes pump platform you want to connect.",
+                "data": {
+                    "platform_type": "Pump platform"
+                }
+            },
+            "carelink": {
                 "title": "Setup your Carelink account",
-                "description": "Run the external script to get the session information. These can be copied as a file into the Carelink Integration directory, or the values ??of the parameters can be entered into this mask. If you are logging in with a Carelink Care Partner account, please provide Patient ID. This should be the primary Carelink account username. The Scan Interval determines the number of seconds before the data is collected again.",
+                "description": "Run the external script to get the session information. These can be copied as a file into the Carelink Integration directory, or the values of the parameters can be entered into this mask. If you are logging in with a Carelink Care Partner account, please provide Patient ID. This should be the primary Carelink account username. The Scan Interval determines the number of seconds before the data is collected again.",
                 "data": {
                     "scan_interval": "Scan Interval in seconds (30-300)",
                     "cl_token": "Access Token (Optional)",
@@ -25,15 +32,27 @@
                     "nightscout_api": "Nightscout API Secret (Optional)"
                 }
             },
-		    "reconfigure": {
-                "title": "Reconfigure Carelink",
-                "description": "Update your Nightscout connection or scan interval.",
+            "tandem": {
+                "title": "Setup your Tandem Source account",
+                "description": "Enter your Tandem Diabetes Source account credentials. This connects to source.tandemdiabetes.com (US) or source.eu.tandemdiabetes.com (EU) to fetch data from your Tandem t:slim pump. The Scan Interval determines the number of seconds between data fetches (note: pump data may have a 30+ minute lag).",
                 "data": {
-                    "scan_interval": "Scan Interval in seconds (30-300)",
+                    "tandem_email": "Email Address",
+                    "tandem_password": "Password",
+                    "tandem_region": "Region",
+                    "scan_interval": "Scan Interval in seconds (60-900)",
                     "nightscout_url": "Nightscout URL (Optional)",
                     "nightscout_api": "Nightscout API Secret (Optional)"
                 }
-		    }
+            },
+            "reconfigure": {
+                "title": "Reconfigure integration",
+                "description": "Update your Nightscout connection or scan interval.",
+                "data": {
+                    "scan_interval": "Scan Interval in seconds",
+                    "nightscout_url": "Nightscout URL (Optional)",
+                    "nightscout_api": "Nightscout API Secret (Optional)"
+                }
+            }
         }
     }
 }

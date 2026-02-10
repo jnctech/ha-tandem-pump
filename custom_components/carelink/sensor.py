@@ -1,4 +1,4 @@
-"""Support for Carelink."""
+"""Support for Carelink / Tandem sensors."""
 from __future__ import annotations
 
 from homeassistant.components.sensor import (
@@ -20,8 +20,13 @@ from .const import (
     DEVICE_PUMP_MODEL,
     DEVICE_PUMP_NAME,
     DEVICE_PUMP_SERIAL,
+    DEVICE_PUMP_MANUFACTURER,
     DOMAIN,
     SENSORS,
+    TANDEM_SENSORS,
+    PLATFORM_TYPE,
+    PLATFORM_CARELINK,
+    PLATFORM_TANDEM,
 )
 
 
@@ -33,10 +38,14 @@ async def async_setup_entry(
     """Set up carelink sensor platform."""
 
     coordinator = hass.data[DOMAIN][entry.entry_id][COORDINATOR]
+    platform_type = hass.data[DOMAIN][entry.entry_id].get(PLATFORM_TYPE, PLATFORM_CARELINK)
+
+    # Choose the right sensor definitions based on platform
+    sensor_definitions = TANDEM_SENSORS if platform_type == PLATFORM_TANDEM else SENSORS
 
     entities = []
 
-    for sensor_description in SENSORS:
+    for sensor_description in sensor_definitions:
 
         entity_name = f"{DOMAIN} {sensor_description.name}"
 
@@ -49,7 +58,7 @@ async def async_setup_entry(
 
 
 class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
-    """Carelink Sensor."""
+    """Carelink / Tandem Sensor."""
 
     def __init__(
         self,
@@ -94,13 +103,16 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
+        manufacturer = self.coordinator.data.get(
+            DEVICE_PUMP_MANUFACTURER, "Medtronic"
+        )
         return DeviceInfo(
             identifiers={
                 # Serial numbers are unique identifiers within a specific domain
                 (DOMAIN, self.coordinator.data[DEVICE_PUMP_SERIAL])
             },
             name=self.coordinator.data[DEVICE_PUMP_NAME],
-            manufacturer="Medtronic",
+            manufacturer=manufacturer,
             model=self.coordinator.data[DEVICE_PUMP_MODEL],
         )
 

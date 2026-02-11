@@ -687,11 +687,24 @@ class TandemCoordinator(DataUpdateCoordinator):
             "Tandem before data parsing: %s", sanitize_for_logging(recent_data)
         )
 
+        # Log what data sources are available
+        _LOGGER.info(
+            "Tandem data sources: pump_metadata=%s, pumper_info=%s, "
+            "therapy_timeline=%s, dashboard_summary=%s",
+            "present" if recent_data.get("pump_metadata") else "MISSING",
+            "present" if recent_data.get("pumper_info") else "MISSING",
+            "present" if recent_data.get("therapy_timeline") else "MISSING",
+            "present" if recent_data.get("dashboard_summary") else "MISSING",
+        )
+
         # ── Device info from pump metadata ───────────────────────────────
         metadata = recent_data.get("pump_metadata")
         pumper_info = recent_data.get("pumper_info")
 
         if metadata:
+            _LOGGER.debug(
+                "Tandem metadata keys: %s", list(metadata.keys())
+            )
             data[DEVICE_PUMP_SERIAL] = metadata.get("serialNumber", "unknown")
             data[DEVICE_PUMP_MODEL] = metadata.get("modelNumber", "t:slim X2")
             data[DEVICE_PUMP_NAME] = metadata.get("patientName", "Tandem Pump")

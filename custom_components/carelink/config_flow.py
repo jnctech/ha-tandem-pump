@@ -61,7 +61,7 @@ async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> di
     if not email or not password:
         raise InvalidAuth
 
-    client = TandemSourceClient(email, password, region)
+    client = TandemSourceClient(data["email"], data["password"], data["region"])
     try:
         if not await client.login():
             raise InvalidAuth

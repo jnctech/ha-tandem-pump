@@ -12,6 +12,13 @@ from homeassistant.components.binary_sensor import (
 
 from homeassistant.helpers.entity import EntityCategory
 
+# BLOOD_GLUCOSE_CONCENTRATION was added in HA 2024.11.
+# Gracefully degrade on older versions so tests can run.
+try:
+    _BLOOD_GLUCOSE = SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION
+except AttributeError:
+    _BLOOD_GLUCOSE = None
+
 UNAVAILABLE = None
 
 DOMAIN = "carelink"
@@ -106,7 +113,7 @@ SENSORS = (
         name="Last glucose level mmol",
         native_unit_of_measurement=MMOL,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION,
+        device_class=_BLOOD_GLUCOSE,
         icon="mdi:water",
         entity_category=None,
     ),
@@ -115,7 +122,7 @@ SENSORS = (
         name="Last glucose level mg/dl",
         native_unit_of_measurement=MGDL,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION,
+        device_class=_BLOOD_GLUCOSE,
         icon="mdi:water",
         entity_category=None,
     ),
@@ -268,7 +275,7 @@ SENSORS = (
         name="Average glucose level mmol",
         native_unit_of_measurement=MMOL,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION,
+        device_class=_BLOOD_GLUCOSE,
         icon="mdi:chart-line",
         entity_category=None,
     ),
@@ -277,7 +284,7 @@ SENSORS = (
         name="Average glucose level mg/dl",
         native_unit_of_measurement=MGDL,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION,
+        device_class=_BLOOD_GLUCOSE,
         icon="mdi:chart-line",
         entity_category=None,
     ),
@@ -513,7 +520,7 @@ TANDEM_SENSORS = (
         name="Last glucose level mmol",
         native_unit_of_measurement=MMOL,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION,
+        device_class=_BLOOD_GLUCOSE,
         icon="mdi:water",
         entity_category=None,
     ),
@@ -522,7 +529,7 @@ TANDEM_SENSORS = (
         name="Last glucose level mg/dl",
         native_unit_of_measurement=MGDL,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION,
+        device_class=_BLOOD_GLUCOSE,
         icon="mdi:water",
         entity_category=None,
     ),
@@ -612,7 +619,7 @@ TANDEM_SENSORS = (
         name="Average glucose level mmol",
         native_unit_of_measurement=MMOL,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION,
+        device_class=_BLOOD_GLUCOSE,
         icon="mdi:chart-line",
         entity_category=None,
     ),
@@ -621,7 +628,7 @@ TANDEM_SENSORS = (
         name="Average glucose level mg/dl",
         native_unit_of_measurement=MGDL,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=SensorDeviceClass.BLOOD_GLUCOSE_CONCENTRATION,
+        device_class=_BLOOD_GLUCOSE,
         icon="mdi:chart-line",
         entity_category=None,
     ),

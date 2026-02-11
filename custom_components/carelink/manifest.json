@@ -9,6 +9,6 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/issues",
   "requirements": ["aiofiles>=0.8.0", "certifi>=2023.0.0", "httpx>=0.23.0"],
-  "version": "2024.1.0",
+  "version": "0.1.3-beta",
   "zeroconf": []
 }

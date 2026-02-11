@@ -788,12 +788,24 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         # ── Therapy timeline (CGM, bolus, basal) ────────────────────────
         timeline = recent_data.get("therapy_timeline")
+        therapy_events = recent_data.get("therapy_events")
+
         _LOGGER.debug("TandemCoordinator: Parsing therapy timeline (present: %s)", timeline is not None)
+        _LOGGER.debug("TandemCoordinator: Therapy events fallback (present: %s)", therapy_events is not None)
+
         try:
-            self._parse_therapy_timeline(timeline, data)
-            _LOGGER.info("TandemCoordinator: Therapy timeline parsed successfully")
+            if timeline:
+                self._parse_therapy_timeline(timeline, data)
+                _LOGGER.info("TandemCoordinator: Therapy timeline parsed successfully")
+            elif therapy_events:
+                _LOGGER.info("TandemCoordinator: Using therapy_events as fallback data source")
+                self._parse_therapy_events(therapy_events, data)
+                _LOGGER.info("TandemCoordinator: Therapy events parsed successfully")
+            else:
+                _LOGGER.warning("TandemCoordinator: No therapy data available (neither timeline nor events)")
+                self._parse_therapy_timeline(None, data)  # Set all to UNAVAILABLE
         except Exception as e:
-            _LOGGER.error("TandemCoordinator: Error parsing therapy timeline: %s", e, exc_info=True)
+            _LOGGER.error("TandemCoordinator: Error parsing therapy data: %s", e, exc_info=True)
 
         # ── Dashboard summary (statistics) ───────────────────────────────
         summary = recent_data.get("dashboard_summary")
@@ -989,6 +1001,29 @@ class TandemCoordinator(DataUpdateCoordinator):
             _LOGGER.warning("Error parsing basal data: %s", e)
             data[TANDEM_SENSOR_KEY_BASAL_RATE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
+
+    def _parse_therapy_events(self, therapy_events: dict | None, data: dict) -> None:
+        """Parse therapy events data as fallback when therapy_timeline is not available.
+
+        The therapy_events API uses a different format than therapy_timeline.
+        This method attempts to extract the same sensor values from this alternative structure.
+        """
+        if not therapy_events:
+            _LOGGER.debug("No therapy_events data to parse, setting all to UNAVAILABLE")
+            # Set all therapy timeline sensors to UNAVAILABLE
+            self._parse_therapy_timeline(None, data)
+            return
+
+        _LOGGER.debug("Parsing therapy_events structure: %s", list(therapy_events.keys()) if isinstance(therapy_events, dict) else type(therapy_events))
+
+        # Log the full structure for analysis (will help us understand the format)
+        _LOGGER.debug("therapy_events sample data: %s", str(therapy_events)[:500])
+
+        # TODO: Parse therapy_events structure once we see what format it returns
+        # For now, set everything to UNAVAILABLE and we'll implement parsing
+        # once we see the actual data structure in the logs
+        _LOGGER.warning("therapy_events parsing not yet implemented - need to analyze data structure first")
+        self._parse_therapy_timeline(None, data)
 
     def _parse_dashboard_summary(self, summary: dict | None, data: dict) -> None:
         """Parse dashboard summary into sensor values."""

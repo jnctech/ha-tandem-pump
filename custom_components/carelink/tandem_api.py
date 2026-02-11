@@ -25,6 +25,7 @@ import re
 import time
 from datetime import datetime, timedelta
 from urllib.parse import urlencode, urlparse, parse_qs
+from homeassistant.helpers.httpx_client import create_async_httpx_client
 
 import httpx
 
@@ -74,7 +75,8 @@ class TandemSourceClient:
         },
     }
 
-    def __init__(self, email: str, password: str, region: str = "EU"):
+    def __init__(self, hass, email: str, password: str, region: str = "EU"):
+        self.hass = hass
         self.email = email
         self.password = password
         self.region = region.upper()
@@ -93,7 +95,7 @@ class TandemSourceClient:
     def _get_client(self) -> httpx.AsyncClient:
         """Get or create the async HTTP client."""
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(
+            self._client = create_async_httpx_client(self.hass, timeout=30)
                 follow_redirects=True,
                 timeout=30.0,
                 headers={"User-Agent": USER_AGENT},

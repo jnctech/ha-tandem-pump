@@ -6,14 +6,14 @@ import pytest
 from custom_components.carelink.config_flow import (
     CannotConnect,
     InvalidAuth,
-    validate_input,
+    validate_carelink_input,
 )
 
 
 class TestValidateInput:
-    """Tests for the validate_input function."""
+    """Tests for the validate_carelink_input function."""
 
-    async def test_validate_input_success(self):
+    async def test_validate_carelink_input_success(self):
         """Test successful validation."""
         mock_hass = MagicMock()
 
@@ -34,13 +34,13 @@ class TestValidateInput:
                 "patientId": "test_patient",
             }
 
-            result = await validate_input(mock_hass, data)
+            result = await validate_carelink_input(mock_hass, data)
 
             assert result == {"title": "Carelink"}
             mock_client.login.assert_called_once()
             mock_client.close.assert_called_once()
 
-    async def test_validate_input_invalid_auth(self):
+    async def test_validate_carelink_input_invalid_auth(self):
         """Test validation with invalid credentials."""
         mock_hass = MagicMock()
 
@@ -58,9 +58,9 @@ class TestValidateInput:
             }
 
             with pytest.raises(InvalidAuth):
-                await validate_input(mock_hass, data)
+                await validate_carelink_input(mock_hass, data)
 
-    async def test_validate_input_nightscout_success(self):
+    async def test_validate_carelink_input_nightscout_success(self):
         """Test validation with valid Nightscout configuration."""
         mock_hass = MagicMock()
 
@@ -86,12 +86,12 @@ class TestValidateInput:
                 "nightscout_api": "secret123",
             }
 
-            result = await validate_input(mock_hass, data)
+            result = await validate_carelink_input(mock_hass, data)
 
             assert result == {"title": "Carelink"}
             mock_uploader.reachServer.assert_called_once()
 
-    async def test_validate_input_nightscout_unreachable(self):
+    async def test_validate_carelink_input_nightscout_unreachable(self):
         """Test validation when Nightscout server is unreachable."""
         mock_hass = MagicMock()
 
@@ -118,9 +118,9 @@ class TestValidateInput:
             }
 
             with pytest.raises(CannotConnect):
-                await validate_input(mock_hass, data)
+                await validate_carelink_input(mock_hass, data)
 
-    async def test_validate_input_nightscout_url_only(self):
+    async def test_validate_carelink_input_nightscout_url_only(self):
         """Test validation fails when only URL is provided."""
         mock_hass = MagicMock()
 
@@ -140,9 +140,9 @@ class TestValidateInput:
             }
 
             with pytest.raises(CannotConnect):
-                await validate_input(mock_hass, data)
+                await validate_carelink_input(mock_hass, data)
 
-    async def test_validate_input_nightscout_api_only(self):
+    async def test_validate_carelink_input_nightscout_api_only(self):
         """Test validation fails when only API key is provided."""
         mock_hass = MagicMock()
 
@@ -162,9 +162,9 @@ class TestValidateInput:
             }
 
             with pytest.raises(CannotConnect):
-                await validate_input(mock_hass, data)
+                await validate_carelink_input(mock_hass, data)
 
-    async def test_validate_input_invalid_url_scheme(self):
+    async def test_validate_carelink_input_invalid_url_scheme(self):
         """Test validation fails with invalid URL scheme."""
         mock_hass = MagicMock()
 
@@ -184,9 +184,9 @@ class TestValidateInput:
             }
 
             with pytest.raises(CannotConnect):
-                await validate_input(mock_hass, data)
+                await validate_carelink_input(mock_hass, data)
 
-    async def test_validate_input_url_without_host(self):
+    async def test_validate_carelink_input_url_without_host(self):
         """Test validation fails with URL without host."""
         mock_hass = MagicMock()
 
@@ -206,9 +206,9 @@ class TestValidateInput:
             }
 
             with pytest.raises(CannotConnect):
-                await validate_input(mock_hass, data)
+                await validate_carelink_input(mock_hass, data)
 
-    async def test_validate_input_strips_url_whitespace(self):
+    async def test_validate_carelink_input_strips_url_whitespace(self):
         """Test that URL whitespace is stripped."""
         mock_hass = MagicMock()
 
@@ -234,7 +234,7 @@ class TestValidateInput:
                 "nightscout_api": "secret123",
             }
 
-            await validate_input(mock_hass, data)
+            await validate_carelink_input(mock_hass, data)
 
             # URL should be stripped
             assert data["nightscout_url"] == "https://nightscout.example.com"

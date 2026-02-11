@@ -13,17 +13,21 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
 
 from .api import CarelinkClient
+from .tandem_api import TandemSourceClient, TandemAuthError
 from .nightscout_uploader import NightscoutUploader
-from .const import DOMAIN, SCAN_INTERVAL
+from .const import (
+    DOMAIN,
+    SCAN_INTERVAL,
+    PLATFORM_TYPE,
+    PLATFORM_CARELINK,
+    PLATFORM_TANDEM,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
-async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
-    """Validate the user input allows us to connect.
-
-    Data has the keys from the schema with values provided by the user.
-    """
+async def validate_carelink_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+    """Validate Carelink (Medtronic) user input."""
     client = CarelinkClient(
         data.setdefault("cl_refresh_token", None),
         data.setdefault("cl_token", None),
@@ -43,6 +47,40 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
         except Exception:
             _LOGGER.warning("Failed to close Carelink client during validation")
 
+    await _validate_nightscout(hass, data)
+
+    return {"title": "Carelink"}
+
+
+async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+    """Validate Tandem Source user input."""
+    email = data.get("tandem_email", "").strip()
+    password = data.get("tandem_password", "")
+    region = data.get("tandem_region", "EU")
+
+    if not email or not password:
+        raise InvalidAuth
+
+    client = TandemSourceClient(email, password, region)
+    try:
+        if not await client.login():
+            raise InvalidAuth
+    except TandemAuthError as e:
+        _LOGGER.warning("Tandem login failed: %s", e)
+        raise InvalidAuth from e
+    finally:
+        try:
+            await client.close()
+        except Exception:
+            _LOGGER.warning("Failed to close Tandem client during validation")
+
+    await _validate_nightscout(hass, data)
+
+    return {"title": f"Tandem t:slim ({region})"}
+
+
+async def _validate_nightscout(hass: HomeAssistant, data: dict[str, Any]) -> None:
+    """Validate Nightscout configuration if provided."""
     nightscout_url = data.setdefault("nightscout_url", None)
     nightscout_api = data.setdefault("nightscout_api", None)
 
@@ -61,9 +99,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             raise CannotConnect
 
-        uploader = NightscoutUploader(
-            nightscout_url, nightscout_api
-        )
+        uploader = NightscoutUploader(nightscout_url, nightscout_api)
         try:
             if not await uploader.reachServer():
                 raise CannotConnect
@@ -73,22 +109,49 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
             except Exception:
                 _LOGGER.warning("Failed to close Nightscout uploader during validation")
 
-    return {"title": "Carelink"}
-
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for carelink."""
 
     VERSION = 1
 
-    def _get_schema(self, defaults: dict[str, Any] | None = None, include_auth: bool = True) -> vol.Schema:
-        """Generate the schema with optional default values."""
+    def __init__(self):
+        """Initialize the config flow."""
+        self._platform_type: str | None = None
+
+    # ── Step 1: Choose platform ──────────────────────────────────────────
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle platform selection step."""
+        if user_input is not None:
+            self._platform_type = user_input.get(PLATFORM_TYPE, PLATFORM_CARELINK)
+            if self._platform_type == PLATFORM_TANDEM:
+                return await self.async_step_tandem()
+            return await self.async_step_carelink()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({
+                vol.Required(
+                    PLATFORM_TYPE, default=PLATFORM_CARELINK
+                ): vol.In({
+                    PLATFORM_CARELINK: "Medtronic CareLink",
+                    PLATFORM_TANDEM: "Tandem t:slim (Source)",
+                }),
+            }),
+        )
+
+    # ── Step 2a: Carelink configuration ──────────────────────────────────
+
+    def _get_carelink_schema(self, defaults: dict[str, Any] | None = None, include_auth: bool = True) -> vol.Schema:
+        """Generate the Carelink schema with optional default values."""
         if defaults is None:
             defaults = {}
 
         schema = {}
 
-        # Only include auth fields if requested (e.g. initial setup)
         if include_auth:
             schema.update({
                 vol.Optional("cl_token", description={"suggested_value": defaults.get("cl_token", "")}): str,
@@ -99,7 +162,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional("patientId", description={"suggested_value": defaults.get("patientId", "")}): str,
             })
 
-        # Always include Nightscout and Scan Interval configuration
         schema.update({
             vol.Optional("nightscout_url", description={"suggested_value": defaults.get("nightscout_url", "")}): str,
             vol.Optional("nightscout_api", description={"suggested_value": defaults.get("nightscout_api", "")}): str,
@@ -108,15 +170,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return vol.Schema(schema)
 
-    async def async_step_user(
+    async def async_step_carelink(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle the initial step."""
+        """Handle Carelink configuration step."""
         errors = {}
 
         if user_input is not None:
+            user_input[PLATFORM_TYPE] = PLATFORM_CARELINK
             try:
-                info = await validate_input(self.hass, user_input)
+                info = await validate_carelink_input(self.hass, user_input)
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
@@ -127,12 +190,66 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 return self.async_create_entry(title=info["title"], data=user_input)
 
-        # Show full form (Auth + Nightscout)
         return self.async_show_form(
-            step_id="user",
-            data_schema=self._get_schema(user_input, include_auth=True),
+            step_id="carelink",
+            data_schema=self._get_carelink_schema(user_input, include_auth=True),
             errors=errors
         )
+
+    # ── Step 2b: Tandem configuration ────────────────────────────────────
+
+    def _get_tandem_schema(self, defaults: dict[str, Any] | None = None, include_auth: bool = True) -> vol.Schema:
+        """Generate the Tandem schema with optional default values."""
+        if defaults is None:
+            defaults = {}
+
+        schema = {}
+
+        if include_auth:
+            schema.update({
+                vol.Required("tandem_email", description={"suggested_value": defaults.get("tandem_email", "")}): str,
+                vol.Required("tandem_password", description={"suggested_value": defaults.get("tandem_password", "")}): str,
+                vol.Required("tandem_region", default=defaults.get("tandem_region", "EU")): vol.In({
+                    "EU": "Europe",
+                    "US": "United States",
+                }),
+            })
+
+        schema.update({
+            vol.Optional("nightscout_url", description={"suggested_value": defaults.get("nightscout_url", "")}): str,
+            vol.Optional("nightscout_api", description={"suggested_value": defaults.get("nightscout_api", "")}): str,
+            vol.Required(SCAN_INTERVAL, description={"suggested_value": defaults.get(SCAN_INTERVAL, 300)}): vol.All(vol.Coerce(int), vol.Range(min=60, max=900))
+        })
+
+        return vol.Schema(schema)
+
+    async def async_step_tandem(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle Tandem Source configuration step."""
+        errors = {}
+
+        if user_input is not None:
+            user_input[PLATFORM_TYPE] = PLATFORM_TANDEM
+            try:
+                info = await validate_tandem_input(self.hass, user_input)
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+            else:
+                return self.async_create_entry(title=info["title"], data=user_input)
+
+        return self.async_show_form(
+            step_id="tandem",
+            data_schema=self._get_tandem_schema(user_input, include_auth=True),
+            errors=errors
+        )
+
+    # ── Reconfiguration ──────────────────────────────────────────────────
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
@@ -140,16 +257,17 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle reconfiguration of the integration."""
         errors = {}
 
-        # Get the current configuration entry
         entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        platform = entry.data.get(PLATFORM_TYPE, PLATFORM_CARELINK)
 
         if user_input is not None:
-            # Merge existing auth data (hidden from form) with new Nightscout input
-            # This ensures validation passes using the credentials we already have
             full_config = {**entry.data, **user_input}
 
             try:
-                await validate_input(self.hass, full_config)
+                if platform == PLATFORM_TANDEM:
+                    await validate_tandem_input(self.hass, full_config)
+                else:
+                    await validate_carelink_input(self.hass, full_config)
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
@@ -162,13 +280,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     entry, data=full_config
                 )
 
-        # Prepare defaults: use user_input if a retry is happening, otherwise use stored entry data
         schema_defaults = user_input if user_input else dict(entry.data)
 
-        # Show partial form (Nightscout Only + Scan Interval)
+        if platform == PLATFORM_TANDEM:
+            schema = self._get_tandem_schema(schema_defaults, include_auth=False)
+        else:
+            schema = self._get_carelink_schema(schema_defaults, include_auth=False)
+
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=self._get_schema(schema_defaults, include_auth=False),
+            data_schema=schema,
             errors=errors,
         )
 

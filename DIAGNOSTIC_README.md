@@ -4,6 +4,22 @@ This directory contains diagnostic tools to help troubleshoot the Tandem sensor 
 
 ## Quick Start
 
+### 0. Check Current Sensor States
+
+First, check the current state of your sensors:
+
+```bash
+cd Home-Assistant-Tandem-Source-Carelink
+python check_ha_sensors.py
+```
+
+This will show:
+- Which sensors are in "Unknown" state
+- Which sensors are working
+- Recent errors from Home Assistant logs
+
+**Note**: You'll need a Home Assistant Long-Lived Access Token. Add it to `test_credentials.json` as `ha_token` or pass via `--token` argument.
+
 ### 1. Enable Debug Logging in Home Assistant
 
 Add this to your `configuration.yaml`:

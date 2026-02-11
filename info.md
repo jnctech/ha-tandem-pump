@@ -10,9 +10,14 @@ the [Python port](https://github.com/ondrej1024/carelink-python-client) from ano
 
 ## Supported devices
 
+### Medtronic
 - [Medtronic Guardian Connect CGM](https://hcp.medtronic-diabetes.com.au/guardian-connect) (*to be confirmed*)
 - [Medtronic MiniMed 770G pump](https://www.medtronicdiabetes.com/products/minimed-770g-insulin-pump-system) (*to be confirmed*)
 - [Medtronic MiniMed 780G pump](https://www.medtronic-diabetes.co.uk/insulin-pump-therapy/minimed-780g-system)
+
+### Tandem
+- [Tandem t:slim X2 pump](https://www.tandemdiabetes.com/products/t-slim-x2-insulin-pump) with Control-IQ technology
+- Compatible with Tandem Source (EU and US regions)
 
 
 ## Limitations

@@ -450,6 +450,18 @@ class TandemSourceClient:
                 "Tandem: ControlIQ therapy timeline not available "
                 "(Source OIDC token may not be accepted by ControlIQ API)"
             )
+            # Fallback: Try therapy_events API instead
+            _LOGGER.info("Tandem: Attempting fallback to therapy_events API")
+            try:
+                therapy_events = await self.get_therapy_events(start, end)
+                if therapy_events:
+                    _LOGGER.info("Tandem: Successfully fetched therapy_events as fallback")
+                    data["therapy_events"] = therapy_events
+                else:
+                    _LOGGER.warning("Tandem: therapy_events API also returned no data")
+            except Exception as e:
+                _LOGGER.error("Tandem: Failed to fetch therapy_events fallback: %s", e)
+
         if not data["dashboard_summary"]:
             _LOGGER.info(
                 "Tandem: ControlIQ dashboard summary not available "

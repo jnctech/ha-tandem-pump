@@ -1,5 +1,13 @@
 # Tandem t:slim Pump Integration for Home Assistant
 
+## Documentation
+
+- [Troubleshooting Guide](TROUBLESHOOTING.md) - Common issues and solutions
+- [Contributing Guidelines](CONTRIBUTING.md) - How to contribute to this project
+- [Changelog](CHANGELOG.md) - Version history and release notes
+
+---
+
 ## Prerequisites
 
 1. **A Tandem t:slim pump** syncing data to [Tandem Source](https://source.eu.tandemdiabetes.com) (EU) or [source.tandemdiabetes.com](https://source.tandemdiabetes.com) (US)

@@ -24,6 +24,7 @@ import logging
 import os
 import re
 import ssl
+import struct
 import time
 from datetime import datetime, timedelta
 from urllib.parse import urlencode, urlparse, parse_qs
@@ -45,6 +46,135 @@ class TandemAuthError(Exception):
 
 class TandemApiError(Exception):
     """Raised when an API call fails."""
+
+
+# ── Binary pump event decoder ────────────────────────────────────────
+# The Tandem Source pumpevents API returns base64-encoded binary data.
+# Each record is 26 bytes (big-endian). Format based on tconnectsync
+# event parser (https://github.com/jwoglom/tconnectsync).
+
+EVENT_LEN = 26
+TANDEM_EPOCH = 1199145600  # 2008-01-01 00:00:00 UTC
+
+# Event type IDs we care about
+EVT_BASAL_RATE_CHANGE = 3
+EVT_BOLUS_COMPLETED = 20
+EVT_CGM_DATA_GXB = 256
+EVT_BASAL_DELIVERY = 279
+EVT_BOLUS_DELIVERY = 280
+
+
+def decode_pump_events(raw_b64: str) -> list[dict]:
+    """Decode base64-encoded binary pump events into a list of dicts.
+
+    Each returned dict contains:
+        event_id: int - event type identifier
+        event_name: str - human-readable event name
+        timestamp: datetime - event timestamp (UTC)
+        seq: int - sequence number
+        ... event-specific fields
+    """
+    try:
+        raw_bytes = base64.b64decode(raw_b64)
+    except Exception as e:
+        _LOGGER.error("Failed to base64-decode pump events: %s", e)
+        return []
+
+    num_events = len(raw_bytes) // EVENT_LEN
+    _LOGGER.debug(
+        "Decoding %d pump events (%d bytes)", num_events, len(raw_bytes)
+    )
+
+    events = []
+    for i in range(num_events):
+        chunk = raw_bytes[i * EVENT_LEN : (i + 1) * EVENT_LEN]
+        if len(chunk) < EVENT_LEN:
+            break
+
+        # Header (bytes 0-9)
+        source_and_id = struct.unpack_from(">H", chunk, 0)[0]
+        event_id = source_and_id & 0x0FFF
+        ts_raw = struct.unpack_from(">I", chunk, 2)[0]
+        seq = struct.unpack_from(">I", chunk, 6)[0]
+        payload = chunk[10:26]  # 16-byte data payload
+
+        ts = datetime.utcfromtimestamp(TANDEM_EPOCH + ts_raw)
+
+        evt = {
+            "event_id": event_id,
+            "timestamp": ts,
+            "seq": seq,
+        }
+
+        # Parse event-specific payload fields
+        if event_id == EVT_CGM_DATA_GXB:
+            evt["event_name"] = "CGM"
+            # uint16 at payload offset 4 = glucose in mg/dL
+            glucose = struct.unpack_from(">H", payload, 4)[0]
+            # int8 at payload offset 0 = rate of change (* 0.1 mg/dL/min)
+            rate_raw = struct.unpack_from(">b", payload, 0)[0]
+            status = struct.unpack_from(">H", payload, 2)[0]
+            evt["glucose_mgdl"] = glucose
+            evt["rate_of_change"] = round(rate_raw * 0.1, 1)
+            evt["status"] = status  # 0=normal, 1=high, 2=low
+
+        elif event_id == EVT_BOLUS_COMPLETED:
+            evt["event_name"] = "BolusCompleted"
+            bolus_id = struct.unpack_from(">H", payload, 0)[0]
+            completion = struct.unpack_from(">H", payload, 2)[0]
+            iob = struct.unpack_from(">f", payload, 4)[0]
+            delivered = struct.unpack_from(">f", payload, 8)[0]
+            requested = struct.unpack_from(">f", payload, 12)[0]
+            evt["bolus_id"] = bolus_id
+            evt["completion_status"] = completion  # 3 = Completed
+            evt["iob"] = round(iob, 2)
+            evt["insulin_delivered"] = round(delivered, 2)
+            evt["insulin_requested"] = round(requested, 2)
+
+        elif event_id == EVT_BOLUS_DELIVERY:
+            evt["event_name"] = "BolusDelivery"
+            bolus_type = struct.unpack_from(">B", payload, 0)[0]
+            status = struct.unpack_from(">B", payload, 1)[0]
+            bolus_id = struct.unpack_from(">H", payload, 2)[0]
+            requested_now = struct.unpack_from(">H", payload, 4)[0]
+            correction = struct.unpack_from(">H", payload, 8)[0]
+            delivered_total = struct.unpack_from(">H", payload, 12)[0]
+            evt["bolus_type"] = bolus_type
+            evt["delivery_status"] = status  # 0=completed, 1=started
+            evt["bolus_id"] = bolus_id
+            evt["requested_now_mu"] = requested_now  # milliunits
+            evt["correction_mu"] = correction
+            evt["delivered_total_mu"] = delivered_total
+            evt["insulin_delivered"] = round(delivered_total / 1000.0, 3)
+
+        elif event_id == EVT_BASAL_RATE_CHANGE:
+            evt["event_name"] = "BasalRateChange"
+            commanded = struct.unpack_from(">f", payload, 0)[0]
+            base_rate = struct.unpack_from(">f", payload, 4)[0]
+            max_rate = struct.unpack_from(">f", payload, 8)[0]
+            change_type = struct.unpack_from(">B", payload, 13)[0]
+            evt["commanded_rate"] = round(commanded, 3)
+            evt["base_rate"] = round(base_rate, 3)
+            evt["max_rate"] = round(max_rate, 3)
+            evt["change_type"] = change_type
+
+        elif event_id == EVT_BASAL_DELIVERY:
+            evt["event_name"] = "BasalDelivery"
+            commanded_source = struct.unpack_from(">H", payload, 2)[0]
+            profile_rate = struct.unpack_from(">H", payload, 4)[0]
+            commanded_rate = struct.unpack_from(">H", payload, 6)[0]
+            evt["commanded_source"] = commanded_source
+            evt["profile_rate_mu"] = profile_rate  # milliunits/hr
+            evt["commanded_rate_mu"] = commanded_rate
+            evt["commanded_rate"] = round(commanded_rate / 1000.0, 3)
+
+        else:
+            evt["event_name"] = f"Event_{event_id}"
+            continue  # Skip events we don't need
+
+        events.append(evt)
+
+    return events
 
 
 class TandemSourceClient:
@@ -392,25 +522,103 @@ class TandemSourceClient:
                 f"{self.urls['TDC_BASE']}tconnect/therapyevents/api/"
                 f"TherapyEvents/{start_date}/{end_date}/false?userId={user_guid}"
             )
-            return await self._api_get(url)
+            _LOGGER.info(f"Tandem: Attempting therapy_events API: {url}")
+            result = await self._api_get(url)
+            _LOGGER.info(f"Tandem: therapy_events returned: {type(result)}, keys: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
+            return result
         except (TandemApiError, httpx.HTTPError) as e:
-            _LOGGER.debug("Therapy events not available: %s", e)
+            _LOGGER.error(f"Therapy events API failed: {e}", exc_info=True)
+            return None
+
+    async def get_pump_events(
+        self, device_id: str | int, start_date: str, end_date: str
+    ) -> list[dict] | None:
+        """Fetch and decode pump events from the Source Reports API.
+
+        The pumpevents endpoint returns base64-encoded binary data using
+        Tandem's proprietary 26-byte record format. This method fetches the
+        raw response, decodes the binary, and returns structured event dicts.
+
+        Args:
+            device_id: tconnectDeviceId from pump metadata
+            start_date: Date in YYYY-MM-DD format
+            end_date: Date in YYYY-MM-DD format
+
+        Returns list of decoded event dicts, or None if unavailable.
+        """
+        try:
+            user_id = self.pumper_id or self.account_id
+
+            # Only request the event types we need for sensor data
+            event_ids = (
+                "256,"   # CGM_DATA_GXB (glucose readings)
+                "20,"    # BOLUS_COMPLETED (IOB, delivered, requested)
+                "280,"   # BOLUS_DELIVERY (bolus details)
+                "3,"     # BASAL_RATE_CHANGE (basal rates)
+                "279"    # BASAL_DELIVERY (commanded rates)
+            )
+
+            url = (
+                f"{self.urls['SOURCE_URL']}api/reports/reportsfacade/"
+                f"pumpevents/{user_id}/{device_id}"
+                f"?minDate={start_date}&maxDate={end_date}"
+                f"&eventIds={event_ids}"
+            )
+
+            _LOGGER.info("Tandem: Fetching pump events from Source Reports API")
+            _LOGGER.debug("Tandem: Pump events URL: %s", url)
+
+            # The pumpevents endpoint returns base64-encoded binary,
+            # wrapped in a JSON string. Use _api_get which calls resp.json()
+            # to unwrap the JSON string layer, then decode the binary.
+            raw_response = await self._api_get(url)
+
+            if not raw_response:
+                _LOGGER.warning("Tandem: Pump events API returned no data")
+                return None
+
+            if isinstance(raw_response, str):
+                # Base64-encoded binary wrapped in JSON string
+                events = decode_pump_events(raw_response)
+                _LOGGER.info(
+                    "Tandem: Decoded %d pump events from binary data",
+                    len(events),
+                )
+                return events if events else None
+            elif isinstance(raw_response, list):
+                # Already decoded (unlikely but handle gracefully)
+                _LOGGER.info(
+                    "Tandem: Pump events returned as list (%d items)",
+                    len(raw_response),
+                )
+                return raw_response
+            else:
+                _LOGGER.warning(
+                    "Tandem: Unexpected pump events response type: %s",
+                    type(raw_response),
+                )
+                return None
+
+        except (TandemApiError, httpx.HTTPError) as e:
+            _LOGGER.error("Pump events API failed: %s", e, exc_info=True)
             return None
 
     # ── Unified data fetch ───────────────────────────────────────────────
 
     async def get_recent_data(self) -> dict:
-        """Fetch all available recent data from both Tandem Source and ControlIQ APIs.
+        """Fetch all available recent data from Tandem Source APIs.
 
         Returns a unified dict with keys:
             pump_metadata: dict or None
             pumper_info: dict or None
-            therapy_timeline: dict or None
-            dashboard_summary: dict or None
+            pump_events: list or None  (from Source Reports API)
+            therapy_timeline: dict or None  (from ControlIQ, often unavailable)
+            dashboard_summary: dict or None  (from ControlIQ, often unavailable)
         """
         data = {
             "pump_metadata": None,
             "pumper_info": None,
+            "pump_events": None,
             "therapy_timeline": None,
             "dashboard_summary": None,
         }
@@ -431,42 +639,54 @@ class TandemSourceClient:
         except Exception as e:
             _LOGGER.warning("Failed to fetch pumper info: %s", e)
 
-        # Therapy timeline for last 1 day (ControlIQ API - may not work
-        # with Source OIDC tokens; sensors degrade gracefully if unavailable)
+        # ── Pump events from Source Reports API ──────────────────────
+        # This is the primary data source (same endpoint the web UI uses).
+        # Requires tconnectDeviceId from pump metadata.
         today = datetime.now()
         yesterday = today - timedelta(days=1)
-        start = yesterday.strftime("%m-%d-%Y")
-        end = today.strftime("%m-%d-%Y")
 
-        _LOGGER.debug(
-            "Tandem: Fetching ControlIQ data for %s to %s", start, end
-        )
+        device_id = None
+        if data["pump_metadata"]:
+            device_id = data["pump_metadata"].get("tconnectDeviceId")
 
-        data["therapy_timeline"] = await self.get_therapy_timeline(start, end)
-        data["dashboard_summary"] = await self.get_dashboard_summary(start, end)
-
-        if not data["therapy_timeline"]:
-            _LOGGER.info(
-                "Tandem: ControlIQ therapy timeline not available "
-                "(Source OIDC token may not be accepted by ControlIQ API)"
-            )
-            # Fallback: Try therapy_events API instead
-            _LOGGER.info("Tandem: Attempting fallback to therapy_events API")
+        if device_id:
+            start_iso = yesterday.strftime("%Y-%m-%d")
+            end_iso = today.strftime("%Y-%m-%d")
             try:
-                therapy_events = await self.get_therapy_events(start, end)
-                if therapy_events:
-                    _LOGGER.info("Tandem: Successfully fetched therapy_events as fallback")
-                    data["therapy_events"] = therapy_events
-                else:
-                    _LOGGER.warning("Tandem: therapy_events API also returned no data")
+                data["pump_events"] = await self.get_pump_events(
+                    device_id, start_iso, end_iso
+                )
             except Exception as e:
-                _LOGGER.error("Tandem: Failed to fetch therapy_events fallback: %s", e)
-
-        if not data["dashboard_summary"]:
-            _LOGGER.info(
-                "Tandem: ControlIQ dashboard summary not available "
-                "(Source OIDC token may not be accepted by ControlIQ API)"
+                _LOGGER.error("Failed to fetch pump events: %s", e)
+        else:
+            _LOGGER.warning(
+                "Tandem: No tconnectDeviceId in metadata, cannot fetch pump events"
             )
+
+        # ── ControlIQ endpoints (legacy, often return 404) ───────────
+        # Try these as a secondary source; they may not accept the
+        # Source OIDC token.
+        if not data["pump_events"]:
+            start_mm = yesterday.strftime("%m-%d-%Y")
+            end_mm = today.strftime("%m-%d-%Y")
+
+            _LOGGER.debug(
+                "Tandem: No pump_events, trying ControlIQ endpoints for %s to %s",
+                start_mm, end_mm,
+            )
+
+            data["therapy_timeline"] = await self.get_therapy_timeline(
+                start_mm, end_mm
+            )
+            data["dashboard_summary"] = await self.get_dashboard_summary(
+                start_mm, end_mm
+            )
+
+            if not data["therapy_timeline"]:
+                _LOGGER.info(
+                    "Tandem: ControlIQ therapy timeline not available "
+                    "(Source OIDC token may not be accepted by ControlIQ API)"
+                )
 
         return data
 

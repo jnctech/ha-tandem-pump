@@ -269,11 +269,14 @@ async def _async_setup_tandem_entry(
     hass: HomeAssistant, entry: ConfigEntry, config: dict
 ) -> bool:
     """Set up a Tandem t:slim Source config entry."""
+    _LOGGER.info("Setting up Tandem entry: %s", entry.entry_id)
+
     tandem_client = TandemSourceClient(
         email=config["tandem_email"],
         password=config["tandem_password"],
         region=config.get("tandem_region", "EU"),
     )
+    _LOGGER.debug("Tandem client created for region: %s", config.get("tandem_region", "EU"))
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         TANDEM_CLIENT: tandem_client,
@@ -286,17 +289,28 @@ async def _async_setup_tandem_entry(
             config["nightscout_api"]
         )
         hass.data[DOMAIN][entry.entry_id][UPLOADER] = nightscout_uploader
+        _LOGGER.debug("Nightscout uploader configured")
 
     coordinator = TandemCoordinator(
         hass, entry, update_interval=timedelta(seconds=config[SCAN_INTERVAL])
     )
+    _LOGGER.info("TandemCoordinator created with update interval: %d seconds", config[SCAN_INTERVAL])
 
-    await coordinator.async_config_entry_first_refresh()
+    _LOGGER.info("Performing first coordinator refresh...")
+    try:
+        await coordinator.async_config_entry_first_refresh()
+        _LOGGER.info("First coordinator refresh completed successfully")
+        _LOGGER.debug("Coordinator data keys after first refresh: %s", list(coordinator.data.keys()) if coordinator.data else "None")
+    except Exception as e:
+        _LOGGER.error("First coordinator refresh FAILED: %s", e, exc_info=True)
+        raise
 
     hass.data[DOMAIN][entry.entry_id][COORDINATOR] = coordinator
 
+    _LOGGER.info("Forwarding entry setups to platforms: %s", PLATFORMS)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    _LOGGER.info("Tandem entry setup completed successfully")
     return True
 
 
@@ -678,10 +692,33 @@ class TandemCoordinator(DataUpdateCoordinator):
             self.uploader = hass.data[DOMAIN][entry.entry_id][UPLOADER]
 
     async def _async_update_data(self):
+        _LOGGER.info("TandemCoordinator: Starting _async_update_data")
         data = {}
 
-        await self.client.login()
-        recent_data = await self.client.get_recent_data()
+        try:
+            _LOGGER.debug("TandemCoordinator: Attempting login to Tandem Source API")
+            await self.client.login()
+            _LOGGER.info("TandemCoordinator: Login successful")
+        except Exception as e:
+            _LOGGER.error("TandemCoordinator: Login failed: %s", e, exc_info=True)
+            raise
+
+        try:
+            _LOGGER.debug("TandemCoordinator: Fetching recent data from API")
+            recent_data = await self.client.get_recent_data()
+            _LOGGER.info("TandemCoordinator: API data fetch completed. Data type: %s", type(recent_data))
+
+            if recent_data is None:
+                _LOGGER.error("TandemCoordinator: get_recent_data() returned None!")
+                return {}
+
+            if not isinstance(recent_data, dict):
+                _LOGGER.error("TandemCoordinator: get_recent_data() returned non-dict type: %s", type(recent_data))
+                return {}
+
+        except Exception as e:
+            _LOGGER.error("TandemCoordinator: Failed to fetch data from API: %s", e, exc_info=True)
+            raise
 
         _LOGGER.debug(
             "Tandem before data parsing: %s", sanitize_for_logging(recent_data)
@@ -751,16 +788,28 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         # ── Therapy timeline (CGM, bolus, basal) ────────────────────────
         timeline = recent_data.get("therapy_timeline")
-        self._parse_therapy_timeline(timeline, data)
+        _LOGGER.debug("TandemCoordinator: Parsing therapy timeline (present: %s)", timeline is not None)
+        try:
+            self._parse_therapy_timeline(timeline, data)
+            _LOGGER.info("TandemCoordinator: Therapy timeline parsed successfully")
+        except Exception as e:
+            _LOGGER.error("TandemCoordinator: Error parsing therapy timeline: %s", e, exc_info=True)
 
         # ── Dashboard summary (statistics) ───────────────────────────────
         summary = recent_data.get("dashboard_summary")
-        self._parse_dashboard_summary(summary, data)
+        _LOGGER.debug("TandemCoordinator: Parsing dashboard summary (present: %s)", summary is not None)
+        try:
+            self._parse_dashboard_summary(summary, data)
+            _LOGGER.info("TandemCoordinator: Dashboard summary parsed successfully")
+        except Exception as e:
+            _LOGGER.error("TandemCoordinator: Error parsing dashboard summary: %s", e, exc_info=True)
 
+        _LOGGER.info("TandemCoordinator: Data dictionary populated with %d keys", len(data))
         _LOGGER.debug(
             "Tandem _async_update_data: %s", sanitize_for_logging(data)
         )
 
+        _LOGGER.info("TandemCoordinator: Returning data dictionary")
         return data
 
     def _parse_therapy_timeline(self, timeline: dict | None, data: dict) -> None:

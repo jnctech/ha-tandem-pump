@@ -5,8 +5,9 @@
 
 ## Summary
 
-✅ **Integration IS loaded and working partially**
-❌ **Sensors are NOT being populated with data**
+✅ **Integration IS loaded and working**
+✅ **Primary sensors now populated** (PR #4)
+⚠️ **Some sensors still Unknown** (Issue #5 - dashboard-dependent)
 
 ## Key Findings
 

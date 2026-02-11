@@ -1,9 +1,10 @@
 # Issue: Home Assistant Sensors Not Populating
 
-**Status**: Open
+**Status**: Resolved (PR #4)
 **Priority**: High
 **Type**: Bug
 **Created**: 2026-02-11
+**Resolved**: 2026-02-12
 
 ## Description
 
@@ -123,7 +124,52 @@ def native_value(self) -> float:
 
 ---
 
+## Resolution (2026-02-12)
+
+### Root Cause
+The ControlIQ API endpoints (`tdcservices.eu.tandemdiabetes.com/tconnect/controliq/api/`) return HTTP 404 errors when accessed with Source OIDC tokens. This meant `therapy_timeline` and `dashboard_summary` were always `None`, leaving all sensors in Unknown state.
+
+### Fix Applied (PR #4)
+Switched to the **Source Reports pumpevents API** (`source.eu.tandemdiabetes.com/api/reports/reportsfacade/pumpevents/`) as the primary data source. This is the same endpoint the Tandem Source web UI uses.
+
+The pumpevents API returns **base64-encoded binary data** using Tandem's proprietary 26-byte record format. Implemented a binary decoder (`decode_pump_events()`) that parses each record:
+- **Header** (bytes 0-9): 4-bit source + 12-bit event_id, 4-byte timestamp (seconds since 2008-01-01), 4-byte sequence number
+- **Payload** (bytes 10-25): 16 bytes of event-specific data
+
+### Event Types Decoded
+| Event ID | Name | Sensor Data Extracted |
+|----------|------|----------------------|
+| 256 | CGM_DATA_GXB | glucose_mgdl, rate_of_change, status |
+| 20 | BOLUS_COMPLETED | iob, insulin_delivered, insulin_requested, bolus_id |
+| 280 | BOLUS_DELIVERY | bolus_type, delivery_status, insulin_delivered |
+| 3 | BASAL_RATE_CHANGE | commanded_rate, base_rate, max_rate, change_type |
+| 279 | BASAL_DELIVERY | commanded_source, profile_rate_mu, commanded_rate |
+
+### Sensors Now Populating
+- Last glucose (mg/dL and mmol/L)
+- Last glucose timestamp
+- Active insulin (IOB)
+- Basal rate
+- Last bolus (units and timestamp)
+- Last meal bolus
+- Control-IQ status
+- Glucose delta (after second update cycle)
+
+### Sensors Still Unknown
+See Issue #5 for remaining sensor gaps:
+- Average glucose, CGM usage, Time in range (require dashboard_summary or computation from CGM history)
+- Last pump upload, Last update (metadata timestamp parsing)
+
+### Key Discovery: How the Web UI Gets Data
+By inspecting network traffic on the Tandem Source web UI (`source.eu.tandemdiabetes.com`), we discovered the web UI uses the pumpevents endpoint - NOT the ControlIQ API. The web UI decodes the same binary format client-side in JavaScript.
+
+### Binary Format Reference
+Based on [tconnectsync](https://github.com/jwoglom/tconnectsync) event parser by @jwoglom.
+
+---
+
 ## Branch
 
 - Bugfix branch: `bugfix/sensor-population-unknown-state`
 - Base: `develop`
+- PR: #4

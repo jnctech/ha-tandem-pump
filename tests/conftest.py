@@ -1,75 +1,25 @@
-"""Fixtures for Carelink tests."""
-import sys
+"""Fixtures for Carelink / Tandem integration tests."""
+from __future__ import annotations
+
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-def _create_mock_modules() -> dict[str, MagicMock]:
-    """Create mock modules for homeassistant dependencies."""
-    mock_modules = {
-        'homeassistant': MagicMock(),
-        'homeassistant.components': MagicMock(),
-        'homeassistant.components.sensor': MagicMock(),
-        'homeassistant.components.binary_sensor': MagicMock(),
-        'homeassistant.config_entries': MagicMock(),
-        'homeassistant.const': MagicMock(),
-        'homeassistant.core': MagicMock(),
-        'homeassistant.data_entry_flow': MagicMock(),
-        'homeassistant.exceptions': MagicMock(),
-        'homeassistant.helpers': MagicMock(),
-        'homeassistant.helpers.entity': MagicMock(),
-        'homeassistant.helpers.entity_platform': MagicMock(),
-        'homeassistant.helpers.update_coordinator': MagicMock(),
-        'homeassistant.util': MagicMock(),
-        'homeassistant.util.dt': MagicMock(),
-    }
-
-    # Set up Platform enum mock
-    mock_modules['homeassistant.const'].Platform = MagicMock()
-    mock_modules['homeassistant.const'].Platform.SENSOR = 'sensor'
-    mock_modules['homeassistant.const'].Platform.BINARY_SENSOR = 'binary_sensor'
-
-    # Set up default timezone mock
-    mock_modules['homeassistant.util.dt'].DEFAULT_TIME_ZONE = 'UTC'
-
-    # Set up HomeAssistantError mock
-    class MockHomeAssistantError(Exception):
-        """Mock HomeAssistant error."""
-        pass
-
-    mock_modules['homeassistant.exceptions'].HomeAssistantError = MockHomeAssistantError
-
-    # Set up FlowResultType mock
-    mock_modules['homeassistant.data_entry_flow'].FlowResultType = MagicMock()
-    mock_modules['homeassistant.data_entry_flow'].FlowResultType.FORM = 'form'
-    mock_modules['homeassistant.data_entry_flow'].FlowResultType.CREATE_ENTRY = 'create_entry'
-
-    return mock_modules
-
-
-# Store original modules for cleanup
-_original_modules: dict[str, Any] = {}
-_mock_modules = _create_mock_modules()
-
-# Save originals and apply mocks
-for key in _mock_modules:
-    _original_modules[key] = sys.modules.get(key)
-sys.modules.update(_mock_modules)
-
-# Now we can import our modules
 from custom_components.carelink.api import CarelinkClient
 from custom_components.carelink.nightscout_uploader import NightscoutUploader
+from custom_components.carelink.const import DOMAIN
 
 
-def pytest_sessionfinish(session, exitstatus):
-    """Clean up sys.modules after test session."""
-    for key, original in _original_modules.items():
-        if original is None:
-            sys.modules.pop(key, None)
-        else:
-            sys.modules[key] = original
+@pytest.fixture(autouse=True)
+def auto_enable_custom_integrations(enable_custom_integrations):
+    """Enable loading custom integrations in all tests."""
+    yield
+
+
+# ── Carelink (Medtronic) fixtures ──────────────────────────────────────────
 
 
 @pytest.fixture
@@ -82,7 +32,11 @@ def mock_token_data() -> dict[str, str]:
     - token_details: {"country": "NL", "preferred_username": "testuser"}
     """
     return {
-        "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjk5OTk5OTk5OTksInRva2VuX2RldGFpbHMiOnsiY291bnRyeSI6Ik5MIiwicHJlZmVycmVkX3VzZXJuYW1lIjoidGVzdHVzZXIifX0.fake",
+        "access_token": (
+            "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9."
+            "eyJleHAiOjk5OTk5OTk5OTksInRva2VuX2RldGFpbHMiOnsiY291bnRyeSI6Ik5MIiwicH"
+            "JlZmVycmVkX3VzZXJuYW1lIjoidGVzdHVzZXIifX0.fake"
+        ),
         "refresh_token": "mock_refresh_token",
         "client_id": "mock_client_id",
         "client_secret": "mock_client_secret",
@@ -163,7 +117,7 @@ def mock_recent_data() -> dict[str, Any]:
 @pytest.fixture
 def mock_carelink_client(mock_token_data: dict[str, str], tmp_path) -> CarelinkClient:
     """Return a CarelinkClient instance for testing."""
-    client = CarelinkClient(
+    return CarelinkClient(
         carelink_refresh_token=mock_token_data["refresh_token"],
         carelink_token=mock_token_data["access_token"],
         client_id=mock_token_data["client_id"],
@@ -172,14 +126,125 @@ def mock_carelink_client(mock_token_data: dict[str, str], tmp_path) -> CarelinkC
         carelink_patient_id="mock_patient_id",
         config_path=str(tmp_path),
     )
-    return client
 
 
 @pytest.fixture
 def mock_nightscout_uploader() -> NightscoutUploader:
     """Return a NightscoutUploader instance for testing."""
-    uploader = NightscoutUploader(
+    return NightscoutUploader(
         nightscout_url="https://nightscout.example.com",
         nightscout_secret="mock_api_secret",
     )
-    return uploader
+
+
+# ── Config entry fixtures ─────────────────────────────────────────────────
+
+
+@pytest.fixture
+def mock_carelink_config_entry() -> MockConfigEntry:
+    """Return a MockConfigEntry for Carelink (Medtronic)."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title="Carelink",
+        data={
+            "platform_type": "carelink",
+            "cl_token": "mock_token",
+            "cl_refresh_token": "mock_refresh",
+            "cl_client_id": "mock_client_id",
+            "cl_client_secret": "mock_secret",
+            "cl_mag_identifier": "mock_mag",
+            "patientId": "mock_patient",
+            "scan_interval": 60,
+        },
+    )
+
+
+@pytest.fixture
+def mock_tandem_config_entry() -> MockConfigEntry:
+    """Return a MockConfigEntry for Tandem t:slim."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title="Tandem t:slim",
+        data={
+            "platform_type": "tandem",
+            "tandem_email": "test@example.com",
+            "tandem_password": "testpassword",
+            "tandem_region": "EU",
+            "scan_interval": 300,
+        },
+    )
+
+
+# ── Tandem mock data fixtures ─────────────────────────────────────────────
+
+
+@pytest.fixture
+def mock_tandem_recent_data() -> dict[str, Any]:
+    """Return mock data from the Tandem Source API."""
+    return {
+        "pump_metadata": {
+            "serialNumber": "12345678",
+            "modelNumber": "t:slim X2",
+            "softwareVersion": "7.6.0",
+            "lastUpload": "/Date(1705320000000)/",
+        },
+        "pumper_info": {
+            "firstName": "Test",
+            "lastName": "User",
+            "pumperId": "abc-123",
+        },
+        "therapy_timeline": {
+            "cgm": [
+                {
+                    "EventDateTime": "/Date(1705320000000)/",
+                    "Readings": [
+                        {"Value": 120, "Type": "EGV"},
+                    ],
+                },
+            ],
+            "bolus": [
+                {
+                    "CompletionDateTime": "/Date(1705318000000)/",
+                    "RequestDateTime": "/Date(1705317800000)/",
+                    "InsulinDelivered": 3.5,
+                    "RequestedInsulin": 3.5,
+                    "Description": "Standard",
+                    "CarbSize": 45,
+                    "BG": 120,
+                    "IOB": 2.1,
+                    "CompletionStatusID": "Completed",
+                },
+            ],
+            "basal": [
+                {
+                    "EventDateTime": "/Date(1705320000000)/",
+                    "BasalRate": 0.85,
+                    "Type": "Control-IQ",
+                },
+            ],
+        },
+        "dashboard_summary": {
+            "averageReading": 135,
+            "timeInRangePercent": 72.5,
+            "cgmInactivePercent": 5.0,
+        },
+    }
+
+
+@pytest.fixture
+def mock_tandem_recent_data_minimal() -> dict[str, Any]:
+    """Return mock Tandem data with only metadata (no ControlIQ)."""
+    return {
+        "pump_metadata": {
+            "serialNumber": "12345678",
+            "modelNumber": "t:slim X2",
+            "softwareVersion": "7.6.0",
+            "lastUpload": "/Date(1705320000000)/",
+        },
+        "pumper_info": {
+            "firstName": "Test",
+            "lastName": "User",
+        },
+        "therapy_timeline": None,
+        "dashboard_summary": None,
+    }

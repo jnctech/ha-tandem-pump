@@ -16,16 +16,19 @@ Data sources:
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
 import logging
 import os
 import re
+import ssl
 import time
 from datetime import datetime, timedelta
 from urllib.parse import urlencode, urlparse, parse_qs
 
+import certifi
 import httpx
 
 _LOGGER = logging.getLogger(__name__)
@@ -90,13 +93,23 @@ class TandemSourceClient:
 
         self._client: httpx.AsyncClient | None = None
 
-    def _get_client(self) -> httpx.AsyncClient:
-        """Get or create the async HTTP client."""
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Get or create the async HTTP client.
+
+        Creates the SSL context in an executor to avoid blocking the event loop
+        with load_verify_locations().
+        """
         if self._client is None or self._client.is_closed:
+            loop = asyncio.get_running_loop()
+            ssl_ctx = await loop.run_in_executor(
+                None,
+                lambda: ssl.create_default_context(cafile=certifi.where()),
+            )
             self._client = httpx.AsyncClient(
                 follow_redirects=True,
                 timeout=30.0,
                 headers={"User-Agent": USER_AGENT},
+                verify=ssl_ctx,
             )
         return self._client
 
@@ -126,7 +139,7 @@ class TandemSourceClient:
         if not self._needs_login():
             return True
 
-        client = self._get_client()
+        client = await self._get_client()
 
         _LOGGER.debug("Tandem: Starting OIDC login for %s region", self.region)
 
@@ -278,7 +291,7 @@ class TandemSourceClient:
 
     async def _api_get(self, url: str) -> dict:
         """Make an authenticated GET request with automatic re-login on 401."""
-        client = self._get_client()
+        client = await self._get_client()
 
         resp = await client.get(url, headers=self._api_headers())
 
@@ -418,14 +431,30 @@ class TandemSourceClient:
         except Exception as e:
             _LOGGER.warning("Failed to fetch pumper info: %s", e)
 
-        # Therapy timeline for last 1 day (ControlIQ API - may not work)
+        # Therapy timeline for last 1 day (ControlIQ API - may not work
+        # with Source OIDC tokens; sensors degrade gracefully if unavailable)
         today = datetime.now()
         yesterday = today - timedelta(days=1)
         start = yesterday.strftime("%m-%d-%Y")
         end = today.strftime("%m-%d-%Y")
 
+        _LOGGER.debug(
+            "Tandem: Fetching ControlIQ data for %s to %s", start, end
+        )
+
         data["therapy_timeline"] = await self.get_therapy_timeline(start, end)
         data["dashboard_summary"] = await self.get_dashboard_summary(start, end)
+
+        if not data["therapy_timeline"]:
+            _LOGGER.info(
+                "Tandem: ControlIQ therapy timeline not available "
+                "(Source OIDC token may not be accepted by ControlIQ API)"
+            )
+        if not data["dashboard_summary"]:
+            _LOGGER.info(
+                "Tandem: ControlIQ dashboard summary not available "
+                "(Source OIDC token may not be accepted by ControlIQ API)"
+            )
 
         return data
 

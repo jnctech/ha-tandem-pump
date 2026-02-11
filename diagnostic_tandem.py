@@ -38,10 +38,31 @@ async def test_tandem_api():
     print("Tandem Source API Diagnostic Tool")
     print("="*70 + "\n")
 
-    # Get credentials from user
-    email = input("Enter Tandem email: ").strip()
-    password = input("Enter Tandem password: ").strip()
-    region = input("Enter region (US/EU) [default: EU]: ").strip() or "EU"
+    # Try to load credentials from file first
+    credentials_file = Path(__file__).parent / "test_credentials.json"
+    email = None
+    password = None
+    region = "EU"
+
+    if credentials_file.exists():
+        print(f"Found credentials file: {credentials_file}")
+        try:
+            with open(credentials_file, 'r') as f:
+                creds = json.load(f)
+                email = creds.get("tandem_email")
+                password = creds.get("tandem_password")
+                region = creds.get("tandem_region", "EU")
+                print(f"✓ Loaded credentials from file (Region: {region})")
+        except Exception as e:
+            print(f"✗ Failed to load credentials file: {e}")
+            print("Falling back to interactive input...")
+
+    # If credentials not loaded from file, prompt user
+    if not email or not password:
+        print("\nNo credentials file found. Please enter credentials:")
+        email = input("Enter Tandem email: ").strip()
+        password = input("Enter Tandem password: ").strip()
+        region = input("Enter region (US/EU) [default: EU]: ").strip() or "EU"
 
     print("\n" + "-"*70)
     print("Step 1: Creating Tandem client")

@@ -2,7 +2,9 @@
 
 **Issue**: [#3](https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/issues/3)
 **Branch**: `bugfix/sensor-population-unknown-state`
-**Status**: Investigation in progress
+**PR**: [#4](https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/pull/4)
+**Status**: Resolved
+**Remaining gaps**: [#5](https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/issues/5)
 
 ## What We've Done
 
@@ -163,7 +165,35 @@ For questions or to report findings:
 - Include diagnostic script output
 - Specify which sensors are affected
 
+## Resolution (2026-02-12)
+
+### Root Cause Found
+
+The ControlIQ API endpoints (`tdcservices.eu.tandemdiabetes.com/tconnect/controliq/api/`) return **HTTP 404** when accessed with Source OIDC tokens. This is why `therapy_timeline` and `dashboard_summary` were always `None`.
+
+### How We Found It
+
+1. Enabled debug logging on the HA server via SSH
+2. Logs confirmed: API authentication succeeds, `pump_metadata` and `pumper_info` fetch correctly
+3. ControlIQ endpoints (`therapy_timeline`, `therapy_events`, `dashboard_summary`) all return 404
+4. Inspected Tandem Source web UI network traffic and discovered the web UI uses a **different API endpoint**: `/api/reports/reportsfacade/pumpevents/{userId}/{deviceId}`
+5. This endpoint returns **base64-encoded binary data** (not JSON), using Tandem's proprietary 26-byte record format
+
+### Fix Applied (PR #4)
+
+1. Implemented `decode_pump_events()` binary decoder in `tandem_api.py`
+2. Added `get_pump_events()` targeting the Source Reports API
+3. Updated `get_recent_data()` to use pump_events as primary data source
+4. Added `_parse_pump_events()` in `__init__.py` to extract sensor values from decoded events
+
+### Verification
+
+- Deployed to HA server via SSH (`scp` to `/config/custom_components/carelink/`)
+- Restarted HA core (`ha core restart`)
+- Confirmed 3376 events decoded: 1228 CGM, 68 BolusCompleted, 136 BolusDelivery, 778 BasalChange, 1166 BasalDelivery
+- Sensors populating: glucose 179 mg/dL, IOB 2.9 units, basal 3.524 U/hr, last bolus 0.74 units
+
 ---
 
-**Last Updated**: 2026-02-11
-**Commit**: f9e44ce
+**Last Updated**: 2026-02-12
+**Commits**: d7ea0da, ead41e9

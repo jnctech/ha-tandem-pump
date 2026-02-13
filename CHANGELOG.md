@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4-beta] - 2026-02-13
+
 ### Fixed
+- **Sensor update timing**: Improved data fetch performance and reliability
+  - Parallelised independent API calls (metadata + pumper_info concurrent, ControlIQ fallback concurrent)
+  - Added retry with exponential backoff (2s, 4s) for transient network errors (connection reset, timeout, DNS)
+  - Wrapped errors with Home Assistant `UpdateFailed` for proper coordinator backoff and entity unavailable marking
+  - Fixed timezone mismatch: API date range now uses pump timezone instead of server local time
+  - Demoted per-cycle INFO logs to DEBUG to reduce log noise (~288 lines/day at 5-min intervals)
 - **CRITICAL**: Fixed sensor population - all Tandem pump sensors stuck in "Unknown" state (#3)
   - ControlIQ API endpoints (`tdcservices.eu.tandemdiabetes.com`) return 404 errors
   - Switched to Source Reports pumpevents API as primary data source (same endpoint the Tandem Source web UI uses)
@@ -23,7 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `get_recent_data()` now uses pump_events as primary data source, falling back to ControlIQ endpoints only when unavailable
+- `get_recent_data()` accepts `pump_timezone` parameter for timezone-aware date ranges
+- `_api_get()` retries transient network errors up to 2 times with exponential backoff
 - Data coordinator prioritises pump_events over therapy_timeline for sensor value extraction
+- Data coordinator raises `UpdateFailed` on errors instead of returning empty dict
 
 ### Technical Notes
 - Binary format reference: [tconnectsync](https://github.com/jwoglom/tconnectsync) event parser
@@ -71,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Guardian Connect CGM
 - Nightscout upload capability
 
+[0.1.4-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.3-beta...v0.1.4-beta
 [0.1.3-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.1-beta...v0.1.3-beta
 [0.1.1-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/2024.1.0...v0.1.1-beta
 [2024.1.0]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/releases/tag/2024.1.0

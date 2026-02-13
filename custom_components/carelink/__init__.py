@@ -1,12 +1,13 @@
 """Medtronic Carelink / Tandem t:slim integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
 import shutil
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -679,7 +680,13 @@ class CarelinkCoordinator(DataUpdateCoordinator):
 # ═══════════════════════════════════════════════════════════════════════════
 
 class TandemCoordinator(DataUpdateCoordinator):
-    """Class to manage fetching data from the Tandem Source API."""
+    """Class to manage fetching data from the Tandem Source API.
+
+    Fetches pump events from the Tandem Source Reports API and replays
+    ALL intermediate events (CGM, bolus, basal) through the coordinator
+    so HA's recorder captures the full history between polls. Also imports
+    correctly-timestamped long-term statistics for Statistics Graph cards.
+    """
 
     def __init__(self, hass: HomeAssistant, entry, update_interval: timedelta):
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=update_interval)
@@ -688,6 +695,11 @@ class TandemCoordinator(DataUpdateCoordinator):
         self.client = hass.data[DOMAIN][entry.entry_id][TANDEM_CLIENT]
         self.timezone = hass.config.time_zone
         self._prev_sg_mgdl: float | None = None
+
+        # Historical data tracking
+        self._last_max_date: str | None = None  # maxDateWithEvents from metadata
+        self._last_event_seq: int = 0  # Last processed event sequence number
+        self._pending_replay_events: list[dict] = []  # Events to replay
 
         if UPLOADER in hass.data[DOMAIN][entry.entry_id]:
             self.uploader = hass.data[DOMAIN][entry.entry_id][UPLOADER]
@@ -817,6 +829,20 @@ class TandemCoordinator(DataUpdateCoordinator):
         _LOGGER.debug(
             "Tandem _async_update_data: %d keys", len(data)
         )
+
+        # ── Schedule replay of intermediate events ───────────────────────
+        # After the coordinator updates with the latest values, replay
+        # intermediate events so the recorder captures full history.
+        if self._pending_replay_events:
+            self.hass.async_create_task(
+                self._replay_historical_events(data)
+            )
+
+        # ── Import long-term statistics with correct timestamps ──────────
+        if pump_events:
+            self.hass.async_create_task(
+                self._import_statistics(pump_events)
+            )
 
         return data
 
@@ -1004,6 +1030,10 @@ class TandemCoordinator(DataUpdateCoordinator):
         Events are pre-decoded from binary format by decode_pump_events().
         Each event dict has: event_id, event_name, timestamp (datetime),
         and event-specific fields (glucose_mgdl, insulin_delivered, etc.).
+
+        All events are processed: the latest of each type populates the
+        current sensor state, and intermediate events are queued for
+        replay so the recorder captures full history between polls.
         """
         if not pump_events:
             _LOGGER.debug("No pump_events data, setting all to UNAVAILABLE")
@@ -1012,14 +1042,28 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         _LOGGER.debug("Tandem: Parsing %d decoded pump events", len(pump_events))
 
-        # Categorise events by type
-        cgm_readings = []
-        bolus_completed = []
-        bolus_delivery = []
-        basal_rate_changes = []
-        basal_delivery = []
+        # Filter out already-processed events using sequence number
+        new_events = [
+            evt for evt in pump_events
+            if evt.get("seq", 0) > self._last_event_seq
+        ]
 
-        for evt in pump_events:
+        if not new_events:
+            _LOGGER.debug(
+                "Tandem: No new events (all seq <= %d), using full set for "
+                "latest values",
+                self._last_event_seq,
+            )
+            new_events = pump_events
+
+        # Categorise events by type
+        cgm_readings: list[dict] = []
+        bolus_completed: list[dict] = []
+        bolus_delivery: list[dict] = []
+        basal_rate_changes: list[dict] = []
+        basal_delivery: list[dict] = []
+
+        for evt in new_events:
             eid = evt.get("event_id")
             if eid == 256:      # CGM_DATA_GXB
                 cgm_readings.append(evt)
@@ -1039,16 +1083,55 @@ class TandemCoordinator(DataUpdateCoordinator):
             len(basal_rate_changes), len(basal_delivery),
         )
 
-        # Log a sample for debugging
-        if cgm_readings:
-            _LOGGER.debug("Tandem: Latest CGM event: %s", cgm_readings[-1])
+        # Update the last-seen sequence number for deduplication
+        max_seq = max((evt.get("seq", 0) for evt in new_events), default=0)
+        if max_seq > self._last_event_seq:
+            self._last_event_seq = max_seq
+            _LOGGER.debug("Tandem: Updated last_event_seq to %d", max_seq)
+
+        # Sort all event lists by timestamp
+        cgm_readings.sort(key=lambda e: e["timestamp"])
+        bolus_completed.sort(key=lambda e: e["timestamp"])
+        bolus_delivery.sort(key=lambda e: e["timestamp"])
+        basal_rate_changes.sort(key=lambda e: e["timestamp"])
+        basal_delivery.sort(key=lambda e: e["timestamp"])
+
+        # ── Build intermediate events for replay ─────────────────────
+        # Collect all events except the latest of each type; these will
+        # be replayed after the coordinator update so the recorder
+        # captures them as individual state changes.
+        self._pending_replay_events = []
+
+        if len(cgm_readings) > 1:
+            for reading in cgm_readings[:-1]:
+                self._pending_replay_events.append(reading)
+
+        all_bolus = bolus_completed + bolus_delivery
+        all_bolus.sort(key=lambda e: e["timestamp"])
+        if len(all_bolus) > 1:
+            for bolus in all_bolus[:-1]:
+                self._pending_replay_events.append(bolus)
+
+        all_basal = basal_rate_changes + basal_delivery
+        all_basal.sort(key=lambda e: e["timestamp"])
+        if len(all_basal) > 1:
+            for basal in all_basal[:-1]:
+                self._pending_replay_events.append(basal)
+
+        # Sort replay events chronologically
+        self._pending_replay_events.sort(key=lambda e: e["timestamp"])
+
+        if self._pending_replay_events:
+            _LOGGER.info(
+                "Tandem: %d intermediate events queued for replay",
+                len(self._pending_replay_events),
+            )
+
+        # ── Populate current sensor values from latest events ────────
 
         # ── CGM readings ─────────────────────────────────────────────
         try:
             if cgm_readings:
-                # Events are already sorted by time (from binary sequence);
-                # take the last one as most recent
-                cgm_readings.sort(key=lambda e: e["timestamp"])
                 latest = cgm_readings[-1]
                 sg_mgdl = latest.get("glucose_mgdl", 0)
 
@@ -1091,13 +1174,64 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
 
+        # ── Store recent readings history as attributes ───────────────
+        # Custom Lovelace cards (e.g. ApexCharts) can use these for
+        # correctly-timestamped graphs. Limited to most recent entries
+        # to stay within HA's 16KB state attribute size limit.
+        tz = ZoneInfo(self.timezone)
+        _MAX_CGM_HISTORY = 24  # ~2 hours of 5-min readings
+        _MAX_BOLUS_HISTORY = 10
+        _MAX_BASAL_HISTORY = 10
+
+        # CGM readings history (for glucose graph cards)
+        recent_cgm = cgm_readings[-_MAX_CGM_HISTORY:]
+        data[f"{TANDEM_SENSOR_KEY_LASTSG_MGDL}_attributes"] = {
+            "readings": [
+                {
+                    "t": r["timestamp"].replace(tzinfo=tz).isoformat(),
+                    "v": r.get("glucose_mgdl"),
+                }
+                for r in recent_cgm
+                if r.get("glucose_mgdl")
+            ],
+        }
+
+        # IOB history (from bolus completed events)
+        recent_iob = bolus_completed[-_MAX_BOLUS_HISTORY:]
+        data[f"{TANDEM_SENSOR_KEY_ACTIVE_INSULIN}_attributes"] = {
+            "readings": [
+                {
+                    "t": b["timestamp"].replace(tzinfo=tz).isoformat(),
+                    "v": round(float(b["iob"]), 2),
+                }
+                for b in recent_iob
+                if b.get("iob") is not None
+            ],
+        }
+
+        # Basal rate history
+        all_basal_sorted = sorted(
+            basal_rate_changes + basal_delivery,
+            key=lambda e: e["timestamp"],
+        )
+        recent_basal = all_basal_sorted[-_MAX_BASAL_HISTORY:]
+        data[f"{TANDEM_SENSOR_KEY_BASAL_RATE}_attributes"] = {
+            "readings": [
+                {
+                    "t": b["timestamp"].replace(tzinfo=tz).isoformat(),
+                    "v": round(float(b["commanded_rate"]), 3),
+                }
+                for b in recent_basal
+                if b.get("commanded_rate") is not None
+            ],
+        }
+
         # ── Bolus events ─────────────────────────────────────────────
         try:
             # Prefer BOLUS_COMPLETED (has IOB), fall back to BOLUS_DELIVERY
-            all_bolus = bolus_completed or bolus_delivery
-            if all_bolus:
-                all_bolus.sort(key=lambda e: e["timestamp"])
-                last_bolus = all_bolus[-1]
+            latest_bolus_list = bolus_completed or bolus_delivery
+            if latest_bolus_list:
+                last_bolus = latest_bolus_list[-1]
 
                 insulin = last_bolus.get("insulin_delivered", 0)
                 if insulin:
@@ -1178,10 +1312,9 @@ class TandemCoordinator(DataUpdateCoordinator):
         try:
             # Prefer BASAL_RATE_CHANGE (has float rate), fall back to
             # BASAL_DELIVERY (has milliunits rate)
-            all_basal = basal_rate_changes or basal_delivery
-            if all_basal:
-                all_basal.sort(key=lambda e: e["timestamp"])
-                last_basal = all_basal[-1]
+            latest_basal_list = basal_rate_changes or basal_delivery
+            if latest_basal_list:
+                last_basal = latest_basal_list[-1]
 
                 rate = last_basal.get("commanded_rate")
                 if rate is not None:
@@ -1258,6 +1391,268 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] = UNAVAILABLE
             data[TANDEM_TIME_IN_RANGE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CGM_USAGE] = UNAVAILABLE
+
+    # ── Historical data replay ───────────────────────────────────────
+
+    async def _replay_historical_events(self, base_data: dict) -> None:
+        """Replay intermediate events so the recorder captures full history.
+
+        Each intermediate event is set as the coordinator's data, which
+        triggers entity listeners and writes a state to the recorder.
+        Events are replayed in chronological order with a brief yield
+        between each to allow the event loop to process state changes.
+
+        Only sensor keys affected by the event type are updated; static
+        device info keys (serial, model, etc.) are preserved from base_data.
+        """
+        events = self._pending_replay_events
+        self._pending_replay_events = []
+
+        if not events:
+            return
+
+        _LOGGER.info(
+            "Tandem: Replaying %d intermediate events for history", len(events)
+        )
+
+        tz = ZoneInfo(self.timezone)
+
+        for evt in events:
+            replay_data = dict(base_data)  # Shallow copy of current data
+            # Strip readings history from replayed states to avoid
+            # bloating the recorder with repeated large attribute payloads
+            for key in list(replay_data):
+                if key.endswith("_attributes") and isinstance(
+                    replay_data.get(key), dict
+                ) and "readings" in replay_data.get(key, {}):
+                    replay_data[key] = {}
+            eid = evt.get("event_id")
+
+            try:
+                if eid == 256:  # CGM_DATA_GXB
+                    sg_mgdl = evt.get("glucose_mgdl", 0)
+                    if sg_mgdl and sg_mgdl > 0:
+                        replay_data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = int(sg_mgdl)
+                        replay_data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = round(
+                            sg_mgdl * 0.0555, 2
+                        )
+                        replay_data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = (
+                            evt["timestamp"].replace(tzinfo=tz)
+                        )
+
+                elif eid == 20:  # BOLUS_COMPLETED
+                    insulin = evt.get("insulin_delivered", 0)
+                    if insulin:
+                        replay_data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = round(
+                            float(insulin), 2
+                        )
+                    replay_data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = (
+                        evt["timestamp"].replace(tzinfo=tz)
+                    )
+                    replay_data[TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS] = {
+                        "event_type": evt.get("event_name", ""),
+                        "insulin_requested": evt.get("insulin_requested"),
+                        "bolus_id": evt.get("bolus_id"),
+                        "completion_status": evt.get("completion_status"),
+                    }
+                    iob = evt.get("iob")
+                    if iob is not None:
+                        replay_data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = round(
+                            float(iob), 2
+                        )
+
+                elif eid == 280:  # BOLUS_DELIVERY
+                    insulin = evt.get("insulin_delivered", 0)
+                    if insulin:
+                        replay_data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = round(
+                            float(insulin), 2
+                        )
+                    replay_data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = (
+                        evt["timestamp"].replace(tzinfo=tz)
+                    )
+                    replay_data[TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS] = {
+                        "event_type": evt.get("event_name", ""),
+                        "bolus_id": evt.get("bolus_id"),
+                        "bolus_type": evt.get("bolus_type"),
+                        "delivery_status": evt.get("delivery_status"),
+                    }
+                    # Detect meal bolus
+                    btype = evt.get("bolus_type", 0)
+                    if btype & 0x10:
+                        meal_ins = evt.get("insulin_delivered", 0)
+                        replay_data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = (
+                            round(float(meal_ins), 2) if meal_ins else UNAVAILABLE
+                        )
+                        replay_data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {
+                            "bolus_type": btype,
+                            "bolus_id": evt.get("bolus_id"),
+                        }
+
+                elif eid in (3, 279):  # BASAL_RATE_CHANGE or BASAL_DELIVERY
+                    rate = evt.get("commanded_rate")
+                    if rate is not None:
+                        replay_data[TANDEM_SENSOR_KEY_BASAL_RATE] = round(
+                            float(rate), 3
+                        )
+                    commanded_source = evt.get("commanded_source")
+                    if commanded_source is not None:
+                        source_map = {
+                            0: "Suspended", 1: "Profile", 2: "Temp Rate",
+                            3: "Algorithm", 4: "Temp + Algorithm",
+                        }
+                        replay_data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = (
+                            source_map.get(
+                                commanded_source, f"Source_{commanded_source}"
+                            )
+                        )
+
+                self.async_set_updated_data(replay_data)
+                # Yield to the event loop so each state change is processed
+                await asyncio.sleep(0)
+
+            except Exception as e:
+                _LOGGER.warning(
+                    "Tandem: Error replaying event %s: %s",
+                    evt.get("event_name", "unknown"),
+                    e,
+                )
+
+        _LOGGER.debug("Tandem: Historical event replay complete")
+
+    # ── Long-term statistics import ──────────────────────────────────
+
+    async def _import_statistics(self, pump_events: list[dict]) -> None:
+        """Import pump events as HA long-term statistics.
+
+        Creates correctly-timestamped 5-minute statistics entries so
+        Statistics Graph cards show accurate historical data.
+        """
+        try:
+            from homeassistant.components.recorder.statistics import (
+                async_import_statistics,
+            )
+            from homeassistant.components.recorder.models import (
+                StatisticData,
+                StatisticMetaData,
+            )
+        except ImportError:
+            _LOGGER.debug(
+                "Tandem: Recorder statistics API not available, skipping"
+            )
+            return
+
+        tz = ZoneInfo(self.timezone)
+
+        # ── CGM statistics ───────────────────────────────────────────
+        cgm_stats: list[StatisticData] = []
+        iob_stats: list[StatisticData] = []
+        basal_stats: list[StatisticData] = []
+
+        for evt in pump_events:
+            eid = evt.get("event_id")
+            ts = evt.get("timestamp")
+            if not ts:
+                continue
+
+            # Ensure timezone-aware timestamp
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=tz)
+
+            # Round down to 5-minute boundary for statistics period
+            minute = (ts.minute // 5) * 5
+            period_start = ts.replace(
+                minute=minute, second=0, microsecond=0
+            )
+
+            if eid == 256:  # CGM
+                sg = evt.get("glucose_mgdl", 0)
+                if sg and sg > 0:
+                    mmol = round(sg * 0.0555, 2)
+                    cgm_stats.append(StatisticData(
+                        start=period_start,
+                        mean=mmol,
+                        min=mmol,
+                        max=mmol,
+                        state=mmol,
+                    ))
+
+            elif eid == 20:  # BOLUS_COMPLETED (has IOB)
+                iob = evt.get("iob")
+                if iob is not None:
+                    iob_val = round(float(iob), 2)
+                    iob_stats.append(StatisticData(
+                        start=period_start,
+                        mean=iob_val,
+                        min=iob_val,
+                        max=iob_val,
+                        state=iob_val,
+                    ))
+
+            elif eid in (3, 279):  # Basal
+                rate = evt.get("commanded_rate")
+                if rate is not None:
+                    rate_val = round(float(rate), 3)
+                    basal_stats.append(StatisticData(
+                        start=period_start,
+                        mean=rate_val,
+                        min=rate_val,
+                        max=rate_val,
+                        state=rate_val,
+                    ))
+
+        # Import each statistic type
+        entity_prefix = f"sensor.{DOMAIN}"
+
+        if cgm_stats:
+            try:
+                cgm_meta = StatisticMetaData(
+                    has_mean=True,
+                    has_sum=False,
+                    name="Last glucose level mmol",
+                    source="recorder",
+                    statistic_id=f"{entity_prefix}_last_glucose_level_mmol",
+                    unit_of_measurement="mmol/L",
+                )
+                async_import_statistics(self.hass, cgm_meta, cgm_stats)
+                _LOGGER.debug(
+                    "Tandem: Imported %d CGM statistics", len(cgm_stats)
+                )
+            except Exception as e:
+                _LOGGER.warning("Tandem: Failed to import CGM statistics: %s", e)
+
+        if iob_stats:
+            try:
+                iob_meta = StatisticMetaData(
+                    has_mean=True,
+                    has_sum=False,
+                    name="Active insulin (IOB)",
+                    source="recorder",
+                    statistic_id=f"{entity_prefix}_active_insulin_iob",
+                    unit_of_measurement="units",
+                )
+                async_import_statistics(self.hass, iob_meta, iob_stats)
+                _LOGGER.debug(
+                    "Tandem: Imported %d IOB statistics", len(iob_stats)
+                )
+            except Exception as e:
+                _LOGGER.warning("Tandem: Failed to import IOB statistics: %s", e)
+
+        if basal_stats:
+            try:
+                basal_meta = StatisticMetaData(
+                    has_mean=True,
+                    has_sum=False,
+                    name="Basal rate",
+                    source="recorder",
+                    statistic_id=f"{entity_prefix}_basal_rate",
+                    unit_of_measurement="U/hr",
+                )
+                async_import_statistics(self.hass, basal_meta, basal_stats)
+                _LOGGER.debug(
+                    "Tandem: Imported %d basal statistics", len(basal_stats)
+                )
+            except Exception as e:
+                _LOGGER.warning("Tandem: Failed to import basal statistics: %s", e)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

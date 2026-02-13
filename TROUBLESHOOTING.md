@@ -106,14 +106,20 @@ The ControlIQ API endpoints return 404 errors, leaving all sensors unpopulated. 
    - Check logs for "No tconnectDeviceId in metadata"
    - This usually means the pump hasn't uploaded to Tandem Source yet
 
-### Sensors Not Updating
+### Sensors Not Updating / Delayed Updates
 
-**Symptoms**: Sensors show old data, not updating in real-time
+**Symptoms**: Sensors show old data, updates take longer than the configured scan interval
 
-**Expected Behavior**: This is normal
-- Integration polls API every 5 minutes (default)
-- Not real-time - depends on pump sync frequency
-- Adjust scan interval in configuration if needed (60-900 seconds)
+**Expected Behavior**:
+- Integration polls API every 5 minutes (default scan interval)
+- Not real-time — depends on pump sync frequency via t:connect mobile app
+- Adjust scan interval in configuration if needed (60–900 seconds)
+
+**If updates are slower than expected**:
+1. **Check logs for transient errors**: Enable debug logging and look for `Tandem: transient error` messages. The integration retries failed API calls automatically (up to 2 retries with 2s/4s backoff).
+2. **Check for `UpdateFailed` messages**: If the coordinator reports `UpdateFailed`, Home Assistant will use exponential backoff before retrying. This is normal recovery behaviour after network issues.
+3. **Timezone mismatch**: If your HA server is in a different timezone to your pump, ensure the integration's configured timezone matches the pump's timezone. The API date range uses this to avoid missing recent data.
+4. **Network stability**: Unstable connections can trigger retries. Check your HA server's network connectivity to `source.eu.tandemdiabetes.com` (EU) or `source.tandemdiabetes.com` (US).
 
 ### Missing Sensors
 

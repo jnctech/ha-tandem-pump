@@ -162,3 +162,25 @@ venv
 # Test config (may contain tokens)
 test_config/**
 !test_config/configuration.yaml
+
+# Secrets and credentials (NEVER COMMIT THESE)
+secrets.json
+credentials.json
+secrets.yaml
+credentials.yaml
+.secrets
+*_credentials.json
+*_secrets.json
+test_credentials.json
+tandem_credentials.json
+carelink_credentials.json
+
+# API responses (may contain sensitive data)
+tandem_api_response.json
+carelink_api_response.json
+*_api_response.json
+api_debug_*.json
+
+# Local testing files
+local_test_*.py
+test_local_*.py

@@ -1,6 +1,8 @@
 """Support for Carelink / Tandem sensors."""
 from __future__ import annotations
 
+import logging
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -29,6 +31,8 @@ from .const import (
     PLATFORM_TANDEM,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -40,8 +44,12 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][entry.entry_id][COORDINATOR]
     platform_type = hass.data[DOMAIN][entry.entry_id].get(PLATFORM_TYPE, PLATFORM_CARELINK)
 
+    _LOGGER.info("Setting up sensor platform for %s (entry: %s)", platform_type, entry.entry_id)
+
     # Choose the right sensor definitions based on platform
     sensor_definitions = TANDEM_SENSORS if platform_type == PLATFORM_TANDEM else SENSORS
+
+    _LOGGER.info("Creating %d sensor entities for %s", len(sensor_definitions), platform_type)
 
     entities = []
 
@@ -54,7 +62,9 @@ async def async_setup_entry(
             CarelinkSensorEntity(coordinator, sensor_description, entity_name)
         )
 
+    _LOGGER.debug("Adding %d entities to Home Assistant", len(entities))
     async_add_entities(entities)
+    _LOGGER.info("Sensor setup completed - %d entities added", len(entities))
 
 
 class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
@@ -82,7 +92,14 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float:
-        return self.coordinator.data.setdefault(self.sensor_description.key, None)
+        value = self.coordinator.data.setdefault(self.sensor_description.key, None)
+        if value is None:
+            _LOGGER.debug(
+                "Sensor %s has None value (key: %s not in coordinator.data)",
+                self.sensor_description.name,
+                self.sensor_description.key
+            )
+        return value
 
     @property
     def device_class(self) -> SensorDeviceClass:

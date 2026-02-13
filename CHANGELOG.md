@@ -5,6 +5,31 @@ All notable changes to the Tandem Source / Carelink integration will be document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **CRITICAL**: Fixed sensor population - all Tandem pump sensors stuck in "Unknown" state (#3)
+  - ControlIQ API endpoints (`tdcservices.eu.tandemdiabetes.com`) return 404 errors
+  - Switched to Source Reports pumpevents API as primary data source (same endpoint the Tandem Source web UI uses)
+  - Implemented binary event decoder for Tandem's proprietary 26-byte record format (base64-encoded)
+  - Sensors now populate: glucose (mg/dL & mmol/L), active insulin (IOB), basal rate, last bolus, meal bolus, Control-IQ status
+
+### Added
+- `decode_pump_events()` binary decoder for Tandem pump event records
+  - Supports CGM readings (event 256), bolus completed (event 20), bolus delivery (event 280), basal rate change (event 3), basal delivery (event 279)
+  - Tandem epoch (2008-01-01) timestamp conversion
+- `get_pump_events()` method targeting Source Reports API (`/api/reports/reportsfacade/pumpevents/`)
+- `_parse_pump_events()` coordinator method to extract sensor values from decoded binary events
+
+### Changed
+- `get_recent_data()` now uses pump_events as primary data source, falling back to ControlIQ endpoints only when unavailable
+- Data coordinator prioritises pump_events over therapy_timeline for sensor value extraction
+
+### Technical Notes
+- Binary format reference: [tconnectsync](https://github.com/jwoglom/tconnectsync) event parser
+- Each record: 2-byte header (4-bit source + 12-bit event ID), 4-byte timestamp, 4-byte sequence, 16-byte payload
+- Dashboard-dependent sensors (average glucose, CGM usage, time in range) still require ControlIQ endpoints
+
 ## [0.1.3-beta] - 2026-02-11
 
 ### Fixed

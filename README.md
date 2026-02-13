@@ -20,7 +20,7 @@
 
 1. Open **HACS** in Home Assistant
 2. Go to **Integrations** > **3-dot menu** > **Custom repositories**
-3. Add repository URL: `https://github.com/jnctech/Home-Assistant-Carelink`
+3. Add repository URL: `https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink`
 4. Category: **Integration**
 5. Click **Add**, then find "Carelink" and click **Download**
 6. Restart Home Assistant

@@ -419,11 +419,36 @@ class TandemSourceClient:
             "User-Agent": USER_AGENT,
         }
 
-    async def _api_get(self, url: str) -> dict:
-        """Make an authenticated GET request with automatic re-login on 401."""
-        client = await self._get_client()
+    async def _api_get(self, url: str, _retries: int = 2) -> dict:
+        """Make an authenticated GET request with automatic re-login on 401.
 
-        resp = await client.get(url, headers=self._api_headers())
+        Retries transient network errors (connection reset, timeout, DNS)
+        up to ``_retries`` times with a short back-off.
+        """
+        client = await self._get_client()
+        last_exc: Exception | None = None
+
+        for attempt in range(_retries + 1):
+            try:
+                resp = await client.get(url, headers=self._api_headers())
+                break
+            except (httpx.ConnectError, httpx.ReadError, httpx.WriteError,
+                    httpx.PoolTimeout, httpx.ConnectTimeout,
+                    httpx.ReadTimeout) as exc:
+                last_exc = exc
+                if attempt < _retries:
+                    wait = 2 ** (attempt + 1)  # 2s, 4s
+                    _LOGGER.debug(
+                        "Tandem: transient error on %s (attempt %d/%d), "
+                        "retrying in %ds: %s",
+                        url, attempt + 1, _retries + 1, wait, exc,
+                    )
+                    await asyncio.sleep(wait)
+                else:
+                    raise TandemApiError(
+                        f"API GET {url} failed after {_retries + 1} attempts: "
+                        f"{exc}"
+                    ) from last_exc
 
         if resp.status_code == 401:
             _LOGGER.info("Tandem: Got 401, attempting re-login")
@@ -522,12 +547,12 @@ class TandemSourceClient:
                 f"{self.urls['TDC_BASE']}tconnect/therapyevents/api/"
                 f"TherapyEvents/{start_date}/{end_date}/false?userId={user_guid}"
             )
-            _LOGGER.info(f"Tandem: Attempting therapy_events API: {url}")
+            _LOGGER.debug("Tandem: Attempting therapy_events API: %s", url)
             result = await self._api_get(url)
-            _LOGGER.info(f"Tandem: therapy_events returned: {type(result)}, keys: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
+            _LOGGER.debug("Tandem: therapy_events returned type=%s", type(result).__name__)
             return result
         except (TandemApiError, httpx.HTTPError) as e:
-            _LOGGER.error(f"Therapy events API failed: {e}", exc_info=True)
+            _LOGGER.debug("Therapy events API not available: %s", e)
             return None
 
     async def get_pump_events(
@@ -565,7 +590,7 @@ class TandemSourceClient:
                 f"&eventIds={event_ids}"
             )
 
-            _LOGGER.info("Tandem: Fetching pump events from Source Reports API")
+            _LOGGER.debug("Tandem: Fetching pump events from Source Reports API")
             _LOGGER.debug("Tandem: Pump events URL: %s", url)
 
             # The pumpevents endpoint returns base64-encoded binary,
@@ -580,14 +605,14 @@ class TandemSourceClient:
             if isinstance(raw_response, str):
                 # Base64-encoded binary wrapped in JSON string
                 events = decode_pump_events(raw_response)
-                _LOGGER.info(
+                _LOGGER.debug(
                     "Tandem: Decoded %d pump events from binary data",
                     len(events),
                 )
                 return events if events else None
             elif isinstance(raw_response, list):
                 # Already decoded (unlikely but handle gracefully)
-                _LOGGER.info(
+                _LOGGER.debug(
                     "Tandem: Pump events returned as list (%d items)",
                     len(raw_response),
                 )
@@ -605,8 +630,16 @@ class TandemSourceClient:
 
     # ── Unified data fetch ───────────────────────────────────────────────
 
-    async def get_recent_data(self) -> dict:
+    async def get_recent_data(self, pump_timezone: str | None = None) -> dict:
         """Fetch all available recent data from Tandem Source APIs.
+
+        Parallelises independent API calls where possible.
+
+        Args:
+            pump_timezone: IANA timezone string (e.g. "Europe/London").
+                           Used for the date range so we don't miss recent
+                           data when the HA server is in a different zone.
+                           Falls back to UTC if not provided.
 
         Returns a unified dict with keys:
             pump_metadata: dict or None
@@ -615,7 +648,17 @@ class TandemSourceClient:
             therapy_timeline: dict or None  (from ControlIQ, often unavailable)
             dashboard_summary: dict or None  (from ControlIQ, often unavailable)
         """
-        data = {
+        from zoneinfo import ZoneInfo
+
+        try:
+            tz = ZoneInfo(pump_timezone) if pump_timezone else ZoneInfo("UTC")
+        except (KeyError, TypeError):
+            tz = ZoneInfo("UTC")
+
+        now_pump = datetime.now(tz)
+        yesterday_pump = now_pump - timedelta(days=1)
+
+        data: dict = {
             "pump_metadata": None,
             "pumper_info": None,
             "pump_events": None,
@@ -623,72 +666,88 @@ class TandemSourceClient:
             "dashboard_summary": None,
         }
 
-        # Pump event metadata (Tandem Source API - should always work)
-        try:
-            metadata_list = await self.get_pump_event_metadata()
-            if metadata_list and isinstance(metadata_list, list) and len(metadata_list) > 0:
-                data["pump_metadata"] = metadata_list[0]
-            elif isinstance(metadata_list, dict):
-                data["pump_metadata"] = metadata_list
-        except Exception as e:
-            _LOGGER.warning("Failed to fetch pump metadata: %s", e)
+        # ── Phase 1: metadata + pumper_info in parallel ──────────────
+        metadata_result, pumper_result = await asyncio.gather(
+            self._fetch_pump_metadata(),
+            self._fetch_pumper_info(),
+            return_exceptions=True,
+        )
 
-        # Pumper info (Tandem Source API - should always work)
-        try:
-            data["pumper_info"] = await self.get_pumper_info()
-        except Exception as e:
-            _LOGGER.warning("Failed to fetch pumper info: %s", e)
+        if isinstance(metadata_result, BaseException):
+            _LOGGER.warning("Failed to fetch pump metadata: %s", metadata_result)
+        else:
+            data["pump_metadata"] = metadata_result
 
-        # ── Pump events from Source Reports API ──────────────────────
-        # This is the primary data source (same endpoint the web UI uses).
-        # Requires tconnectDeviceId from pump metadata.
-        today = datetime.now()
-        yesterday = today - timedelta(days=1)
+        if isinstance(pumper_result, BaseException):
+            _LOGGER.warning("Failed to fetch pumper info: %s", pumper_result)
+        else:
+            data["pumper_info"] = pumper_result
 
+        # ── Phase 2: pump_events (needs device_id from metadata) ─────
         device_id = None
         if data["pump_metadata"]:
             device_id = data["pump_metadata"].get("tconnectDeviceId")
 
         if device_id:
-            start_iso = yesterday.strftime("%Y-%m-%d")
-            end_iso = today.strftime("%Y-%m-%d")
+            start_iso = yesterday_pump.strftime("%Y-%m-%d")
+            end_iso = now_pump.strftime("%Y-%m-%d")
             try:
                 data["pump_events"] = await self.get_pump_events(
                     device_id, start_iso, end_iso
                 )
             except Exception as e:
-                _LOGGER.error("Failed to fetch pump events: %s", e)
+                _LOGGER.warning("Failed to fetch pump events: %s", e)
         else:
-            _LOGGER.warning(
-                "Tandem: No tconnectDeviceId in metadata, cannot fetch pump events"
+            _LOGGER.debug(
+                "Tandem: No tconnectDeviceId in metadata, skipping pump events"
             )
 
-        # ── ControlIQ endpoints (legacy, often return 404) ───────────
-        # Try these as a secondary source; they may not accept the
-        # Source OIDC token.
+        # ── Phase 3: ControlIQ fallback (parallel) ───────────────────
         if not data["pump_events"]:
-            start_mm = yesterday.strftime("%m-%d-%Y")
-            end_mm = today.strftime("%m-%d-%Y")
+            start_mm = yesterday_pump.strftime("%m-%d-%Y")
+            end_mm = now_pump.strftime("%m-%d-%Y")
 
             _LOGGER.debug(
-                "Tandem: No pump_events, trying ControlIQ endpoints for %s to %s",
-                start_mm, end_mm,
+                "Tandem: No pump_events, trying ControlIQ for %s to %s (tz=%s)",
+                start_mm, end_mm, tz,
             )
 
-            data["therapy_timeline"] = await self.get_therapy_timeline(
-                start_mm, end_mm
+            timeline_result, summary_result = await asyncio.gather(
+                self.get_therapy_timeline(start_mm, end_mm),
+                self.get_dashboard_summary(start_mm, end_mm),
+                return_exceptions=True,
             )
-            data["dashboard_summary"] = await self.get_dashboard_summary(
-                start_mm, end_mm
-            )
+
+            if isinstance(timeline_result, BaseException):
+                _LOGGER.debug("Therapy timeline not available: %s", timeline_result)
+            else:
+                data["therapy_timeline"] = timeline_result
+
+            if isinstance(summary_result, BaseException):
+                _LOGGER.debug("Dashboard summary not available: %s", summary_result)
+            else:
+                data["dashboard_summary"] = summary_result
 
             if not data["therapy_timeline"]:
-                _LOGGER.info(
+                _LOGGER.debug(
                     "Tandem: ControlIQ therapy timeline not available "
                     "(Source OIDC token may not be accepted by ControlIQ API)"
                 )
 
         return data
+
+    async def _fetch_pump_metadata(self) -> dict | None:
+        """Fetch and extract first pump metadata entry."""
+        metadata_list = await self.get_pump_event_metadata()
+        if metadata_list and isinstance(metadata_list, list) and len(metadata_list) > 0:
+            return metadata_list[0]
+        if isinstance(metadata_list, dict):
+            return metadata_list
+        return None
+
+    async def _fetch_pumper_info(self) -> dict | None:
+        """Fetch pumper info."""
+        return await self.get_pumper_info()
 
     async def close(self):
         """Close the HTTP client."""

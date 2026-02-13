@@ -201,6 +201,41 @@ f9e44ce - fix(tandem): Add comprehensive debug logging for sensor population iss
 
 ---
 
+## bugfix/sensor-update-timing - ACTIVE
+
+**Status**: PR open against develop
+**Created**: 2026-02-13
+**Issue**: Sensor updates slower than configured scan interval
+**Parent**: develop (post PR #4 merge)
+
+### Problem Statement
+
+After the sensor population fix (PR #4), sensors were updating but with noticeable delays beyond the configured scan interval. Investigation revealed multiple causes in the data fetch pipeline.
+
+### Root Causes Identified
+
+1. **Sequential API calls**: All API requests ran one after another. Total fetch time = sum of all individual request times (~3–5s per call × 4–5 calls = 15–25s overhead per cycle).
+2. **No retry on transient errors**: A single network blip (timeout, connection reset) caused the entire update to fail silently.
+3. **No UpdateFailed exception**: The coordinator returned empty dicts on error instead of raising `UpdateFailed`, so Home Assistant didn't know updates were failing (no backoff, no entity unavailable marking).
+4. **Timezone mismatch**: Date range for API queries used server local time, not pump timezone. When server and pump are in different timezones, recent data could be missed.
+5. **Excessive INFO logging**: ~12 INFO-level messages per update cycle (288 lines/day at 5-min intervals) added unnecessary I/O.
+
+### Fix Applied (Commit 1edae83)
+
+- **Parallel API calls**: 3-phase execution — Phase 1: metadata + pumper_info concurrent; Phase 2: pump_events (depends on device_id from Phase 1); Phase 3: ControlIQ fallback concurrent (only if pump_events empty)
+- **Retry with backoff**: `_api_get()` retries transient httpx exceptions (ConnectError, ReadError, WriteError, PoolTimeout, ConnectTimeout, ReadTimeout) up to 2 times with 2s/4s backoff
+- **UpdateFailed integration**: Coordinator wraps auth and API errors with `UpdateFailed` for proper HA coordinator behaviour
+- **Timezone-aware dates**: `get_recent_data(pump_timezone=...)` uses pump timezone from HA config
+- **Log cleanup**: All per-cycle INFO messages demoted to DEBUG
+
+### Lessons Learned
+
+1. **Parallelise where possible** — `asyncio.gather(return_exceptions=True)` lets independent requests run concurrently without one failure aborting the others
+2. **Always raise UpdateFailed** — Home Assistant's `DataUpdateCoordinator` relies on this for proper error recovery and entity state management
+3. **Timezone matters for date ranges** — A server in UTC querying for "today" will miss afternoon data for a pump in UTC+10
+
+---
+
 ## Future Branch Management
 
 When a feature branch fails:

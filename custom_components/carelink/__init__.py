@@ -14,10 +14,11 @@ from homeassistant.util.dt import DEFAULT_TIME_ZONE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
+    UpdateFailed,
 )
 
 from .api import CarelinkClient, LEGACY_AUTH_FILE, AUTH_FILE_PREFIX, SHARED_AUTH_FILE
-from .tandem_api import TandemSourceClient, parse_dotnet_date
+from .tandem_api import TandemSourceClient, TandemAuthError, TandemApiError, parse_dotnet_date
 from .nightscout_uploader import NightscoutUploader
 
 from .const import (
@@ -692,40 +693,36 @@ class TandemCoordinator(DataUpdateCoordinator):
             self.uploader = hass.data[DOMAIN][entry.entry_id][UPLOADER]
 
     async def _async_update_data(self):
-        _LOGGER.info("TandemCoordinator: Starting _async_update_data")
+        _LOGGER.debug("TandemCoordinator: Starting _async_update_data")
         data = {}
 
         try:
-            _LOGGER.debug("TandemCoordinator: Attempting login to Tandem Source API")
             await self.client.login()
-            _LOGGER.info("TandemCoordinator: Login successful")
-        except Exception as e:
-            _LOGGER.error("TandemCoordinator: Login failed: %s", e, exc_info=True)
-            raise
+        except TandemAuthError as err:
+            raise UpdateFailed(f"Tandem authentication failed: {err}") from err
+        except Exception as err:
+            raise UpdateFailed(f"Tandem login error: {err}") from err
 
         try:
-            _LOGGER.debug("TandemCoordinator: Fetching recent data from API")
-            recent_data = await self.client.get_recent_data()
-            _LOGGER.info("TandemCoordinator: API data fetch completed. Data type: %s", type(recent_data))
+            recent_data = await self.client.get_recent_data(
+                pump_timezone=self.timezone,
+            )
+        except TandemApiError as err:
+            raise UpdateFailed(f"Tandem API error: {err}") from err
+        except Exception as err:
+            raise UpdateFailed(f"Tandem data fetch error: {err}") from err
 
-            if recent_data is None:
-                _LOGGER.error("TandemCoordinator: get_recent_data() returned None!")
-                return {}
-
-            if not isinstance(recent_data, dict):
-                _LOGGER.error("TandemCoordinator: get_recent_data() returned non-dict type: %s", type(recent_data))
-                return {}
-
-        except Exception as e:
-            _LOGGER.error("TandemCoordinator: Failed to fetch data from API: %s", e, exc_info=True)
-            raise
+        if not isinstance(recent_data, dict):
+            raise UpdateFailed(
+                f"get_recent_data() returned {type(recent_data)}, expected dict"
+            )
 
         _LOGGER.debug(
             "Tandem before data parsing: %s", sanitize_for_logging(recent_data)
         )
 
         # Log what data sources are available
-        _LOGGER.info(
+        _LOGGER.debug(
             "Tandem data sources: pump_metadata=%s, pumper_info=%s, "
             "pump_events=%s, therapy_timeline=%s, dashboard_summary=%s",
             "present" if recent_data.get("pump_metadata") else "MISSING",
@@ -799,34 +796,28 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         try:
             if pump_events:
-                _LOGGER.info("TandemCoordinator: Parsing pump events (Source Reports API)")
+                _LOGGER.debug("TandemCoordinator: Parsing pump events (Source Reports API)")
                 self._parse_pump_events(pump_events, data)
-                _LOGGER.info("TandemCoordinator: Pump events parsed successfully")
             elif timeline:
-                _LOGGER.info("TandemCoordinator: Parsing therapy timeline (ControlIQ API)")
+                _LOGGER.debug("TandemCoordinator: Parsing therapy timeline (ControlIQ API)")
                 self._parse_therapy_timeline(timeline, data)
-                _LOGGER.info("TandemCoordinator: Therapy timeline parsed successfully")
             else:
-                _LOGGER.warning("TandemCoordinator: No therapy data available")
+                _LOGGER.debug("TandemCoordinator: No therapy data available")
                 self._parse_therapy_timeline(None, data)  # Set all to UNAVAILABLE
         except Exception as e:
             _LOGGER.error("TandemCoordinator: Error parsing therapy data: %s", e, exc_info=True)
 
         # ── Dashboard summary (statistics) ───────────────────────────────
         summary = recent_data.get("dashboard_summary")
-        _LOGGER.debug("TandemCoordinator: Parsing dashboard summary (present: %s)", summary is not None)
         try:
             self._parse_dashboard_summary(summary, data)
-            _LOGGER.info("TandemCoordinator: Dashboard summary parsed successfully")
         except Exception as e:
             _LOGGER.error("TandemCoordinator: Error parsing dashboard summary: %s", e, exc_info=True)
 
-        _LOGGER.info("TandemCoordinator: Data dictionary populated with %d keys", len(data))
         _LOGGER.debug(
-            "Tandem _async_update_data: %s", sanitize_for_logging(data)
+            "Tandem _async_update_data: %d keys", len(data)
         )
 
-        _LOGGER.info("TandemCoordinator: Returning data dictionary")
         return data
 
     def _parse_therapy_timeline(self, timeline: dict | None, data: dict) -> None:
@@ -1019,7 +1010,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             self._parse_therapy_timeline(None, data)
             return
 
-        _LOGGER.info("Tandem: Parsing %d decoded pump events", len(pump_events))
+        _LOGGER.debug("Tandem: Parsing %d decoded pump events", len(pump_events))
 
         # Categorise events by type
         cgm_readings = []
@@ -1041,7 +1032,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             elif eid == 279:    # BASAL_DELIVERY
                 basal_delivery.append(evt)
 
-        _LOGGER.info(
+        _LOGGER.debug(
             "Tandem: Events - CGM: %d, BolusCompleted: %d, BolusDelivery: %d, "
             "BasalChange: %d, BasalDelivery: %d",
             len(cgm_readings), len(bolus_completed), len(bolus_delivery),

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-rc1] - 2026-02-14
+
+### Added
+- **Historical data import**: Import ALL pump events between polls instead of only the latest reading
+  - State replay: Intermediate events replayed through coordinator so recorder captures each state change
+  - Long-term statistics: CGM, IOB, and basal rate imported via `async_import_statistics()` with correct 5-minute timestamps
+  - Entity attributes: Recent readings arrays (24 CGM, 10 bolus, 10 basal) available for custom cards (e.g., ApexCharts)
+- Event sequence number tracking to deduplicate events across polls
+- Compact attribute keys to stay within Home Assistant's 16KB attribute limit
+
+### Changed
+- `_parse_pump_events()` now processes ALL events in the fetch window, not just the latest of each type
+- Data coordinator schedules replay and statistics import tasks after each update cycle
+
+### Fixed
+- Glucose history graphs no longer show staircase pattern between polls
+- Intermediate CGM readings, boluses, and basal changes between syncs are no longer discarded
+
+### Housekeeping
+- Removed diagnostic/troubleshooting docs and scripts from repository (archived to dev-notes/)
+- Fixed CODEOWNERS: updated from upstream author to @jnctech
+- Fixed HACS custom repository URL in README
+- Updated info.md to reflect Tandem Source scope and proper attribution
+
 ## [0.1.4-beta] - 2026-02-13
 
 ### Fixed
@@ -82,6 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Guardian Connect CGM
 - Nightscout upload capability
 
+[0.2.0-rc1]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.4-beta...v0.2.0-rc1
 [0.1.4-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.3-beta...v0.1.4-beta
 [0.1.3-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.1-beta...v0.1.3-beta
 [0.1.1-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/2024.1.0...v0.1.1-beta

@@ -88,7 +88,10 @@ config/
 
 **Symptoms**: Integration loads, but all sensors show "Unknown" or "Unavailable"
 
-**Possible Causes**:
+**Most Likely Cause** (Tandem, v0.1.3-beta and earlier):
+The ControlIQ API endpoints return 404 errors, leaving all sensors unpopulated. **Upgrade to the latest version** which uses the Source Reports pumpevents API instead.
+
+**Other Possible Causes**:
 
 1. **No recent data from pump**
    - Ensure pump has synced to Source recently (check Source website)
@@ -98,10 +101,10 @@ config/
    - Wait for next polling cycle (default: 5 minutes)
    - Or restart integration
 
-3. **ControlIQ API not available** (Tandem only)
-   - Some Tandem sensors require ControlIQ API access
-   - Source OIDC tokens may not work with ControlIQ endpoints
-   - Check Home Assistant logs for warnings about ControlIQ availability
+3. **Missing tconnectDeviceId** (Tandem only)
+   - If pump_metadata doesn't contain a `tconnectDeviceId`, the integration cannot fetch pump events
+   - Check logs for "No tconnectDeviceId in metadata"
+   - This usually means the pump hasn't uploaded to Tandem Source yet
 
 ### Sensors Not Updating
 
@@ -235,11 +238,20 @@ If issues persist:
 
 ## Known Issues
 
+### Current (Unreleased - bugfix/sensor-population-unknown-state)
+
+**Resolved**: Primary sensor population now works via Source Reports pumpevents API (PR #4).
+
+**Remaining** (Issue #5): The following sensors still show "Unknown":
+- **Average Glucose, Time in Range, CGM Usage**: Require dashboard_summary from ControlIQ API (returns 404). Planned fix: compute from CGM event history.
+- **Last Pump Upload, Last Update**: Metadata timestamp parsing not yet implemented. Quick fix available.
+- **Last Glucose Delta**: Self-resolving - requires two update cycles to calculate.
+
 ### v0.1.3-beta
 
-- ControlIQ API access may be limited with Source OIDC tokens (Tandem)
-- Some sensors may show "Unknown" if ControlIQ data is unavailable
-- This is expected behavior and sensors degrade gracefully
+- ControlIQ API (`tdcservices.eu.tandemdiabetes.com`) returns 404 with Source OIDC tokens
+- All Tandem sensors stuck in "Unknown" state (fixed in unreleased - PR #4)
+- Fix switches to Source Reports pumpevents API as primary data source
 
 ### v0.1.0.beta (DEPRECATED - DO NOT USE)
 

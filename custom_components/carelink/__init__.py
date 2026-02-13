@@ -269,11 +269,14 @@ async def _async_setup_tandem_entry(
     hass: HomeAssistant, entry: ConfigEntry, config: dict
 ) -> bool:
     """Set up a Tandem t:slim Source config entry."""
+    _LOGGER.info("Setting up Tandem entry: %s", entry.entry_id)
+
     tandem_client = TandemSourceClient(
         email=config["tandem_email"],
         password=config["tandem_password"],
         region=config.get("tandem_region", "EU"),
     )
+    _LOGGER.debug("Tandem client created for region: %s", config.get("tandem_region", "EU"))
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         TANDEM_CLIENT: tandem_client,
@@ -286,17 +289,28 @@ async def _async_setup_tandem_entry(
             config["nightscout_api"]
         )
         hass.data[DOMAIN][entry.entry_id][UPLOADER] = nightscout_uploader
+        _LOGGER.debug("Nightscout uploader configured")
 
     coordinator = TandemCoordinator(
         hass, entry, update_interval=timedelta(seconds=config[SCAN_INTERVAL])
     )
+    _LOGGER.info("TandemCoordinator created with update interval: %d seconds", config[SCAN_INTERVAL])
 
-    await coordinator.async_config_entry_first_refresh()
+    _LOGGER.info("Performing first coordinator refresh...")
+    try:
+        await coordinator.async_config_entry_first_refresh()
+        _LOGGER.info("First coordinator refresh completed successfully")
+        _LOGGER.debug("Coordinator data keys after first refresh: %s", list(coordinator.data.keys()) if coordinator.data else "None")
+    except Exception as e:
+        _LOGGER.error("First coordinator refresh FAILED: %s", e, exc_info=True)
+        raise
 
     hass.data[DOMAIN][entry.entry_id][COORDINATOR] = coordinator
 
+    _LOGGER.info("Forwarding entry setups to platforms: %s", PLATFORMS)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    _LOGGER.info("Tandem entry setup completed successfully")
     return True
 
 
@@ -678,10 +692,33 @@ class TandemCoordinator(DataUpdateCoordinator):
             self.uploader = hass.data[DOMAIN][entry.entry_id][UPLOADER]
 
     async def _async_update_data(self):
+        _LOGGER.info("TandemCoordinator: Starting _async_update_data")
         data = {}
 
-        await self.client.login()
-        recent_data = await self.client.get_recent_data()
+        try:
+            _LOGGER.debug("TandemCoordinator: Attempting login to Tandem Source API")
+            await self.client.login()
+            _LOGGER.info("TandemCoordinator: Login successful")
+        except Exception as e:
+            _LOGGER.error("TandemCoordinator: Login failed: %s", e, exc_info=True)
+            raise
+
+        try:
+            _LOGGER.debug("TandemCoordinator: Fetching recent data from API")
+            recent_data = await self.client.get_recent_data()
+            _LOGGER.info("TandemCoordinator: API data fetch completed. Data type: %s", type(recent_data))
+
+            if recent_data is None:
+                _LOGGER.error("TandemCoordinator: get_recent_data() returned None!")
+                return {}
+
+            if not isinstance(recent_data, dict):
+                _LOGGER.error("TandemCoordinator: get_recent_data() returned non-dict type: %s", type(recent_data))
+                return {}
+
+        except Exception as e:
+            _LOGGER.error("TandemCoordinator: Failed to fetch data from API: %s", e, exc_info=True)
+            raise
 
         _LOGGER.debug(
             "Tandem before data parsing: %s", sanitize_for_logging(recent_data)
@@ -690,9 +727,10 @@ class TandemCoordinator(DataUpdateCoordinator):
         # Log what data sources are available
         _LOGGER.info(
             "Tandem data sources: pump_metadata=%s, pumper_info=%s, "
-            "therapy_timeline=%s, dashboard_summary=%s",
+            "pump_events=%s, therapy_timeline=%s, dashboard_summary=%s",
             "present" if recent_data.get("pump_metadata") else "MISSING",
             "present" if recent_data.get("pumper_info") else "MISSING",
+            "present" if recent_data.get("pump_events") else "MISSING",
             "present" if recent_data.get("therapy_timeline") else "MISSING",
             "present" if recent_data.get("dashboard_summary") else "MISSING",
         )
@@ -749,18 +787,46 @@ class TandemCoordinator(DataUpdateCoordinator):
             if name:
                 data[DEVICE_PUMP_NAME] = name
 
-        # ── Therapy timeline (CGM, bolus, basal) ────────────────────────
+        # ── Therapy data (CGM, bolus, basal) ─────────────────────────────
+        pump_events = recent_data.get("pump_events")
         timeline = recent_data.get("therapy_timeline")
-        self._parse_therapy_timeline(timeline, data)
+
+        _LOGGER.debug(
+            "TandemCoordinator: Data sources - pump_events=%s, therapy_timeline=%s",
+            "present" if pump_events else "MISSING",
+            "present" if timeline else "MISSING",
+        )
+
+        try:
+            if pump_events:
+                _LOGGER.info("TandemCoordinator: Parsing pump events (Source Reports API)")
+                self._parse_pump_events(pump_events, data)
+                _LOGGER.info("TandemCoordinator: Pump events parsed successfully")
+            elif timeline:
+                _LOGGER.info("TandemCoordinator: Parsing therapy timeline (ControlIQ API)")
+                self._parse_therapy_timeline(timeline, data)
+                _LOGGER.info("TandemCoordinator: Therapy timeline parsed successfully")
+            else:
+                _LOGGER.warning("TandemCoordinator: No therapy data available")
+                self._parse_therapy_timeline(None, data)  # Set all to UNAVAILABLE
+        except Exception as e:
+            _LOGGER.error("TandemCoordinator: Error parsing therapy data: %s", e, exc_info=True)
 
         # ── Dashboard summary (statistics) ───────────────────────────────
         summary = recent_data.get("dashboard_summary")
-        self._parse_dashboard_summary(summary, data)
+        _LOGGER.debug("TandemCoordinator: Parsing dashboard summary (present: %s)", summary is not None)
+        try:
+            self._parse_dashboard_summary(summary, data)
+            _LOGGER.info("TandemCoordinator: Dashboard summary parsed successfully")
+        except Exception as e:
+            _LOGGER.error("TandemCoordinator: Error parsing dashboard summary: %s", e, exc_info=True)
 
+        _LOGGER.info("TandemCoordinator: Data dictionary populated with %d keys", len(data))
         _LOGGER.debug(
             "Tandem _async_update_data: %s", sanitize_for_logging(data)
         )
 
+        _LOGGER.info("TandemCoordinator: Returning data dictionary")
         return data
 
     def _parse_therapy_timeline(self, timeline: dict | None, data: dict) -> None:
@@ -938,6 +1004,222 @@ class TandemCoordinator(DataUpdateCoordinator):
                 data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
         except Exception as e:
             _LOGGER.warning("Error parsing basal data: %s", e)
+            data[TANDEM_SENSOR_KEY_BASAL_RATE] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
+
+    def _parse_pump_events(self, pump_events: list[dict], data: dict) -> None:
+        """Parse decoded pump events into sensor values.
+
+        Events are pre-decoded from binary format by decode_pump_events().
+        Each event dict has: event_id, event_name, timestamp (datetime),
+        and event-specific fields (glucose_mgdl, insulin_delivered, etc.).
+        """
+        if not pump_events:
+            _LOGGER.debug("No pump_events data, setting all to UNAVAILABLE")
+            self._parse_therapy_timeline(None, data)
+            return
+
+        _LOGGER.info("Tandem: Parsing %d decoded pump events", len(pump_events))
+
+        # Categorise events by type
+        cgm_readings = []
+        bolus_completed = []
+        bolus_delivery = []
+        basal_rate_changes = []
+        basal_delivery = []
+
+        for evt in pump_events:
+            eid = evt.get("event_id")
+            if eid == 256:      # CGM_DATA_GXB
+                cgm_readings.append(evt)
+            elif eid == 20:     # BOLUS_COMPLETED
+                bolus_completed.append(evt)
+            elif eid == 280:    # BOLUS_DELIVERY
+                bolus_delivery.append(evt)
+            elif eid == 3:      # BASAL_RATE_CHANGE
+                basal_rate_changes.append(evt)
+            elif eid == 279:    # BASAL_DELIVERY
+                basal_delivery.append(evt)
+
+        _LOGGER.info(
+            "Tandem: Events - CGM: %d, BolusCompleted: %d, BolusDelivery: %d, "
+            "BasalChange: %d, BasalDelivery: %d",
+            len(cgm_readings), len(bolus_completed), len(bolus_delivery),
+            len(basal_rate_changes), len(basal_delivery),
+        )
+
+        # Log a sample for debugging
+        if cgm_readings:
+            _LOGGER.debug("Tandem: Latest CGM event: %s", cgm_readings[-1])
+
+        # ── CGM readings ─────────────────────────────────────────────
+        try:
+            if cgm_readings:
+                # Events are already sorted by time (from binary sequence);
+                # take the last one as most recent
+                cgm_readings.sort(key=lambda e: e["timestamp"])
+                latest = cgm_readings[-1]
+                sg_mgdl = latest.get("glucose_mgdl", 0)
+
+                if sg_mgdl and sg_mgdl > 0:
+                    data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = int(sg_mgdl)
+                    data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = round(
+                        sg_mgdl * 0.0555, 2
+                    )
+                    data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = (
+                        latest["timestamp"].replace(
+                            tzinfo=ZoneInfo(self.timezone)
+                        )
+                    )
+
+                    if self._prev_sg_mgdl is not None:
+                        data[TANDEM_SENSOR_KEY_SG_DELTA] = (
+                            float(sg_mgdl) - self._prev_sg_mgdl
+                        )
+                    else:
+                        data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
+                    self._prev_sg_mgdl = float(sg_mgdl)
+                else:
+                    _LOGGER.warning(
+                        "Tandem: CGM event has zero/missing glucose: %s",
+                        latest,
+                    )
+                    data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
+            else:
+                data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
+        except Exception as e:
+            _LOGGER.warning("Error parsing CGM: %s", e, exc_info=True)
+            data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
+
+        # ── Bolus events ─────────────────────────────────────────────
+        try:
+            # Prefer BOLUS_COMPLETED (has IOB), fall back to BOLUS_DELIVERY
+            all_bolus = bolus_completed or bolus_delivery
+            if all_bolus:
+                all_bolus.sort(key=lambda e: e["timestamp"])
+                last_bolus = all_bolus[-1]
+
+                insulin = last_bolus.get("insulin_delivered", 0)
+                if insulin:
+                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = round(
+                        float(insulin), 2
+                    )
+                else:
+                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = UNAVAILABLE
+
+                data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = (
+                    last_bolus["timestamp"].replace(
+                        tzinfo=ZoneInfo(self.timezone)
+                    )
+                )
+
+                data[TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS] = {
+                    "event_type": last_bolus.get("event_name", ""),
+                    "insulin_requested": last_bolus.get("insulin_requested"),
+                    "bolus_id": last_bolus.get("bolus_id"),
+                    "completion_status": last_bolus.get("completion_status"),
+                }
+
+                # IOB from BOLUS_COMPLETED event
+                iob = last_bolus.get("iob")
+                if iob is not None:
+                    data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = round(
+                        float(iob), 2
+                    )
+                else:
+                    # Try to find IOB from any completed bolus
+                    for b in reversed(bolus_completed):
+                        if b.get("iob") is not None:
+                            data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = round(
+                                float(b["iob"]), 2
+                            )
+                            break
+                    else:
+                        data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = UNAVAILABLE
+
+                # Meal bolus detection (bolus with carb flag)
+                # In binary format, bolus_type bitmask bit 4 = Carb bolus
+                meal_bolus = None
+                for b in reversed(bolus_delivery):
+                    btype = b.get("bolus_type", 0)
+                    if btype & 0x10:  # bit 4 = Carb
+                        meal_bolus = b
+                        break
+
+                if meal_bolus:
+                    meal_ins = meal_bolus.get("insulin_delivered", 0)
+                    data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = (
+                        round(float(meal_ins), 2) if meal_ins else UNAVAILABLE
+                    )
+                    data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {
+                        "bolus_type": meal_bolus.get("bolus_type"),
+                        "bolus_id": meal_bolus.get("bolus_id"),
+                    }
+                else:
+                    data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {}
+            else:
+                data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS] = {}
+                data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {}
+        except Exception as e:
+            _LOGGER.warning("Error parsing bolus: %s", e, exc_info=True)
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS] = {}
+            data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {}
+
+        # ── Basal events ─────────────────────────────────────────────
+        try:
+            # Prefer BASAL_RATE_CHANGE (has float rate), fall back to
+            # BASAL_DELIVERY (has milliunits rate)
+            all_basal = basal_rate_changes or basal_delivery
+            if all_basal:
+                all_basal.sort(key=lambda e: e["timestamp"])
+                last_basal = all_basal[-1]
+
+                rate = last_basal.get("commanded_rate")
+                if rate is not None:
+                    data[TANDEM_SENSOR_KEY_BASAL_RATE] = round(
+                        float(rate), 3
+                    )
+                else:
+                    data[TANDEM_SENSOR_KEY_BASAL_RATE] = UNAVAILABLE
+
+                # Control-IQ status from basal change type or source
+                change_type = last_basal.get("change_type")
+                commanded_source = last_basal.get("commanded_source")
+                if commanded_source is not None:
+                    source_map = {
+                        0: "Suspended", 1: "Profile", 2: "Temp Rate",
+                        3: "Algorithm", 4: "Temp + Algorithm",
+                    }
+                    data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = source_map.get(
+                        commanded_source, f"Source_{commanded_source}"
+                    )
+                elif change_type is not None:
+                    data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = str(change_type)
+                else:
+                    data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
+            else:
+                data[TANDEM_SENSOR_KEY_BASAL_RATE] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
+        except Exception as e:
+            _LOGGER.warning("Error parsing basal: %s", e, exc_info=True)
             data[TANDEM_SENSOR_KEY_BASAL_RATE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
 

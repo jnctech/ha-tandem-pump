@@ -1,0 +1,372 @@
+# Tandem Source - Example Dashboard
+#
+# This is a starter Lovelace dashboard for the Tandem Source integration.
+# It provides graphs and cards for all Tandem pump sensors.
+#
+# Usage:
+#   Option A - Copy into an existing dashboard via the HA UI raw editor:
+#     1. Go to your dashboard → Edit → Raw configuration editor
+#     2. Copy the cards from the view below into your dashboard
+#
+#   Option B - Create a new YAML-mode dashboard:
+#     1. Add to configuration.yaml:
+#        lovelace:
+#          mode: storage
+#          dashboards:
+#            lovelace-tandem:
+#              mode: yaml
+#              title: Tandem Pump
+#              icon: mdi:diabetes
+#              show_in_sidebar: true
+#              filename: dashboards/tandem.yaml
+#     2. Copy this file to your config/dashboards/tandem.yaml
+#     3. Restart Home Assistant
+#
+# Requirements:
+#   - apexcharts-card (install via HACS → Frontend)
+#   - The Tandem Source / Carelink integration configured and running
+#
+# Sensor entity IDs:
+#   These assume the default entity naming. If you renamed entities during
+#   setup, adjust the entity IDs below to match your configuration.
+#   Default pattern: sensor.<name_with_underscores>
+#
+# Note on data freshness:
+#   Tandem pump data is uploaded to Tandem cloud periodically (not real-time).
+#   The "Last glucose update" sensor shows when the data was actually recorded
+#   by the pump, which may lag behind the current time. Graphs will show a
+#   flat line at the last known value until new data arrives.
+
+title: "Tandem Pump"
+views:
+  - title: "Tandem Pump"
+    path: tandem
+    icon: mdi:diabetes
+    type: sections
+    max_columns: 2
+    sections:
+      # =================================================================
+      # Current Values - At-a-glance pump status
+      # =================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Current Values"
+            heading_style: title
+
+          - type: markdown
+            content: >
+              Values reflect the last pump upload to Tandem cloud.
+              Check **Last glucose update** for the actual data timestamp.
+
+          # --- Glucose ---
+          - type: entity
+            entity: sensor.last_glucose_level_mmol
+            name: "Glucose (mmol/L)"
+            icon: mdi:water
+
+          - type: entity
+            entity: sensor.last_glucose_level_mg_dl
+            name: "Glucose (mg/dL)"
+            icon: mdi:water
+
+          - type: entity
+            entity: sensor.last_glucose_delta
+            name: "Glucose Delta"
+
+          # --- Insulin ---
+          - type: entity
+            entity: sensor.active_insulin_iob
+            name: "Insulin on Board"
+
+          - type: entity
+            entity: sensor.basal_rate
+            name: "Basal Rate"
+
+          - type: entity
+            entity: sensor.last_bolus
+            name: "Last Bolus"
+
+          - type: entity
+            entity: sensor.last_meal_bolus
+            name: "Last Meal Bolus"
+
+          # --- Timestamps ---
+          - type: entity
+            entity: sensor.last_glucose_update
+            name: "Last Glucose Update"
+
+          - type: entity
+            entity: sensor.last_bolus_time
+            name: "Last Bolus Time"
+
+          - type: entity
+            entity: sensor.last_pump_upload
+            name: "Last Pump Upload"
+
+          # --- Status ---
+          - type: entity
+            entity: sensor.control_iq_status
+            name: "Control-IQ"
+
+      # =================================================================
+      # Glucose History - CGM readings over time
+      # =================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Glucose History"
+            heading_style: title
+
+          # 6-hour glucose graph with target range
+          - type: custom:apexcharts-card
+            header:
+              title: "Glucose (6h)"
+              show: true
+            graph_span: 6h
+            update_interval: 5min
+            yaxis:
+              - id: glucose
+                min: 2
+                max: 22
+                apex_config:
+                  title:
+                    text: "mmol/L"
+                  forceNiceScale: true
+            apex_config:
+              chart:
+                height: 250
+              stroke:
+                width: 3
+                curve: smooth
+              annotations:
+                yaxis:
+                  - "y": 3.9
+                    y2: 10
+                    fillColor: "#43a047"
+                    opacity: 0.08
+                    label:
+                      text: "Target"
+                      style:
+                        color: "#43a047"
+                  - "y": 3
+                    borderColor: "#e53935"
+                    strokeDashArray: 4
+                    label:
+                      text: "Urgent Low"
+                      style:
+                        color: "#e53935"
+                  - "y": 13.9
+                    borderColor: "#e53935"
+                    strokeDashArray: 4
+                    label:
+                      text: "Urgent High"
+                      style:
+                        color: "#e53935"
+            series:
+              - entity: sensor.last_glucose_level_mmol
+                name: "Glucose"
+                yaxis_id: glucose
+                type: line
+                stroke_width: 3
+                color: "#7e57c2"
+                group_by:
+                  func: avg
+                  duration: 5min
+
+          # 24-hour glucose overview
+          - type: custom:apexcharts-card
+            header:
+              title: "Glucose (24h)"
+              show: true
+            graph_span: 24h
+            update_interval: 5min
+            yaxis:
+              - id: glucose24
+                min: 2
+                max: 22
+                apex_config:
+                  forceNiceScale: true
+            apex_config:
+              chart:
+                height: 200
+              stroke:
+                width: 2
+                curve: smooth
+              annotations:
+                yaxis:
+                  - "y": 3.9
+                    y2: 10
+                    fillColor: "#43a047"
+                    opacity: 0.08
+            series:
+              - entity: sensor.last_glucose_level_mmol
+                name: "Glucose"
+                yaxis_id: glucose24
+                type: area
+                opacity: 0.15
+                stroke_width: 2
+                color: "#7e57c2"
+                group_by:
+                  func: avg
+                  duration: 5min
+
+      # =================================================================
+      # Insulin Delivery - IOB, basal, and bolus tracking
+      # =================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Insulin Delivery"
+            heading_style: title
+
+          # Active Insulin (IOB) over 6 hours
+          - type: custom:apexcharts-card
+            header:
+              title: "Active Insulin (IOB) - 6h"
+              show: true
+            graph_span: 6h
+            update_interval: 5min
+            yaxis:
+              - id: iob
+                min: 0
+                apex_config:
+                  title:
+                    text: "Units"
+                  forceNiceScale: true
+            apex_config:
+              chart:
+                height: 200
+              stroke:
+                width: 2
+                curve: stepline
+            series:
+              - entity: sensor.active_insulin_iob
+                name: "IOB"
+                yaxis_id: iob
+                type: area
+                opacity: 0.2
+                stroke_width: 2
+                color: "#ff7043"
+                group_by:
+                  func: avg
+                  duration: 5min
+
+          # Basal rate over 6 hours
+          - type: custom:apexcharts-card
+            header:
+              title: "Basal Rate - 6h"
+              show: true
+            graph_span: 6h
+            update_interval: 5min
+            yaxis:
+              - id: basal
+                min: 0
+                apex_config:
+                  title:
+                    text: "U/hr"
+                  forceNiceScale: true
+            apex_config:
+              chart:
+                height: 180
+              stroke:
+                width: 2
+                curve: stepline
+            series:
+              - entity: sensor.basal_rate
+                name: "Basal Rate"
+                yaxis_id: basal
+                type: area
+                opacity: 0.2
+                stroke_width: 2
+                color: "#26a69a"
+                group_by:
+                  func: avg
+                  duration: 5min
+
+          # Bolus events over 24 hours
+          - type: custom:apexcharts-card
+            header:
+              title: "Bolus Insulin - 24h"
+              show: true
+            graph_span: 24h
+            update_interval: 5min
+            yaxis:
+              - id: bolus
+                min: 0
+                apex_config:
+                  title:
+                    text: "Units"
+                  forceNiceScale: true
+            apex_config:
+              chart:
+                height: 180
+                type: bar
+              plotOptions:
+                bar:
+                  columnWidth: "60%"
+            series:
+              - entity: sensor.last_bolus
+                name: "Bolus"
+                yaxis_id: bolus
+                type: column
+                color: "#ef5350"
+                group_by:
+                  func: max
+                  duration: 30min
+              - entity: sensor.last_meal_bolus
+                name: "Meal Bolus"
+                yaxis_id: bolus
+                type: column
+                color: "#ab47bc"
+                group_by:
+                  func: max
+                  duration: 30min
+
+      # =================================================================
+      # All Sensors - Complete tile overview
+      # =================================================================
+      - type: grid
+        cards:
+          - type: heading
+            heading: "All Sensors"
+            heading_style: subtitle
+          - type: tile
+            entity: sensor.last_glucose_level_mmol
+          - type: tile
+            entity: sensor.last_glucose_level_mg_dl
+          - type: tile
+            entity: sensor.last_glucose_delta
+          - type: tile
+            entity: sensor.last_glucose_update
+          - type: tile
+            entity: sensor.active_insulin_iob
+          - type: tile
+            entity: sensor.basal_rate
+          - type: tile
+            entity: sensor.last_bolus
+          - type: tile
+            entity: sensor.last_bolus_time
+          - type: tile
+            entity: sensor.last_meal_bolus
+          - type: tile
+            entity: sensor.control_iq_status
+          - type: tile
+            entity: sensor.last_pump_upload
+          - type: tile
+            entity: sensor.last_update
+          - type: tile
+            entity: sensor.average_glucose_level_mmol
+          - type: tile
+            entity: sensor.average_glucose_level_mg_dl
+          - type: tile
+            entity: sensor.time_in_range
+          - type: tile
+            entity: sensor.cgm_usage
+          # Diagnostic sensors (hidden by default in HA)
+          # - type: tile
+          #   entity: sensor.pump_serial_number
+          # - type: tile
+          #   entity: sensor.pump_model
+          # - type: tile
+          #   entity: sensor.software_version

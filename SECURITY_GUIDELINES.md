@@ -57,7 +57,6 @@ git diff --staged
 **✅ Safe to see in `git status`**:
 - `test_credentials.json.template`
 - `SECURITY_GUIDELINES.md`
-- `diagnostic_tandem.py`
 
 **❌ NEVER should appear in `git status`**:
 - `test_credentials.json`
@@ -84,47 +83,6 @@ tandem_api_response.json
 # Local testing
 local_test_*.py
 ```
-
-## Using the Diagnostic Script
-
-### Option 1: With Credentials File (Recommended)
-
-```bash
-# 1. Create credentials file from template
-cp test_credentials.json.template test_credentials.json
-
-# 2. Edit with your credentials
-nano test_credentials.json
-
-# 3. Run diagnostic (will auto-load credentials)
-python diagnostic_tandem.py
-```
-
-### Option 2: Interactive Input
-
-```bash
-# Run without credentials file
-# Script will prompt for credentials
-python diagnostic_tandem.py
-```
-
-**Note**: Credentials entered interactively are not saved to disk.
-
-## Data Sanitization
-
-The diagnostic script automatically sanitizes sensitive data before saving:
-
-**Redacted Fields**:
-- `firstName`, `lastName`
-- `email`, `username`
-- `serialNumber`, `patientId`
-- `phone`, `address`
-- `password`
-
-**Output File**: `tandem_api_response.json`
-- Contains API structure with PII redacted
-- Still gitignored as a safety measure
-- Safe to share for debugging (verify before sharing)
 
 ## Best Practices Checklist
 

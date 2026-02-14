@@ -5,6 +5,22 @@ All notable changes to the Tandem Source / Carelink integration will be document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-02-14
+
+### Added
+- **Cartridge fill volume input**: New number entity (`number.carelink_cartridge_fill_volume`) allows users to manually set cartridge fill volume when changing cartridges, since the Tandem API does not report this value (#14)
+
+### Fixed
+- **Glucose timestamp showing future time**: Fixed two independent timezone bugs (#13)
+  - `parse_dotnet_date()` now returns UTC-aware datetimes; therapy timeline timestamps use `.astimezone()` for correct UTC-to-local conversion
+  - Binary event decoder timestamps are **local pump time**, not UTC — decoder now creates naive datetimes, callers use `.replace(tzinfo=tz)` to label them correctly (previously stamped UTC onto local values, shifting data by the UTC offset)
+- **Cartridge insulin showing 0**: Sensor now shows "Unknown" instead of misleading "0" when the Tandem API returns 0.0 for insulin volume (#14)
+- **Software version not populated**: Added fallback to `partNumber` metadata field and debug logging when `softwareVersion` is missing from the API response (#15)
+- **Last carb entry high y-axis**: Removed `state_class=MEASUREMENT` from the "Last carb entry" sensor to prevent HA from tracking it as long-term statistics, which caused misleading y-axis scaling on graphs (#16)
+
+### Changed
+- Added `Platform.NUMBER` to integration platforms for the cartridge fill volume entity
+
 ## [1.2.0] - 2026-02-14
 
 ### Added
@@ -169,6 +185,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Guardian Connect CGM
 - Nightscout upload capability
 
+[1.2.1]: https://github.com/jnctech/ha-tandem-pump/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/jnctech/ha-tandem-pump/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/jnctech/ha-tandem-pump/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/jnctech/ha-tandem-pump/compare/v0.1.4-beta...v1.0.0

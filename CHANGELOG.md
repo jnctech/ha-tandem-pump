@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-rc2] - 2026-02-14
+
+### Fixed
+- **Carelink coordinator**: Added historical SG replay and statistics import (Issue #9, PR #8)
+  - Process ALL valid SG readings from API polls, not just the latest two
+  - Replay intermediate readings so HA's recorder captures full glucose history
+  - Import correctly-timestamped long-term statistics for Statistics Graph cards
+  - Store reading history in sensor attributes for custom cards (e.g. ApexCharts)
+
+### Housekeeping
+- Removed untested Medtronic token tools (carelink-token-generator/, token-tool/, utils/)
+- Removed fork template boilerplate (.devcontainer.json, .prettierrc, dependabot.yml, repository.yaml)
+- Fixed remaining yo-han repo references → jnctech
+- Added Tandem-tested disclaimer to README and info.md
+
 ## [0.2.0-rc1] - 2026-02-14
 
 ### Added
@@ -106,6 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Guardian Connect CGM
 - Nightscout upload capability
 
+[0.2.0-rc2]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.2.0-rc1...v0.2.0-rc2
 [0.2.0-rc1]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.4-beta...v0.2.0-rc1
 [0.1.4-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.3-beta...v0.1.4-beta
 [0.1.3-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.1-beta...v0.1.3-beta

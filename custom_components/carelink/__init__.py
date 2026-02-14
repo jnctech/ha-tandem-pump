@@ -136,6 +136,19 @@ from .const import (
     TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT,
     TANDEM_SENSOR_KEY_DAILY_CARBS,
     TANDEM_SENSOR_KEY_DAILY_BOLUS_COUNT,
+    # Pump settings (from metadata.lastUpload.settings)
+    TANDEM_SENSOR_KEY_ACTIVE_PROFILE,
+    TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS,
+    TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED,
+    TANDEM_SENSOR_KEY_CONTROL_IQ_WEIGHT,
+    TANDEM_SENSOR_KEY_CONTROL_IQ_TDI,
+    TANDEM_SENSOR_KEY_MAX_BOLUS,
+    TANDEM_SENSOR_KEY_BASAL_LIMIT,
+    TANDEM_SENSOR_KEY_CGM_HIGH_ALERT,
+    TANDEM_SENSOR_KEY_CGM_LOW_ALERT,
+    TANDEM_SENSOR_KEY_LOW_BG_THRESHOLD,
+    TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD,
+    TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT,
 )
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
@@ -963,22 +976,32 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_SOFTWARE_VERSION] = metadata.get("softwareVersion")
 
             # Parse last upload timestamp
-            last_upload = metadata.get("lastUpload")
-            if last_upload:
-                upload_dt = parse_dotnet_date(last_upload)
+            # lastUpload is a dict {uploadId, lastUploadedAt, settings}, not a string
+            last_upload_obj = metadata.get("lastUpload")
+            last_uploaded_at = None
+            if isinstance(last_upload_obj, dict):
+                last_uploaded_at = last_upload_obj.get("lastUploadedAt")
+            elif isinstance(last_upload_obj, str):
+                # Backwards compat: some test fixtures use a bare date string
+                last_uploaded_at = last_upload_obj
+
+            if last_uploaded_at:
+                upload_dt = parse_dotnet_date(last_uploaded_at)
                 if upload_dt:
-                    data[TANDEM_SENSOR_KEY_LAST_UPLOAD] = upload_dt.replace(
+                    upload_aware = upload_dt.replace(
                         tzinfo=ZoneInfo(self.timezone)
                     )
-                    data[TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP] = upload_dt.replace(
-                        tzinfo=ZoneInfo(self.timezone)
-                    )
+                    data[TANDEM_SENSOR_KEY_LAST_UPLOAD] = upload_aware
+                    data[TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP] = upload_aware
                 else:
                     data[TANDEM_SENSOR_KEY_LAST_UPLOAD] = UNAVAILABLE
                     data[TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP] = UNAVAILABLE
             else:
                 data[TANDEM_SENSOR_KEY_LAST_UPLOAD] = UNAVAILABLE
                 data[TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP] = UNAVAILABLE
+
+            # Parse pump settings from lastUpload.settings
+            self._parse_pump_settings(last_upload_obj, data)
         else:
             data[DEVICE_PUMP_SERIAL] = "unknown"
             data[DEVICE_PUMP_MODEL] = "t:slim X2"
@@ -988,6 +1011,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_SOFTWARE_VERSION] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_LAST_UPLOAD] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP] = UNAVAILABLE
+            self._parse_pump_settings(None, data)
 
         data[DEVICE_PUMP_MANUFACTURER] = "Tandem Diabetes Care"
 
@@ -1684,6 +1708,149 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] = UNAVAILABLE
             data[TANDEM_TIME_IN_RANGE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CGM_USAGE] = UNAVAILABLE
+
+    def _parse_pump_settings(
+        self, last_upload_obj: dict | None, data: dict
+    ) -> None:
+        """Extract pump settings from metadata.lastUpload.settings.
+
+        The lastUpload field is a dict: {uploadId, lastUploadedAt, settings}.
+        settings contains profiles, controlIQSettings, pumpSettings,
+        alertsAndReminders, cgmSettings, etc.
+        """
+        _set_unavailable = [
+            TANDEM_SENSOR_KEY_ACTIVE_PROFILE,
+            TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED,
+            TANDEM_SENSOR_KEY_CONTROL_IQ_WEIGHT,
+            TANDEM_SENSOR_KEY_CONTROL_IQ_TDI,
+            TANDEM_SENSOR_KEY_MAX_BOLUS,
+            TANDEM_SENSOR_KEY_BASAL_LIMIT,
+            TANDEM_SENSOR_KEY_CGM_HIGH_ALERT,
+            TANDEM_SENSOR_KEY_CGM_LOW_ALERT,
+            TANDEM_SENSOR_KEY_LOW_BG_THRESHOLD,
+            TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD,
+            TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT,
+        ]
+
+        if not isinstance(last_upload_obj, dict):
+            for key in _set_unavailable:
+                data[key] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS] = {}
+            return
+
+        settings = last_upload_obj.get("settings")
+        if not settings:
+            for key in _set_unavailable:
+                data[key] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS] = {}
+            return
+
+        try:
+            # ── Active profile ──────────────────────────────────────────
+            profiles = settings.get("profiles") or {}
+            active_idp = profiles.get("activeIdp")
+            profile_list = profiles.get("profile") or []
+
+            active_profile = None
+            for prof in profile_list:
+                if prof.get("idp") == active_idp:
+                    active_profile = prof
+                    break
+
+            if active_profile:
+                data[TANDEM_SENSOR_KEY_ACTIVE_PROFILE] = active_profile.get("name", "Unknown")
+
+                # Build profile attributes: schedule segments, insulin duration
+                segments = active_profile.get("tDependentSegs") or []
+                schedule = []
+                for seg in segments:
+                    rate = seg.get("basalRate", 0)
+                    if rate == 0 and seg.get("startTime", 0) == 0 and not schedule:
+                        # Skip empty placeholder segments, but keep the first
+                        # one if it has a real rate
+                        continue
+                    if rate == 0 and seg.get("isf", 0) == 0:
+                        # Empty trailing slot
+                        continue
+                    start_mins = seg.get("startTime", 0)
+                    hours, mins = divmod(start_mins, 60)
+                    schedule.append({
+                        "time": f"{hours:02d}:{mins:02d}",
+                        "basal_rate": round(rate / 1000, 3),
+                        "isf_mgdl": seg.get("isf"),
+                        "carb_ratio": round(seg.get("carbRatio", 0) / 1000, 1),
+                        "target_bg_mgdl": seg.get("targetBg"),
+                    })
+
+                insulin_dur_mins = active_profile.get("insulinDuration", 0)
+                attrs = {
+                    "profile_name": active_profile.get("name"),
+                    "insulin_duration_hours": round(insulin_dur_mins / 60, 1) if insulin_dur_mins else None,
+                    "carb_entry_enabled": bool(active_profile.get("carbEntry")),
+                    "schedule": schedule,
+                }
+                data[TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS] = attrs
+            else:
+                data[TANDEM_SENSOR_KEY_ACTIVE_PROFILE] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS] = {}
+
+            # ── Control-IQ settings ─────────────────────────────────────
+            ciq = settings.get("controlIQSettings") or {}
+            closed_loop = ciq.get("ClosedLoop")
+            if closed_loop is not None:
+                data[TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED] = "On" if closed_loop else "Off"
+            else:
+                data[TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED] = UNAVAILABLE
+
+            weight = ciq.get("Weight")
+            data[TANDEM_SENSOR_KEY_CONTROL_IQ_WEIGHT] = weight if weight is not None else UNAVAILABLE
+
+            tdi = ciq.get("TotalDailyInsulin")
+            data[TANDEM_SENSOR_KEY_CONTROL_IQ_TDI] = tdi if tdi is not None else UNAVAILABLE
+
+            # ── Pump limits ─────────────────────────────────────────────
+            pump_settings = settings.get("pumpSettings") or {}
+            max_bolus_raw = pump_settings.get("maxBolus")
+            if max_bolus_raw is not None:
+                data[TANDEM_SENSOR_KEY_MAX_BOLUS] = round(max_bolus_raw / 1000, 1)
+            else:
+                data[TANDEM_SENSOR_KEY_MAX_BOLUS] = UNAVAILABLE
+
+            basal_limit_raw = pump_settings.get("basalLimit")
+            if basal_limit_raw is not None:
+                data[TANDEM_SENSOR_KEY_BASAL_LIMIT] = round(basal_limit_raw / 1000, 1)
+            else:
+                data[TANDEM_SENSOR_KEY_BASAL_LIMIT] = UNAVAILABLE
+
+            # ── CGM alert thresholds ────────────────────────────────────
+            cgm_settings = settings.get("cgmSettings") or {}
+            high_alert = cgm_settings.get("highGlucoseAlert") or {}
+            low_alert = cgm_settings.get("lowGlucoseAlert") or {}
+
+            high_mgdl = high_alert.get("mgPerDl")
+            data[TANDEM_SENSOR_KEY_CGM_HIGH_ALERT] = high_mgdl if high_mgdl is not None else UNAVAILABLE
+
+            low_mgdl = low_alert.get("mgPerDl")
+            data[TANDEM_SENSOR_KEY_CGM_LOW_ALERT] = low_mgdl if low_mgdl is not None else UNAVAILABLE
+
+            # ── Alert thresholds ────────────────────────────────────────
+            alerts = settings.get("alertsAndReminders") or {}
+            low_bg = alerts.get("lowBgThreshold")
+            data[TANDEM_SENSOR_KEY_LOW_BG_THRESHOLD] = low_bg if low_bg is not None else UNAVAILABLE
+
+            high_bg = alerts.get("highBgThreshold")
+            data[TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD] = high_bg if high_bg is not None else UNAVAILABLE
+
+            low_insulin = alerts.get("lowInsulinThreshold")
+            data[TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT] = low_insulin if low_insulin is not None else UNAVAILABLE
+
+        except Exception as e:
+            _LOGGER.warning("Error parsing pump settings: %s", e, exc_info=True)
+            for key in _set_unavailable:
+                if key not in data:
+                    data[key] = UNAVAILABLE
+            if TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS not in data:
+                data[TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS] = {}
 
     def _compute_cgm_summary(
         self, cgm_readings: list[dict], data: dict

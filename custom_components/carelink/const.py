@@ -543,6 +543,20 @@ TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT = "tandem_basal_bolus_split"
 TANDEM_SENSOR_KEY_DAILY_CARBS = "tandem_daily_carbs"
 TANDEM_SENSOR_KEY_DAILY_BOLUS_COUNT = "tandem_daily_bolus_count"
 
+# ── Pump settings keys (from metadata.lastUpload.settings) ───────────────
+TANDEM_SENSOR_KEY_ACTIVE_PROFILE = "tandem_active_profile"
+TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS = "tandem_active_profile_attributes"
+TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED = "tandem_control_iq_enabled"
+TANDEM_SENSOR_KEY_CONTROL_IQ_WEIGHT = "tandem_control_iq_weight"
+TANDEM_SENSOR_KEY_CONTROL_IQ_TDI = "tandem_control_iq_tdi"
+TANDEM_SENSOR_KEY_MAX_BOLUS = "tandem_max_bolus"
+TANDEM_SENSOR_KEY_BASAL_LIMIT = "tandem_basal_limit"
+TANDEM_SENSOR_KEY_CGM_HIGH_ALERT = "tandem_cgm_high_alert"
+TANDEM_SENSOR_KEY_CGM_LOW_ALERT = "tandem_cgm_low_alert"
+TANDEM_SENSOR_KEY_LOW_BG_THRESHOLD = "tandem_low_bg_threshold"
+TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD = "tandem_high_bg_threshold"
+TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT = "tandem_low_insulin_alert"
+
 # ── Staleness detection (Issue #11) ─────────────────────────────────────
 # Tandem Reports API is historical — pump uploads periodically, not in real-time.
 # When data is older than this threshold, sensors are marked unavailable so HA
@@ -565,6 +579,17 @@ TANDEM_SENSORS_ALWAYS_AVAILABLE = (
     TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE,
     TANDEM_SENSOR_KEY_LAST_SITE_CHANGE,
     TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE,
+    TANDEM_SENSOR_KEY_ACTIVE_PROFILE,
+    TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED,
+    TANDEM_SENSOR_KEY_CONTROL_IQ_WEIGHT,
+    TANDEM_SENSOR_KEY_CONTROL_IQ_TDI,
+    TANDEM_SENSOR_KEY_MAX_BOLUS,
+    TANDEM_SENSOR_KEY_BASAL_LIMIT,
+    TANDEM_SENSOR_KEY_CGM_HIGH_ALERT,
+    TANDEM_SENSOR_KEY_CGM_LOW_ALERT,
+    TANDEM_SENSOR_KEY_LOW_BG_THRESHOLD,
+    TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD,
+    TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT,
 )
 
 TANDEM_SENSORS = (
@@ -930,6 +955,106 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:counter",
         entity_category=None,
+    ),
+    # ── Pump settings sensors (from metadata.lastUpload.settings) ────────
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_ACTIVE_PROFILE,
+        name="Active basal profile",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:account-cog",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED,
+        name="Control-IQ enabled",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:robot",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CONTROL_IQ_WEIGHT,
+        name="Control-IQ weight",
+        native_unit_of_measurement="kg",
+        state_class=None,
+        device_class=SensorDeviceClass.WEIGHT,
+        icon="mdi:weight-kilogram",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CONTROL_IQ_TDI,
+        name="Control-IQ total daily insulin",
+        native_unit_of_measurement="U",
+        state_class=None,
+        device_class=None,
+        icon="mdi:needle",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_MAX_BOLUS,
+        name="Max bolus setting",
+        native_unit_of_measurement="U",
+        state_class=None,
+        device_class=None,
+        icon="mdi:needle",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_BASAL_LIMIT,
+        name="Basal rate limit",
+        native_unit_of_measurement="U/hr",
+        state_class=None,
+        device_class=None,
+        icon="mdi:speedometer",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CGM_HIGH_ALERT,
+        name="CGM high glucose alert",
+        native_unit_of_measurement=MGDL,
+        state_class=None,
+        device_class=None,
+        icon="mdi:alert-circle",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CGM_LOW_ALERT,
+        name="CGM low glucose alert",
+        native_unit_of_measurement=MGDL,
+        state_class=None,
+        device_class=None,
+        icon="mdi:alert-circle-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LOW_BG_THRESHOLD,
+        name="Low BG alert threshold",
+        native_unit_of_measurement=MGDL,
+        state_class=None,
+        device_class=None,
+        icon="mdi:alert-circle-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD,
+        name="High BG alert threshold",
+        native_unit_of_measurement=MGDL,
+        state_class=None,
+        device_class=None,
+        icon="mdi:alert-circle",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT,
+        name="Low insulin alert threshold",
+        native_unit_of_measurement="U",
+        state_class=None,
+        device_class=None,
+        icon="mdi:battery-alert",
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )
 

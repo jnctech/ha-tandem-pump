@@ -92,7 +92,7 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> float:
-        value = self.coordinator.data.setdefault(self.sensor_description.key, None)
+        value = self.coordinator.data.get(self.sensor_description.key)
         if value is None:
             _LOGGER.debug(
                 "Sensor %s has None value (key: %s not in coordinator.data)",
@@ -141,4 +141,4 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self):
         attrKey = "{}_attributes".format(self.sensor_description.key)
 
-        return self.coordinator.data.setdefault(attrKey, {})
+        return self.coordinator.data.get(attrKey, {})

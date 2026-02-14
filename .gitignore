@@ -186,3 +186,14 @@ api_debug_*.json
 local_test_*.py
 test_local_*.py
 run-tests.cmd
+
+# Dev artifacts (removed from repo)
+VERSION
+.vscode/
+config/
+test_config/
+scripts/
+docker-compose.test.yml
+Dockerfile.test
+carelink-integration-preview.png
+branding/

@@ -96,6 +96,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
     )
 
     events = []
+    event_id_counts: dict[int, int] = {}
     for i in range(num_events):
         chunk = raw_bytes[i * EVENT_LEN : (i + 1) * EVENT_LEN]
         if len(chunk) < EVENT_LEN:
@@ -109,6 +110,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
         payload = chunk[10:26]  # 16-byte data payload
 
         ts = datetime.utcfromtimestamp(TANDEM_EPOCH + ts_raw)
+        event_id_counts[event_id] = event_id_counts.get(event_id, 0) + 1
 
         evt = {
             "event_id": event_id,
@@ -282,6 +284,12 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             continue  # Skip events we don't need
 
         events.append(evt)
+
+    # Log event ID distribution for diagnostics
+    _LOGGER.debug(
+        "Tandem: Raw event ID counts: %s",
+        dict(sorted(event_id_counts.items()))
+    )
 
     return events
 
@@ -709,7 +717,10 @@ class TandemSourceClient:
                 f"&eventIds={event_ids}"
             )
 
-            _LOGGER.debug("Tandem: Fetching pump events from Source Reports API")
+            _LOGGER.debug(
+                "Tandem: Fetching pump events: minDate=%s, maxDate=%s",
+                start_date, end_date,
+            )
             _LOGGER.debug("Tandem: Pump events URL: %s", url)
 
             # The pumpevents endpoint returns base64-encoded binary,

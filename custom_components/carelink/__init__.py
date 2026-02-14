@@ -1162,9 +1162,9 @@ class TandemCoordinator(DataUpdateCoordinator):
         Each event dict has: event_id, event_name, timestamp (datetime),
         and event-specific fields (glucose_mgdl, insulin_delivered, etc.).
 
-        All events are processed: the latest of each type populates the
-        current sensor state, and intermediate events are queued for
-        replay so the recorder captures full history between polls.
+        IMPORTANT: Sensor values are ALWAYS populated from the full event
+        set (latest of each type), regardless of deduplication. The sequence
+        dedup only controls which events get imported as long-term statistics.
         """
         if not pump_events:
             _LOGGER.debug("No pump_events data, setting all to UNAVAILABLE")
@@ -1173,28 +1173,14 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         _LOGGER.debug("Tandem: Parsing %d decoded pump events", len(pump_events))
 
-        # Filter out already-processed events using sequence number
-        new_events = [
-            evt for evt in pump_events
-            if evt.get("seq", 0) > self._last_event_seq
-        ]
-
-        if not new_events:
-            _LOGGER.debug(
-                "Tandem: No new events (all seq <= %d), using full set for "
-                "latest values",
-                self._last_event_seq,
-            )
-            new_events = pump_events
-
-        # Categorise events by type
+        # Categorise ALL events by type — sensor values always use full set
         cgm_readings: list[dict] = []
         bolus_completed: list[dict] = []
         bolus_delivery: list[dict] = []
         basal_rate_changes: list[dict] = []
         basal_delivery: list[dict] = []
 
-        for evt in new_events:
+        for evt in pump_events:
             eid = evt.get("event_id")
             if eid == 256:      # CGM_DATA_GXB
                 cgm_readings.append(evt)
@@ -1214,8 +1200,8 @@ class TandemCoordinator(DataUpdateCoordinator):
             len(basal_rate_changes), len(basal_delivery),
         )
 
-        # Update the last-seen sequence number for deduplication
-        max_seq = max((evt.get("seq", 0) for evt in new_events), default=0)
+        # Update the last-seen sequence number for statistics deduplication
+        max_seq = max((evt.get("seq", 0) for evt in pump_events), default=0)
         if max_seq > self._last_event_seq:
             self._last_event_seq = max_seq
             _LOGGER.debug("Tandem: Updated last_event_seq to %d", max_seq)

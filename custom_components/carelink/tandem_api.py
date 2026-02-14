@@ -231,8 +231,8 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
 
         elif event_id == EVT_CARBS_ENTERED:
             evt["event_name"] = "CarbsEntered"
-            carbs = struct.unpack_from(">H", payload, 0)[0]
-            evt["carbs"] = carbs
+            carbs = struct.unpack_from(">f", payload, 0)[0]
+            evt["carbs"] = round(carbs)
 
         elif event_id == EVT_CANNULA_FILLED:
             evt["event_name"] = "CannulaFilled"

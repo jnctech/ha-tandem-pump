@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import struct
 import base64
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -57,7 +57,8 @@ from custom_components.carelink.tandem_api import (
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-BASE_TS = datetime(2026, 2, 14, 12, 0, 0)
+# Use UTC-aware "now" so events are always "today" for daily summary filters
+BASE_TS = datetime.now(timezone.utc)
 
 
 def _make_cgm_event(seq: int, glucose_mgdl: int, minutes_ago: int = 0) -> dict:
@@ -275,7 +276,7 @@ class TestNewEventDecoders:
         assert evt["insulin_volume"] == 200.5
 
     def test_decode_carbs_entered(self):
-        payload = struct.pack(">H", 45)
+        payload = struct.pack(">f", 45.0)
         evt = self._decode_single(48, payload)
         assert evt["event_name"] == "CarbsEntered"
         assert evt["carbs"] == 45

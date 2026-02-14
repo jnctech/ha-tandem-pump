@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 import shutil
@@ -111,6 +112,30 @@ from .const import (
     TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP,
     TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS,
     TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS,
+    # Computed CGM summary
+    TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV,
+    TANDEM_SENSOR_KEY_GLUCOSE_CV,
+    TANDEM_SENSOR_KEY_GMI,
+    TANDEM_SENSOR_KEY_TIME_BELOW_RANGE,
+    TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE,
+    # New event-derived sensors
+    TANDEM_SENSOR_KEY_ACTIVITY_MODE,
+    TANDEM_SENSOR_KEY_CONTROL_IQ_MODE,
+    TANDEM_SENSOR_KEY_PUMP_SUSPENDED,
+    TANDEM_SENSOR_KEY_LAST_CARBS,
+    TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP,
+    TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE,
+    TANDEM_SENSOR_KEY_LAST_SITE_CHANGE,
+    TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE,
+    TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN,
+    TANDEM_SENSOR_KEY_LAST_BG_READING,
+    # Computed insulin summary
+    TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN,
+    TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL,
+    TANDEM_SENSOR_KEY_DAILY_BASAL_TOTAL,
+    TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT,
+    TANDEM_SENSOR_KEY_DAILY_CARBS,
+    TANDEM_SENSOR_KEY_DAILY_BOLUS_COUNT,
 )
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
@@ -997,12 +1022,16 @@ class TandemCoordinator(DataUpdateCoordinator):
         except Exception as e:
             _LOGGER.error("TandemCoordinator: Error parsing therapy data: %s", e, exc_info=True)
 
-        # ── Dashboard summary (statistics) ───────────────────────────────
-        summary = recent_data.get("dashboard_summary")
-        try:
-            self._parse_dashboard_summary(summary, data)
-        except Exception as e:
-            _LOGGER.error("TandemCoordinator: Error parsing dashboard summary: %s", e, exc_info=True)
+        # ── Dashboard summary (fallback only) ──────────────────────────
+        # When pump_events are available, _compute_cgm_summary() inside
+        # _parse_pump_events() computes avg glucose, TIR, CGM usage locally.
+        # Only fall back to the dashboard_summary API if no pump_events.
+        if not pump_events:
+            summary = recent_data.get("dashboard_summary")
+            try:
+                self._parse_dashboard_summary(summary, data)
+            except Exception as e:
+                _LOGGER.error("TandemCoordinator: Error parsing dashboard summary: %s", e, exc_info=True)
 
         _LOGGER.debug(
             "Tandem _async_update_data: %d keys", len(data)
@@ -1215,9 +1244,18 @@ class TandemCoordinator(DataUpdateCoordinator):
         # Categorise ALL events by type — sensor values always use full set
         cgm_readings: list[dict] = []
         bolus_completed: list[dict] = []
+        bolex_completed: list[dict] = []
         bolus_delivery: list[dict] = []
         basal_rate_changes: list[dict] = []
         basal_delivery: list[dict] = []
+        suspend_resume: list[dict] = []
+        bg_readings: list[dict] = []
+        cartridge_fills: list[dict] = []
+        carbs_entered: list[dict] = []
+        cannula_fills: list[dict] = []
+        tubing_fills: list[dict] = []
+        user_mode_changes: list[dict] = []
+        pcm_changes: list[dict] = []
 
         for evt in pump_events:
             eid = evt.get("event_id")
@@ -1225,18 +1263,41 @@ class TandemCoordinator(DataUpdateCoordinator):
                 cgm_readings.append(evt)
             elif eid == 20:     # BOLUS_COMPLETED
                 bolus_completed.append(evt)
+            elif eid == 21:     # BOLEX_COMPLETED
+                bolex_completed.append(evt)
             elif eid == 280:    # BOLUS_DELIVERY
                 bolus_delivery.append(evt)
             elif eid == 3:      # BASAL_RATE_CHANGE
                 basal_rate_changes.append(evt)
             elif eid == 279:    # BASAL_DELIVERY
                 basal_delivery.append(evt)
+            elif eid in (11, 12):  # PUMPING_SUSPENDED / RESUMED
+                suspend_resume.append(evt)
+            elif eid == 16:     # BG_READING_TAKEN
+                bg_readings.append(evt)
+            elif eid == 33:     # CARTRIDGE_FILLED
+                cartridge_fills.append(evt)
+            elif eid == 48:     # CARBS_ENTERED
+                carbs_entered.append(evt)
+            elif eid == 61:     # CANNULA_FILLED
+                cannula_fills.append(evt)
+            elif eid == 63:     # TUBING_FILLED
+                tubing_fills.append(evt)
+            elif eid == 229:    # AA_USER_MODE_CHANGE
+                user_mode_changes.append(evt)
+            elif eid == 230:    # AA_PCM_CHANGE
+                pcm_changes.append(evt)
 
         _LOGGER.debug(
-            "Tandem: Events - CGM: %d, BolusCompleted: %d, BolusDelivery: %d, "
-            "BasalChange: %d, BasalDelivery: %d",
-            len(cgm_readings), len(bolus_completed), len(bolus_delivery),
-            len(basal_rate_changes), len(basal_delivery),
+            "Tandem: Events - CGM: %d, BolusCompleted: %d, BolexCompleted: %d, "
+            "BolusDelivery: %d, BasalChange: %d, BasalDelivery: %d, "
+            "Suspend/Resume: %d, BG: %d, Cartridge: %d, Carbs: %d, "
+            "Cannula: %d, Tubing: %d, UserMode: %d, PCM: %d",
+            len(cgm_readings), len(bolus_completed), len(bolex_completed),
+            len(bolus_delivery), len(basal_rate_changes), len(basal_delivery),
+            len(suspend_resume), len(bg_readings), len(cartridge_fills),
+            len(carbs_entered), len(cannula_fills), len(tubing_fills),
+            len(user_mode_changes), len(pcm_changes),
         )
 
         # Update the last-seen sequence number for statistics deduplication
@@ -1248,9 +1309,18 @@ class TandemCoordinator(DataUpdateCoordinator):
         # Sort all event lists by timestamp
         cgm_readings.sort(key=lambda e: e["timestamp"])
         bolus_completed.sort(key=lambda e: e["timestamp"])
+        bolex_completed.sort(key=lambda e: e["timestamp"])
         bolus_delivery.sort(key=lambda e: e["timestamp"])
         basal_rate_changes.sort(key=lambda e: e["timestamp"])
         basal_delivery.sort(key=lambda e: e["timestamp"])
+        suspend_resume.sort(key=lambda e: e["timestamp"])
+        bg_readings.sort(key=lambda e: e["timestamp"])
+        cartridge_fills.sort(key=lambda e: e["timestamp"])
+        carbs_entered.sort(key=lambda e: e["timestamp"])
+        cannula_fills.sort(key=lambda e: e["timestamp"])
+        tubing_fills.sort(key=lambda e: e["timestamp"])
+        user_mode_changes.sort(key=lambda e: e["timestamp"])
+        pcm_changes.sort(key=lambda e: e["timestamp"])
 
         # ── Populate current sensor values from latest events ────────
 
@@ -1472,6 +1542,96 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_BASAL_RATE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
 
+        # ── Pump suspend/resume state ──────────────────────────────────
+        if suspend_resume:
+            last_sr = suspend_resume[-1]
+            data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = (
+                "Suspended" if last_sr.get("event_id") == 11 else "Active"
+            )
+        else:
+            data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = UNAVAILABLE
+
+        # ── Activity mode (sleep/exercise/eating soon) ─────────────────
+        if user_mode_changes:
+            last_mode = user_mode_changes[-1]
+            data[TANDEM_SENSOR_KEY_ACTIVITY_MODE] = last_mode.get(
+                "current_mode", UNAVAILABLE
+            )
+        else:
+            data[TANDEM_SENSOR_KEY_ACTIVITY_MODE] = UNAVAILABLE
+
+        # ── Control-IQ mode (open loop / closed loop) ──────────────────
+        if pcm_changes:
+            last_pcm = pcm_changes[-1]
+            data[TANDEM_SENSOR_KEY_CONTROL_IQ_MODE] = last_pcm.get(
+                "current_pcm", UNAVAILABLE
+            )
+        else:
+            data[TANDEM_SENSOR_KEY_CONTROL_IQ_MODE] = UNAVAILABLE
+
+        # ── BG readings ────────────────────────────────────────────────
+        if bg_readings:
+            last_bg = bg_readings[-1]
+            data[TANDEM_SENSOR_KEY_LAST_BG_READING] = last_bg.get("bg_mgdl", UNAVAILABLE)
+        else:
+            data[TANDEM_SENSOR_KEY_LAST_BG_READING] = UNAVAILABLE
+
+        # ── Carb entries ───────────────────────────────────────────────
+        tz = ZoneInfo(self.timezone)
+        if carbs_entered:
+            last_carb = carbs_entered[-1]
+            data[TANDEM_SENSOR_KEY_LAST_CARBS] = last_carb.get("carbs", UNAVAILABLE)
+            data[TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP] = (
+                last_carb["timestamp"].replace(tzinfo=tz)
+            )
+        else:
+            data[TANDEM_SENSOR_KEY_LAST_CARBS] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP] = UNAVAILABLE
+
+        # ── Cartridge change ───────────────────────────────────────────
+        if cartridge_fills:
+            last_cart = cartridge_fills[-1]
+            data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = (
+                last_cart["timestamp"].replace(tzinfo=tz)
+            )
+            data[TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN] = last_cart.get(
+                "insulin_volume", UNAVAILABLE
+            )
+        else:
+            data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN] = UNAVAILABLE
+
+        # ── Site change (cannula fill) ─────────────────────────────────
+        if cannula_fills:
+            data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = (
+                cannula_fills[-1]["timestamp"].replace(tzinfo=tz)
+            )
+        else:
+            data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = UNAVAILABLE
+
+        # ── Tubing change ──────────────────────────────────────────────
+        if tubing_fills:
+            data[TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE] = (
+                tubing_fills[-1]["timestamp"].replace(tzinfo=tz)
+            )
+        else:
+            data[TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE] = UNAVAILABLE
+
+        # ── Computed summaries ─────────────────────────────────────────
+        try:
+            self._compute_cgm_summary(cgm_readings, data)
+        except Exception as e:
+            _LOGGER.warning("Error computing CGM summary: %s", e, exc_info=True)
+
+        try:
+            self._compute_insulin_summary(
+                bolus_completed, bolex_completed,
+                basal_delivery, basal_rate_changes,
+                carbs_entered, data,
+            )
+        except Exception as e:
+            _LOGGER.warning("Error computing insulin summary: %s", e, exc_info=True)
+
     def _parse_dashboard_summary(self, summary: dict | None, data: dict) -> None:
         """Parse dashboard summary into sensor values."""
         if not summary:
@@ -1516,6 +1676,186 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] = UNAVAILABLE
             data[TANDEM_TIME_IN_RANGE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CGM_USAGE] = UNAVAILABLE
+
+    def _compute_cgm_summary(
+        self, cgm_readings: list[dict], data: dict
+    ) -> None:
+        """Compute CGM summary statistics from raw glucose readings.
+
+        Replaces the broken dashboard_summary API by computing locally:
+        avg glucose, SD, CV, GMI, time in/below/above range, CGM usage.
+        """
+        _unavailable_keys = (
+            TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL,
+            TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL,
+            TANDEM_TIME_IN_RANGE,
+            TANDEM_SENSOR_KEY_CGM_USAGE,
+            TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV,
+            TANDEM_SENSOR_KEY_GLUCOSE_CV,
+            TANDEM_SENSOR_KEY_GMI,
+            TANDEM_SENSOR_KEY_TIME_BELOW_RANGE,
+            TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE,
+        )
+
+        if not cgm_readings:
+            for key in _unavailable_keys:
+                data[key] = UNAVAILABLE
+            return
+
+        # Extract valid glucose values
+        values = [
+            r["glucose_mgdl"]
+            for r in cgm_readings
+            if r.get("glucose_mgdl") and r["glucose_mgdl"] > 0
+        ]
+
+        if not values:
+            for key in _unavailable_keys:
+                data[key] = UNAVAILABLE
+            return
+
+        n = len(values)
+        mean = sum(values) / n
+
+        # Average glucose
+        data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] = round(mean)
+        data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL] = round(mean * 0.0555, 1)
+
+        # Standard deviation
+        if n >= 2:
+            variance = sum((v - mean) ** 2 for v in values) / (n - 1)
+            sd = math.sqrt(variance)
+            data[TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV] = round(sd, 1)
+            data[TANDEM_SENSOR_KEY_GLUCOSE_CV] = round(
+                (sd / mean) * 100, 1
+            ) if mean > 0 else UNAVAILABLE
+        else:
+            data[TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_GLUCOSE_CV] = UNAVAILABLE
+
+        # GMI (Glucose Management Indicator)
+        data[TANDEM_SENSOR_KEY_GMI] = round(3.31 + (0.02392 * mean), 1)
+
+        # Time in range (70-180 mg/dL)
+        in_range = sum(1 for v in values if 70 <= v <= 180)
+        below = sum(1 for v in values if v < 70)
+        above = sum(1 for v in values if v > 180)
+        data[TANDEM_TIME_IN_RANGE] = round((in_range / n) * 100, 1)
+        data[TANDEM_SENSOR_KEY_TIME_BELOW_RANGE] = round(
+            (below / n) * 100, 1
+        )
+        data[TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE] = round(
+            (above / n) * 100, 1
+        )
+
+        # CGM usage (readings per day: 288 at 5-min intervals)
+        # Use reading count vs expected for the fetch window
+        data[TANDEM_SENSOR_KEY_CGM_USAGE] = round(
+            min((n / 288) * 100, 100.0), 1
+        )
+
+        _LOGGER.debug(
+            "CGM summary: avg=%d mg/dL, SD=%.1f, CV=%.1f%%, GMI=%.1f%%, "
+            "TIR=%.1f%%, below=%.1f%%, above=%.1f%%, usage=%.1f%% (%d readings)",
+            mean,
+            data.get(TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV, 0) or 0,
+            data.get(TANDEM_SENSOR_KEY_GLUCOSE_CV, 0) or 0,
+            data.get(TANDEM_SENSOR_KEY_GMI, 0) or 0,
+            data[TANDEM_TIME_IN_RANGE],
+            data[TANDEM_SENSOR_KEY_TIME_BELOW_RANGE],
+            data[TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE],
+            data[TANDEM_SENSOR_KEY_CGM_USAGE],
+            n,
+        )
+
+    def _compute_insulin_summary(
+        self,
+        bolus_completed: list[dict],
+        bolex_completed: list[dict],
+        basal_delivery: list[dict],
+        basal_rate_changes: list[dict],
+        carbs_entered: list[dict],
+        data: dict,
+    ) -> None:
+        """Compute daily insulin summary from bolus and basal events."""
+        _unavailable_keys = (
+            TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN,
+            TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL,
+            TANDEM_SENSOR_KEY_DAILY_BASAL_TOTAL,
+            TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT,
+            TANDEM_SENSOR_KEY_DAILY_CARBS,
+            TANDEM_SENSOR_KEY_DAILY_BOLUS_COUNT,
+        )
+
+        # Daily bolus total: sum insulin_delivered from completed boluses
+        all_bolus = bolus_completed + bolex_completed
+        bolus_total = sum(
+            b.get("insulin_delivered", 0)
+            for b in all_bolus
+            if b.get("insulin_delivered")
+        )
+        data[TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL] = round(bolus_total, 2) if all_bolus else UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_DAILY_BOLUS_COUNT] = len(all_bolus) if all_bolus else UNAVAILABLE
+
+        # Daily basal total: estimate from basal delivery events
+        # Each basal_delivery event gives commanded_rate in U/hr.
+        # Approximate: sum (rate * interval) for consecutive events.
+        basal_total = 0.0
+        if basal_delivery:
+            sorted_basal = sorted(basal_delivery, key=lambda e: e["timestamp"])
+            for i in range(len(sorted_basal) - 1):
+                rate = sorted_basal[i].get("commanded_rate", 0) or 0
+                dt_hours = (
+                    sorted_basal[i + 1]["timestamp"] - sorted_basal[i]["timestamp"]
+                ).total_seconds() / 3600.0
+                # Cap interval at 1 hour to avoid gaps inflating the total
+                dt_hours = min(dt_hours, 1.0)
+                basal_total += rate * dt_hours
+            # Add last segment (assume 5 min)
+            last_rate = sorted_basal[-1].get("commanded_rate", 0) or 0
+            basal_total += last_rate * (5.0 / 60.0)
+        elif basal_rate_changes:
+            sorted_basal = sorted(basal_rate_changes, key=lambda e: e["timestamp"])
+            for i in range(len(sorted_basal) - 1):
+                rate = sorted_basal[i].get("commanded_rate", 0) or 0
+                dt_hours = (
+                    sorted_basal[i + 1]["timestamp"] - sorted_basal[i]["timestamp"]
+                ).total_seconds() / 3600.0
+                dt_hours = min(dt_hours, 1.0)
+                basal_total += rate * dt_hours
+            last_rate = sorted_basal[-1].get("commanded_rate", 0) or 0
+            basal_total += last_rate * (5.0 / 60.0)
+
+        data[TANDEM_SENSOR_KEY_DAILY_BASAL_TOTAL] = (
+            round(basal_total, 2) if (basal_delivery or basal_rate_changes) else UNAVAILABLE
+        )
+
+        # TDI and split
+        if bolus_total > 0 or basal_total > 0:
+            tdi = bolus_total + basal_total
+            data[TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN] = round(tdi, 2)
+            data[TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT] = (
+                round((basal_total / tdi) * 100, 1) if tdi > 0 else UNAVAILABLE
+            )
+        else:
+            data[TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT] = UNAVAILABLE
+
+        # Daily carbs
+        if carbs_entered:
+            total_carbs = sum(c.get("carbs", 0) for c in carbs_entered)
+            data[TANDEM_SENSOR_KEY_DAILY_CARBS] = total_carbs
+        else:
+            data[TANDEM_SENSOR_KEY_DAILY_CARBS] = UNAVAILABLE
+
+        _LOGGER.debug(
+            "Insulin summary: TDI=%.2f U, bolus=%.2f U (%d), "
+            "basal=%.2f U, split=%.1f%%, carbs=%s g",
+            data.get(TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN) or 0,
+            bolus_total, len(all_bolus), basal_total,
+            data.get(TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT) or 0,
+            data.get(TANDEM_SENSOR_KEY_DAILY_CARBS, "N/A"),
+        )
 
     # ── Long-term statistics import ──────────────────────────────────
 

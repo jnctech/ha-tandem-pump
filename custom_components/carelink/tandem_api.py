@@ -58,7 +58,17 @@ TANDEM_EPOCH = 1199145600  # 2008-01-01 00:00:00 UTC
 
 # Event type IDs we care about
 EVT_BASAL_RATE_CHANGE = 3
+EVT_PUMPING_SUSPENDED = 11
+EVT_PUMPING_RESUMED = 12
+EVT_BG_READING_TAKEN = 16
 EVT_BOLUS_COMPLETED = 20
+EVT_BOLEX_COMPLETED = 21
+EVT_CARTRIDGE_FILLED = 33
+EVT_CARBS_ENTERED = 48
+EVT_CANNULA_FILLED = 61
+EVT_TUBING_FILLED = 63
+EVT_AA_USER_MODE_CHANGE = 229
+EVT_AA_PCM_CHANGE = 230
 EVT_CGM_DATA_GXB = 256
 EVT_BASAL_DELIVERY = 279
 EVT_BOLUS_DELIVERY = 280
@@ -167,6 +177,105 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             evt["profile_rate_mu"] = profile_rate  # milliunits/hr
             evt["commanded_rate_mu"] = commanded_rate
             evt["commanded_rate"] = round(commanded_rate / 1000.0, 3)
+
+        elif event_id == EVT_PUMPING_SUSPENDED:
+            evt["event_name"] = "PumpingSuspended"
+            suspend_reason = struct.unpack_from(">B", payload, 0)[0]
+            insulin_amount = struct.unpack_from(">f", payload, 4)[0]
+            reason_map = {
+                0: "User", 1: "Alarm", 2: "Malfunction", 3: "Auto (PLGS)",
+            }
+            evt["suspend_reason"] = reason_map.get(
+                suspend_reason, f"Reason_{suspend_reason}"
+            )
+            evt["suspend_reason_id"] = suspend_reason
+            evt["insulin_amount"] = round(insulin_amount, 2)
+
+        elif event_id == EVT_PUMPING_RESUMED:
+            evt["event_name"] = "PumpingResumed"
+            pre_resume_state = struct.unpack_from(">B", payload, 0)[0]
+            insulin_amount = struct.unpack_from(">f", payload, 4)[0]
+            evt["pre_resume_state"] = pre_resume_state
+            evt["insulin_amount"] = round(insulin_amount, 2)
+
+        elif event_id == EVT_BG_READING_TAKEN:
+            evt["event_name"] = "BGReading"
+            bg = struct.unpack_from(">H", payload, 0)[0]
+            iob = struct.unpack_from(">f", payload, 4)[0]
+            entry_type = struct.unpack_from(">B", payload, 8)[0]
+            type_map = {0: "Manual", 1: "Dexcom EGV"}
+            evt["bg_mgdl"] = bg
+            evt["iob"] = round(iob, 2)
+            evt["entry_type"] = type_map.get(entry_type, f"Type_{entry_type}")
+
+        elif event_id == EVT_BOLEX_COMPLETED:
+            evt["event_name"] = "BolexCompleted"
+            # Same structure as BOLUS_COMPLETED
+            bolus_id = struct.unpack_from(">H", payload, 0)[0]
+            completion = struct.unpack_from(">H", payload, 2)[0]
+            iob = struct.unpack_from(">f", payload, 4)[0]
+            delivered = struct.unpack_from(">f", payload, 8)[0]
+            requested = struct.unpack_from(">f", payload, 12)[0]
+            evt["bolus_id"] = bolus_id
+            evt["completion_status"] = completion
+            evt["iob"] = round(iob, 2)
+            evt["insulin_delivered"] = round(delivered, 2)
+            evt["insulin_requested"] = round(requested, 2)
+
+        elif event_id == EVT_CARTRIDGE_FILLED:
+            evt["event_name"] = "CartridgeFilled"
+            insulin_volume = struct.unpack_from(">f", payload, 0)[0]
+            evt["insulin_volume"] = round(insulin_volume, 1)
+
+        elif event_id == EVT_CARBS_ENTERED:
+            evt["event_name"] = "CarbsEntered"
+            carbs = struct.unpack_from(">H", payload, 0)[0]
+            evt["carbs"] = carbs
+
+        elif event_id == EVT_CANNULA_FILLED:
+            evt["event_name"] = "CannulaFilled"
+            prime_size = struct.unpack_from(">f", payload, 0)[0]
+            completion = struct.unpack_from(">H", payload, 4)[0]
+            evt["prime_size"] = round(prime_size, 2)
+            evt["completion_status"] = completion
+
+        elif event_id == EVT_TUBING_FILLED:
+            evt["event_name"] = "TubingFilled"
+            prime_size = struct.unpack_from(">f", payload, 0)[0]
+            completion = struct.unpack_from(">H", payload, 4)[0]
+            evt["prime_size"] = round(prime_size, 2)
+            evt["completion_status"] = completion
+
+        elif event_id == EVT_AA_USER_MODE_CHANGE:
+            evt["event_name"] = "UserModeChange"
+            current_mode = struct.unpack_from(">B", payload, 0)[0]
+            previous_mode = struct.unpack_from(">B", payload, 1)[0]
+            mode_map = {
+                0: "Normal", 1: "Sleep", 2: "Exercise", 3: "Eating Soon",
+            }
+            evt["current_mode"] = mode_map.get(
+                current_mode, f"Mode_{current_mode}"
+            )
+            evt["previous_mode"] = mode_map.get(
+                previous_mode, f"Mode_{previous_mode}"
+            )
+            evt["current_mode_id"] = current_mode
+            evt["previous_mode_id"] = previous_mode
+
+        elif event_id == EVT_AA_PCM_CHANGE:
+            evt["event_name"] = "PCMChange"
+            current_pcm = struct.unpack_from(">B", payload, 0)[0]
+            previous_pcm = struct.unpack_from(">B", payload, 1)[0]
+            pcm_map = {
+                0: "No Control", 1: "Open Loop", 2: "Pining",
+                3: "Closed Loop",
+            }
+            evt["current_pcm"] = pcm_map.get(
+                current_pcm, f"PCM_{current_pcm}"
+            )
+            evt["previous_pcm"] = pcm_map.get(
+                previous_pcm, f"PCM_{previous_pcm}"
+            )
 
         else:
             evt["event_name"] = f"Event_{event_id}"
@@ -574,13 +683,23 @@ class TandemSourceClient:
         try:
             user_id = self.pumper_id or self.account_id
 
-            # Only request the event types we need for sensor data
+            # Request event types we need for sensor data
             event_ids = (
                 "256,"   # CGM_DATA_GXB (glucose readings)
                 "20,"    # BOLUS_COMPLETED (IOB, delivered, requested)
+                "21,"    # BOLEX_COMPLETED (extended bolus completion)
                 "280,"   # BOLUS_DELIVERY (bolus details)
                 "3,"     # BASAL_RATE_CHANGE (basal rates)
-                "279"    # BASAL_DELIVERY (commanded rates)
+                "279,"   # BASAL_DELIVERY (commanded rates)
+                "11,"    # PUMPING_SUSPENDED
+                "12,"    # PUMPING_RESUMED
+                "16,"    # BG_READING_TAKEN (manual BG)
+                "33,"    # CARTRIDGE_FILLED
+                "48,"    # CARBS_ENTERED
+                "61,"    # CANNULA_FILLED (site change)
+                "63,"    # TUBING_FILLED
+                "229,"   # AA_USER_MODE_CHANGE (sleep/exercise)
+                "230"    # AA_PCM_CHANGE (Control-IQ mode)
             )
 
             url = (

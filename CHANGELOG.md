@@ -5,7 +5,7 @@ All notable changes to the Tandem Source / Carelink integration will be document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-02-14
 
 ### Added
 - **Expanded data sources**: Decode 10 new pump event types (15 total, up from 5)
@@ -16,8 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixes the 3 sensors (avg glucose, TIR, CGM usage) that were permanently unavailable due to dashboard_summary API returning 404
   - All stats computed locally from CGM pump events
 - **Computed insulin summary**: Total Daily Insulin (TDI), daily bolus/basal totals, basal/bolus split %, daily carbs, daily bolus count
-- 16 new sensors total (34 Tandem sensors, up from 18)
-- 31 new unit tests (219 total, up from 188)
+- **Pump settings extraction**: 11 new sensors from pump metadata upload settings
+  - Active basal profile name (with full schedule as attributes: rates, ISF, carb ratio, target BG per segment)
+  - Control-IQ settings: enabled status, configured weight, configured TDI
+  - Pump limits: max bolus, basal rate limit
+  - CGM alert thresholds: high/low glucose alerts
+  - BG alert thresholds: low/high BG alerts, low insulin alert
+- 27 new sensors total (45 Tandem sensors, up from 18)
+- 48 new unit tests (236 total, up from 188)
 
 ### Changed
 - API now requests 15 event types instead of 5 (adds events 11, 12, 16, 21, 33, 48, 61, 63, 229, 230)
@@ -25,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Daily insulin/carb summaries now filter events to "today" in pump timezone (previously summed full 2-day fetch window)
 
 ### Fixed
+- **CRITICAL**: Fixed `lastUpload` parsing bug — field is a dict `{uploadId, lastUploadedAt, settings}`, not a timestamp string
+  - `sensor.last_pump_upload` and `sensor.last_update` now show real timestamps (were stuck on "unknown")
 - **CRITICAL**: Fixed timestamp timezone handling — API returns UTC timestamps, not local time
   - `.replace(tzinfo=tz)` was stamping local timezone onto UTC clock values, shifting all data by the UTC offset (e.g. 10.5 hours for Adelaide)
   - Decoder now uses `fromtimestamp(tz=timezone.utc)`, coordinator uses `.astimezone(tz)` for all conversions
@@ -161,6 +169,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Guardian Connect CGM
 - Nightscout upload capability
 
+[1.2.0]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.4-beta...v1.0.0
 [0.1.4-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.3-beta...v0.1.4-beta
 [0.1.3-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.1-beta...v0.1.3-beta

@@ -54,7 +54,7 @@ class TandemApiError(Exception):
 # event parser (https://github.com/jwoglom/tconnectsync).
 
 EVENT_LEN = 26
-TANDEM_EPOCH = 1199145600  # 2008-01-01 00:00:00 UTC
+TANDEM_EPOCH = 1199145600  # 2008-01-01 00:00:00 (local pump time)
 
 # Event type IDs we care about
 EVT_BASAL_RATE_CHANGE = 3
@@ -109,7 +109,10 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
         seq = struct.unpack_from(">I", chunk, 6)[0]
         payload = chunk[10:26]  # 16-byte data payload
 
-        ts = datetime.fromtimestamp(TANDEM_EPOCH + ts_raw, tz=timezone.utc)
+        # Tandem timestamps are LOCAL pump time (seconds since 2008-01-01
+        # midnight local).  Create a naive datetime so the coordinator can
+        # attach the correct pump timezone via .replace(tzinfo=tz).
+        ts = datetime.utcfromtimestamp(TANDEM_EPOCH + ts_raw)
         event_id_counts[event_id] = event_id_counts.get(event_id, 0) + 1
 
         evt = {

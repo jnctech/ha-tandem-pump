@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Expanded data sources**: Decode 10 new pump event types (15 total, up from 5)
+  - Pump suspend/resume state, activity mode (Sleep/Exercise/Eating Soon), Control-IQ mode (Open/Closed Loop)
+  - Cartridge, cannula (site), and tubing change timestamps for load activity tracking
+  - Carb entries, manual BG readings, extended bolus completion, cartridge insulin level
+- **Computed CGM summary**: Average glucose, Time in Range (70-180), time below/above range, SD, CV, GMI, CGM usage %
+  - Fixes the 3 sensors (avg glucose, TIR, CGM usage) that were permanently unavailable due to dashboard_summary API returning 404
+  - All stats computed locally from CGM pump events
+- **Computed insulin summary**: Total Daily Insulin (TDI), daily bolus/basal totals, basal/bolus split %, daily carbs, daily bolus count
+- 16 new sensors total (34 Tandem sensors, up from 18)
+- 31 new unit tests (219 total, up from 188)
+
+### Changed
+- API now requests 15 event types instead of 5 (adds events 11, 12, 16, 21, 33, 48, 61, 63, 229, 230)
+- Dashboard summary API call only used as fallback when pump events are unavailable
+
 ## [1.1.0] - 2026-02-14
 
 ### Added

@@ -1368,8 +1368,8 @@ class TandemCoordinator(DataUpdateCoordinator):
                         sg_mgdl * 0.0555, 2
                     )
                     data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = (
-                        latest["timestamp"].astimezone(
-                            ZoneInfo(self.timezone)
+                        latest["timestamp"].replace(
+                            tzinfo=ZoneInfo(self.timezone)
                         )
                     )
 
@@ -1415,7 +1415,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[f"{TANDEM_SENSOR_KEY_LASTSG_MGDL}_attributes"] = {
             "readings": [
                 {
-                    "t": r["timestamp"].astimezone(tz).isoformat(),
+                    "t": r["timestamp"].replace(tzinfo=tz).isoformat(),
                     "v": r.get("glucose_mgdl"),
                 }
                 for r in recent_cgm
@@ -1428,7 +1428,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[f"{TANDEM_SENSOR_KEY_ACTIVE_INSULIN}_attributes"] = {
             "readings": [
                 {
-                    "t": b["timestamp"].astimezone(tz).isoformat(),
+                    "t": b["timestamp"].replace(tzinfo=tz).isoformat(),
                     "v": round(float(b["iob"]), 2),
                 }
                 for b in recent_iob
@@ -1445,7 +1445,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[f"{TANDEM_SENSOR_KEY_BASAL_RATE}_attributes"] = {
             "readings": [
                 {
-                    "t": b["timestamp"].astimezone(tz).isoformat(),
+                    "t": b["timestamp"].replace(tzinfo=tz).isoformat(),
                     "v": round(float(b["commanded_rate"]), 3),
                 }
                 for b in recent_basal
@@ -1469,8 +1469,8 @@ class TandemCoordinator(DataUpdateCoordinator):
                     data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = UNAVAILABLE
 
                 data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = (
-                    last_bolus["timestamp"].astimezone(
-                        ZoneInfo(self.timezone)
+                    last_bolus["timestamp"].replace(
+                        tzinfo=ZoneInfo(self.timezone)
                     )
                 )
 
@@ -1614,7 +1614,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             last_carb = carbs_entered[-1]
             data[TANDEM_SENSOR_KEY_LAST_CARBS] = last_carb.get("carbs", UNAVAILABLE)
             data[TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP] = (
-                last_carb["timestamp"].astimezone(tz)
+                last_carb["timestamp"].replace(tzinfo=tz)
             )
         else:
             data[TANDEM_SENSOR_KEY_LAST_CARBS] = UNAVAILABLE
@@ -1624,7 +1624,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         if cartridge_fills:
             last_cart = cartridge_fills[-1]
             data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = (
-                last_cart["timestamp"].astimezone(tz)
+                last_cart["timestamp"].replace(tzinfo=tz)
             )
             fill_volume = last_cart.get("insulin_volume")
             # Tandem API often returns 0.0 for insulin_volume — treat as unknown.
@@ -1650,11 +1650,11 @@ class TandemCoordinator(DataUpdateCoordinator):
         # fill timestamp, falling back to cannula fill if present.
         if cannula_fills:
             data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = (
-                cannula_fills[-1]["timestamp"].astimezone(tz)
+                cannula_fills[-1]["timestamp"].replace(tzinfo=tz)
             )
         elif cartridge_fills:
             data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = (
-                cartridge_fills[-1]["timestamp"].astimezone(tz)
+                cartridge_fills[-1]["timestamp"].replace(tzinfo=tz)
             )
         else:
             data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = UNAVAILABLE
@@ -1662,7 +1662,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         # ── Tubing change ──────────────────────────────────────────────
         if tubing_fills:
             data[TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE] = (
-                tubing_fills[-1]["timestamp"].astimezone(tz)
+                tubing_fills[-1]["timestamp"].replace(tzinfo=tz)
             )
         else:
             data[TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE] = UNAVAILABLE
@@ -1996,8 +1996,8 @@ class TandemCoordinator(DataUpdateCoordinator):
                 if not ts:
                     continue
                 if ts.tzinfo is None:
-                    # Naive timestamp — assume UTC
-                    ts = ts.replace(tzinfo=ZoneInfo("UTC"))
+                    # Naive timestamp — local pump time
+                    ts = ts.replace(tzinfo=tz)
                 if ts.astimezone(tz).date() == today:
                     result.append(e)
             return result
@@ -2113,11 +2113,11 @@ class TandemCoordinator(DataUpdateCoordinator):
             if not ts:
                 continue
 
-            # Convert UTC timestamp to pump timezone for statistics
+            # Pump event timestamps are naive local pump time — label them
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=tz)
             else:
-                ts = ts.astimezone(tz)
+                ts = ts.astimezone(tz)  # already aware (shouldn't happen)
 
             # Round down to the top of the hour for HA statistics
             # (HA requires timestamps at the top of the hour)

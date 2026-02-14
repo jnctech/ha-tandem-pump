@@ -1,4 +1,4 @@
-# Contributing to Tandem Source / Carelink Integration
+# Contributing to Tandem t:slim Pump for Home Assistant
 
 Thank you for considering contributing to this Home Assistant integration!
 
@@ -13,8 +13,8 @@ Thank you for considering contributing to this Home Assistant integration!
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink.git
-cd Home-Assistant-Tandem-Source-Carelink
+git clone https://github.com/jnctech/ha-tandem-pump.git
+cd ha-tandem-pump
 ```
 
 2. Install development dependencies:

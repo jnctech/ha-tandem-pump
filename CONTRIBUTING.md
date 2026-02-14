@@ -133,7 +133,7 @@ Update documentation when:
 
 ## Release Process
 
-See [RELEASE_PROCESS.md](RELEASE_PROCESS.md) for details on how releases are made.
+Releases follow [Semantic Versioning](https://semver.org/) with Git Flow branching. Pre-releases use `-rc` suffixes. See the [CHANGELOG](CHANGELOG.md) for release history.
 
 ## Getting Help
 

@@ -68,6 +68,10 @@ async def _setup_tandem_coordinator(
     mock_client = AsyncMock()
     mock_client.login = AsyncMock(return_value=True)
     mock_client.get_recent_data = AsyncMock(return_value=mock_recent_data)
+    # Metadata check returns a new maxDateWithEvents each time (forces full fetch)
+    mock_client.get_pump_event_metadata = AsyncMock(return_value=[{
+        "maxDateWithEvents": "2024-01-15T12:00:00",
+    }])
     mock_client.close = AsyncMock()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
@@ -329,6 +333,13 @@ class TestTandemCoordinatorSgDelta:
         mock_client = AsyncMock()
         mock_client.login = AsyncMock(return_value=True)
         mock_client.get_recent_data = AsyncMock(side_effect=[first_data, second_data])
+        # Return different maxDateWithEvents each poll to force full fetch
+        mock_client.get_pump_event_metadata = AsyncMock(
+            side_effect=[
+                [{"maxDateWithEvents": "2024-01-15T12:00:00"}],
+                [{"maxDateWithEvents": "2024-01-15T12:05:00"}],
+            ]
+        )
         mock_client.close = AsyncMock()
 
         hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {

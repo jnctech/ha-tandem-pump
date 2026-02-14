@@ -516,6 +516,47 @@ TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP = "tandem_last_update_timestamp"
 TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS = "tandem_last_meal_bolus"
 TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS = "tandem_last_meal_bolus_attributes"
 
+# ── Computed CGM summary keys ──────────────────────────────────────────
+TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV = "tandem_glucose_std_dev"
+TANDEM_SENSOR_KEY_GLUCOSE_CV = "tandem_glucose_cv"
+TANDEM_SENSOR_KEY_GMI = "tandem_gmi"
+TANDEM_SENSOR_KEY_TIME_BELOW_RANGE = "tandem_time_below_range"
+TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE = "tandem_time_above_range"
+
+# ── New event-derived sensor keys ──────────────────────────────────────
+TANDEM_SENSOR_KEY_ACTIVITY_MODE = "tandem_activity_mode"
+TANDEM_SENSOR_KEY_CONTROL_IQ_MODE = "tandem_control_iq_mode"
+TANDEM_SENSOR_KEY_PUMP_SUSPENDED = "tandem_pump_suspended"
+TANDEM_SENSOR_KEY_LAST_CARBS = "tandem_last_carbs"
+TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP = "tandem_last_carbs_timestamp"
+TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE = "tandem_last_cartridge_change"
+TANDEM_SENSOR_KEY_LAST_SITE_CHANGE = "tandem_last_site_change"
+TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE = "tandem_last_tubing_change"
+TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN = "tandem_cartridge_insulin"
+TANDEM_SENSOR_KEY_LAST_BG_READING = "tandem_last_bg_reading"
+
+# ── Computed insulin summary keys ──────────────────────────────────────
+TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN = "tandem_total_daily_insulin"
+TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL = "tandem_daily_bolus_total"
+TANDEM_SENSOR_KEY_DAILY_BASAL_TOTAL = "tandem_daily_basal_total"
+TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT = "tandem_basal_bolus_split"
+TANDEM_SENSOR_KEY_DAILY_CARBS = "tandem_daily_carbs"
+TANDEM_SENSOR_KEY_DAILY_BOLUS_COUNT = "tandem_daily_bolus_count"
+
+# ── Pump settings keys (from metadata.lastUpload.settings) ───────────────
+TANDEM_SENSOR_KEY_ACTIVE_PROFILE = "tandem_active_profile"
+TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS = "tandem_active_profile_attributes"
+TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED = "tandem_control_iq_enabled"
+TANDEM_SENSOR_KEY_CONTROL_IQ_WEIGHT = "tandem_control_iq_weight"
+TANDEM_SENSOR_KEY_CONTROL_IQ_TDI = "tandem_control_iq_tdi"
+TANDEM_SENSOR_KEY_MAX_BOLUS = "tandem_max_bolus"
+TANDEM_SENSOR_KEY_BASAL_LIMIT = "tandem_basal_limit"
+TANDEM_SENSOR_KEY_CGM_HIGH_ALERT = "tandem_cgm_high_alert"
+TANDEM_SENSOR_KEY_CGM_LOW_ALERT = "tandem_cgm_low_alert"
+TANDEM_SENSOR_KEY_LOW_BG_THRESHOLD = "tandem_low_bg_threshold"
+TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD = "tandem_high_bg_threshold"
+TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT = "tandem_low_insulin_alert"
+
 # ── Staleness detection (Issue #11) ─────────────────────────────────────
 # Tandem Reports API is historical — pump uploads periodically, not in real-time.
 # When data is older than this threshold, sensors are marked unavailable so HA
@@ -534,6 +575,21 @@ TANDEM_SENSORS_ALWAYS_AVAILABLE = (
     TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
     TANDEM_SENSOR_KEY_PUMP_SERIAL_INFO,
     TANDEM_SENSOR_KEY_PUMP_MODEL_INFO,
+    TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP,
+    TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE,
+    TANDEM_SENSOR_KEY_LAST_SITE_CHANGE,
+    TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE,
+    TANDEM_SENSOR_KEY_ACTIVE_PROFILE,
+    TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED,
+    TANDEM_SENSOR_KEY_CONTROL_IQ_WEIGHT,
+    TANDEM_SENSOR_KEY_CONTROL_IQ_TDI,
+    TANDEM_SENSOR_KEY_MAX_BOLUS,
+    TANDEM_SENSOR_KEY_BASAL_LIMIT,
+    TANDEM_SENSOR_KEY_CGM_HIGH_ALERT,
+    TANDEM_SENSOR_KEY_CGM_LOW_ALERT,
+    TANDEM_SENSOR_KEY_LOW_BG_THRESHOLD,
+    TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD,
+    TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT,
 )
 
 TANDEM_SENSORS = (
@@ -706,6 +762,298 @@ TANDEM_SENSORS = (
         native_unit_of_measurement=None,
         state_class=None,
         icon="mdi:code-tags",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # ── Computed CGM summary sensors ───────────────────────────────────
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV,
+        name="Glucose standard deviation",
+        native_unit_of_measurement=MGDL,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:chart-bell-curve",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_GLUCOSE_CV,
+        name="Glucose CV",
+        native_unit_of_measurement=PERCENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:chart-bell-curve-cumulative",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_GMI,
+        name="GMI",
+        native_unit_of_measurement=PERCENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:diabetes",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_TIME_BELOW_RANGE,
+        name="Time below range",
+        native_unit_of_measurement=PERCENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:arrow-down-bold",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE,
+        name="Time above range",
+        native_unit_of_measurement=PERCENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:arrow-up-bold",
+        entity_category=None,
+    ),
+    # ── Event-derived sensors ──────────────────────────────────────────
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_ACTIVITY_MODE,
+        name="Pump activity mode",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:run",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CONTROL_IQ_MODE,
+        name="Control-IQ mode",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:robot",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_PUMP_SUSPENDED,
+        name="Pump suspended",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:pause-circle",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_CARBS,
+        name="Last carb entry",
+        native_unit_of_measurement="g",
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:food-apple",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP,
+        name="Last carb entry time",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:clock",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE,
+        name="Last cartridge change",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:cup-water",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_SITE_CHANGE,
+        name="Last site change",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:needle",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE,
+        name="Last tubing change",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:pipe",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN,
+        name="Cartridge insulin",
+        native_unit_of_measurement=UNITS,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:cup-water",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_BG_READING,
+        name="Last BG reading",
+        native_unit_of_measurement=MGDL,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=_BLOOD_GLUCOSE,
+        icon="mdi:blood-bag",
+        entity_category=None,
+    ),
+    # ── Computed insulin summary sensors ───────────────────────────────
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN,
+        name="Total daily insulin",
+        native_unit_of_measurement=UNITS,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:needle",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL,
+        name="Daily bolus total",
+        native_unit_of_measurement=UNITS,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:needle",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_DAILY_BASAL_TOTAL,
+        name="Daily basal total",
+        native_unit_of_measurement=UNITS,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:chart-line",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT,
+        name="Basal percentage",
+        native_unit_of_measurement=PERCENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:chart-pie",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_DAILY_CARBS,
+        name="Daily carbs",
+        native_unit_of_measurement="g",
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:food",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_DAILY_BOLUS_COUNT,
+        name="Daily bolus count",
+        native_unit_of_measurement=None,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:counter",
+        entity_category=None,
+    ),
+    # ── Pump settings sensors (from metadata.lastUpload.settings) ────────
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_ACTIVE_PROFILE,
+        name="Active basal profile",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:account-cog",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED,
+        name="Control-IQ enabled",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:robot",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CONTROL_IQ_WEIGHT,
+        name="Control-IQ weight",
+        native_unit_of_measurement="kg",
+        state_class=None,
+        device_class=SensorDeviceClass.WEIGHT,
+        icon="mdi:weight-kilogram",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CONTROL_IQ_TDI,
+        name="Control-IQ total daily insulin",
+        native_unit_of_measurement="U",
+        state_class=None,
+        device_class=None,
+        icon="mdi:needle",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_MAX_BOLUS,
+        name="Max bolus setting",
+        native_unit_of_measurement="U",
+        state_class=None,
+        device_class=None,
+        icon="mdi:needle",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_BASAL_LIMIT,
+        name="Basal rate limit",
+        native_unit_of_measurement="U/hr",
+        state_class=None,
+        device_class=None,
+        icon="mdi:speedometer",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CGM_HIGH_ALERT,
+        name="CGM high glucose alert",
+        native_unit_of_measurement=MGDL,
+        state_class=None,
+        device_class=None,
+        icon="mdi:alert-circle",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CGM_LOW_ALERT,
+        name="CGM low glucose alert",
+        native_unit_of_measurement=MGDL,
+        state_class=None,
+        device_class=None,
+        icon="mdi:alert-circle-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LOW_BG_THRESHOLD,
+        name="Low BG alert threshold",
+        native_unit_of_measurement=MGDL,
+        state_class=None,
+        device_class=None,
+        icon="mdi:alert-circle-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD,
+        name="High BG alert threshold",
+        native_unit_of_measurement=MGDL,
+        state_class=None,
+        device_class=None,
+        icon="mdi:alert-circle",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT,
+        name="Low insulin alert threshold",
+        native_unit_of_measurement="U",
+        state_class=None,
+        device_class=None,
+        icon="mdi:battery-alert",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )

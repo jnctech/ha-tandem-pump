@@ -26,10 +26,12 @@ from .const import (
     DOMAIN,
     SENSORS,
     TANDEM_SENSORS,
+    TANDEM_SENSORS_ALWAYS_AVAILABLE,
     PLATFORM_TYPE,
     PLATFORM_CARELINK,
     PLATFORM_TANDEM,
 )
+from .helpers import is_data_stale
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,8 +60,9 @@ async def async_setup_entry(
         entity_name = f"{DOMAIN} {sensor_description.name}"
 
         entities.append(
-            # pylint: disable=too-many-function-args
-            CarelinkSensorEntity(coordinator, sensor_description, entity_name)
+            CarelinkSensorEntity(
+                coordinator, sensor_description, entity_name, platform_type
+            )
         )
 
     _LOGGER.debug("Adding %d entities to Home Assistant", len(entities))
@@ -75,12 +78,27 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
         coordinator: DataUpdateCoordinator,
         sensor_description,
         entity_name,
+        platform_type=PLATFORM_CARELINK,
     ):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
         self.coordinator = coordinator
         self.sensor_description = sensor_description
         self.entity_name = entity_name
+        self._platform_type = platform_type
+
+    @property
+    def available(self) -> bool:
+        """Return True if the sensor has valid, non-stale data."""
+        if not super().available:
+            return False
+        # Only apply staleness check to Tandem sensors
+        if self._platform_type != PLATFORM_TANDEM:
+            return True
+        # Timestamp/diagnostic sensors stay available even when data is stale
+        if self.sensor_description.key in TANDEM_SENSORS_ALWAYS_AVAILABLE:
+            return True
+        return not is_data_stale(self.coordinator.data)
 
     @property
     def name(self) -> str:

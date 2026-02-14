@@ -854,6 +854,41 @@ class TandemCoordinator(DataUpdateCoordinator):
         except Exception as err:
             raise UpdateFailed(f"Tandem login error: {err}") from err
 
+        # ── Lightweight metadata check: skip heavy API call if no new data ──
+        # The pumpevents endpoint is expensive. Check maxDateWithEvents first
+        # and skip the full fetch if nothing has changed since last poll.
+        try:
+            metadata_list = await self.client.get_pump_event_metadata()
+            metadata_entry = None
+            if metadata_list and isinstance(metadata_list, list) and len(metadata_list) > 0:
+                metadata_entry = metadata_list[0]
+            elif isinstance(metadata_list, dict):
+                metadata_entry = metadata_list
+
+            max_date_str = metadata_entry.get("maxDateWithEvents") if metadata_entry else None
+        except Exception as err:
+            _LOGGER.debug("Tandem: Metadata check failed (%s), proceeding with full fetch", err)
+            max_date_str = None
+            metadata_entry = None
+
+        if (
+            max_date_str
+            and self._last_max_date
+            and max_date_str == self._last_max_date
+            and self.data
+        ):
+            _LOGGER.debug(
+                "TandemCoordinator: maxDateWithEvents unchanged (%s), "
+                "returning cached data (no new pump events)",
+                max_date_str,
+            )
+            return self.data
+
+        _LOGGER.debug(
+            "TandemCoordinator: maxDateWithEvents changed (%s -> %s), fetching pump events",
+            self._last_max_date, max_date_str,
+        )
+
         try:
             recent_data = await self.client.get_recent_data(
                 pump_timezone=self.timezone,
@@ -867,6 +902,10 @@ class TandemCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(
                 f"get_recent_data() returned {type(recent_data)}, expected dict"
             )
+
+        # Save maxDateWithEvents for next poll comparison
+        if max_date_str:
+            self._last_max_date = max_date_str
 
         _LOGGER.debug(
             "Tandem before data parsing: %s", sanitize_for_logging(recent_data)

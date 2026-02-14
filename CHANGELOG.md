@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-02-14
+
+### Added
+- **Stale data detection** (#11): Sensors now report `unavailable` when pump data is older than 30 minutes
+  - Prevents misleading flat lines in glucose history graphs when the pump hasn't uploaded recent data
+  - Timestamp and diagnostic sensors (last glucose update, last upload, serial, model, etc.) remain available so users can see when data was last received
+  - Pattern adapted from upstream yo-han/Home-Assistant-Carelink staleness system
+
+### Changed
+- **API optimisation**: Coordinator now checks `maxDateWithEvents` from lightweight metadata endpoint before fetching full pump events
+  - If no new data since last poll, skips the expensive `pumpevents` API call entirely
+  - Reduces unnecessary API traffic and auth token usage when pump hasn't uploaded
+- Added `helpers.py` with `is_data_stale()` utility function
+- Sensor entity now tracks `platform_type` to apply staleness checks only to Tandem sensors (Carelink behaviour unchanged)
+
 ## [1.0.0] - 2026-02-14
 
 ### Added

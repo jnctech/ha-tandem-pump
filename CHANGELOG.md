@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Expanded data sources**: Decode 10 new pump event types (15 total, up from 5)
   - Pump suspend/resume state, activity mode (Sleep/Exercise/Eating Soon), Control-IQ mode (Open/Closed Loop)
-  - Cartridge, cannula (site), and tubing change timestamps for load activity tracking
+  - Cartridge, cannula (site), and tubing change timestamps for infusion set tracking
   - Carb entries, manual BG readings, extended bolus completion, cartridge insulin level
 - **Computed CGM summary**: Average glucose, Time in Range (70-180), time below/above range, SD, CV, GMI, CGM usage %
   - Fixes the 3 sensors (avg glucose, TIR, CGM usage) that were permanently unavailable due to dashboard_summary API returning 404
@@ -22,6 +22,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - API now requests 15 event types instead of 5 (adds events 11, 12, 16, 21, 33, 48, 61, 63, 229, 230)
 - Dashboard summary API call only used as fallback when pump events are unavailable
+- Daily insulin/carb summaries now filter events to "today" in pump timezone (previously summed full 2-day fetch window)
+
+### Fixed
+- **CRITICAL**: Fixed timestamp timezone handling — API returns UTC timestamps, not local time
+  - `.replace(tzinfo=tz)` was stamping local timezone onto UTC clock values, shifting all data by the UTC offset (e.g. 10.5 hours for Adelaide)
+  - Decoder now uses `fromtimestamp(tz=timezone.utc)`, coordinator uses `.astimezone(tz)` for all conversions
+- **CRITICAL**: Fixed CARBS_ENTERED binary decoder — payload is float32, not uint16
+  - Was reading IEEE 754 float bytes as raw integer (e.g. 16,800 instead of 20g)
+  - Verified correct format via live API binary decode in browser
+- Fixed statistics import "Invalid timestamp" error — HA requires timestamps at top of hour (minute=0)
+  - Statistics now importing successfully (CGM, IOB, basal)
+- Fixed site change sensor — CANNULA_FILLED (event 61) never returned by API
+  - Now derives from CARTRIDGE_FILLED (event 33) as fallback
+- Fixed manifest.json key ordering for hassfest validation (alphabetical after domain/name)
 
 ## [1.1.0] - 2026-02-14
 

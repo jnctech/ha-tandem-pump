@@ -617,11 +617,12 @@ class TestImportStatistics:
         finally:
             cleanup()
 
-    async def test_statistics_period_rounded_to_5_min(
+    async def test_statistics_period_rounded_to_hour(
         self, hass: HomeAssistant
     ):
-        """Test that statistics timestamps are rounded to 5-minute boundaries."""
+        """Test that statistics timestamps are rounded to the top of the hour."""
         from custom_components.carelink import TandemCoordinator
+        from datetime import timezone as dt_tz
 
         entry = MockConfigEntry(
             domain=DOMAIN,
@@ -648,12 +649,12 @@ class TestImportStatistics:
             hass, entry, update_interval=timedelta(seconds=300)
         )
 
-        # Create a CGM event at 12:07:30 - should round to 12:05:00
+        # Create a CGM event at 12:07:30 UTC - should round to 12:00:00
         events = [{
             "event_id": 256,
             "event_name": "CGM_DATA_GXB",
             "seq": 1,
-            "timestamp": datetime(2026, 2, 14, 12, 7, 30),
+            "timestamp": datetime(2026, 2, 14, 12, 7, 30, tzinfo=dt_tz.utc),
             "glucose_mgdl": 120,
         }]
 
@@ -663,7 +664,7 @@ class TestImportStatistics:
             await coordinator._import_statistics(events)
 
             stats = mock_import.call_args[0][2]
-            assert stats[0].start.minute == 5
+            assert stats[0].start.minute == 0
             assert stats[0].start.second == 0
         finally:
             cleanup()

@@ -1,0 +1,29 @@
+# Dockerfile for running pytest against the custom component.
+# Uses Python 3.11+ to satisfy pytest-homeassistant-custom-component requirements.
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml run --rm pytest
+#   docker compose -f docker-compose.test.yml run --rm pytest -k "test_historical"
+#   docker compose -f docker-compose.test.yml run --rm pytest --cov
+
+FROM python:3.11-slim-bookworm
+
+WORKDIR /app
+
+# Install system deps needed for building native extensions (numpy, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python test dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the integration and tests into the container
+COPY custom_components/ /app/custom_components/
+COPY tests/ /app/tests/
+COPY pytest.ini /app/
+
+ENTRYPOINT ["pytest"]
+CMD ["-v", "--tb=short"]

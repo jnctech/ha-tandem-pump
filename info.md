@@ -18,7 +18,7 @@ The most comprehensive Tandem insulin pump integration for Home Assistant. Monit
 
 ## Requirements
 
-- Tandem t:slim X2 pump syncing to Tandem Source via the t:connect app
+- Tandem t:slim X2 pump syncing to Tandem Source via the Tandem t:slim mobile app
 - Tandem Source account credentials (email + password)
 - Home Assistant 2023.1.0+
 

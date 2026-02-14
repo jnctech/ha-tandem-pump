@@ -88,7 +88,7 @@ Follow Conventional Commits format:
 
 **Examples**:
 ```
-feat(tandem): Add support for Tandem t:connect app authentication
+feat(tandem): Add support for Tandem t:slim mobile app authentication
 
 fix(api): Resolve blocking SSL call in TandemSourceClient
 - Move SSL context creation to executor

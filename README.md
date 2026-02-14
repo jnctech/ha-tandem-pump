@@ -126,7 +126,7 @@ Copy `custom_components/carelink/` to your HA `config/custom_components/` direct
 
 ### Prerequisites
 - A **Tandem t:slim X2** pump syncing to [Tandem Source](https://source.tandemdiabetes.com)
-- The **t:connect** mobile app connected to your pump (this is how data reaches Tandem Source)
+- The **Tandem t:slim mobile app** connected to your pump (this is how data reaches Tandem Source)
 - Home Assistant **2023.1.0** or later
 
 ---
@@ -145,7 +145,7 @@ A starter dashboard YAML with ApexCharts glucose and insulin graphs is included 
 
 This integration connects to the **Tandem Source Reports API** — the same API that powers the Tandem Source website. It decodes the proprietary binary pump event format (26-byte records with Tandem epoch timestamps) to extract all sensor data.
 
-**Data flow:** Pump → t:connect app → Tandem Source cloud → This integration → Home Assistant
+**Data flow:** Pump → Tandem t:slim mobile app → Tandem Source cloud → This integration → Home Assistant
 
 The integration polls every 5 minutes (configurable) and:
 1. Checks lightweight metadata to see if new data exists (skip if unchanged)

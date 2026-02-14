@@ -1,171 +1,192 @@
-# Tandem t:slim Pump Integration for Home Assistant
+# Tandem t:slim Pump for Home Assistant
 
-> **Tested with Tandem t:slim X2.** Medtronic Carelink support is inherited from the [original integration](https://github.com/yo-han/Home-Assistant-Carelink) by @yo-han but has not been tested under this fork. For verified Medtronic support, please refer to the original repo.
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/v/release/jnctech/ha-tandem-pump?style=for-the-badge)](https://github.com/jnctech/ha-tandem-pump/releases)
+[![Tests](https://img.shields.io/github/actions/workflow/status/jnctech/ha-tandem-pump/pytest.yml?branch=develop&label=tests&style=for-the-badge)](https://github.com/jnctech/ha-tandem-pump/actions)
+[![License](https://img.shields.io/github/license/jnctech/ha-tandem-pump?style=for-the-badge)](LICENSE)
 
-## Documentation
+**The most comprehensive Tandem insulin pump integration for Home Assistant.** Monitor your Tandem t:slim X2 pump with **45+ sensors**, long-term statistics, glucose history graphs, insulin delivery tracking, pump settings, and full basal profile visibility — all directly in your smart home.
 
-- [Troubleshooting Guide](TROUBLESHOOTING.md) - Common issues and solutions
-- [Contributing Guidelines](CONTRIBUTING.md) - How to contribute to this project
-- [Changelog](CHANGELOG.md) - Version history and release notes
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jnctech&repository=ha-tandem-pump&category=integration)
 
 ---
 
-## Prerequisites
+## Why This Integration?
 
-1. **A Tandem t:slim pump** syncing data to [Tandem Source](https://source.eu.tandemdiabetes.com) (EU) or [source.tandemdiabetes.com](https://source.tandemdiabetes.com) (US)
-2. **Home Assistant** (2023.x or later)
-3. **Tandem Source account credentials** (email + password)
+If you use a **Tandem t:slim X2** insulin pump with Home Assistant, this is the only integration that gives you direct access to your pump data. No Nightscout relay, no third-party cloud — just your Tandem Source account connected straight to HA.
+
+- **45 sensors** covering glucose, insulin delivery, pump status, CGM stats, and pump settings
+- **Long-term statistics** — glucose, IOB, and basal rate imported into HA's statistics engine for native Statistics Graph cards
+- **Stale data detection** — sensors go `unavailable` when your pump hasn't synced, preventing misleading flat lines
+- **Smart polling** — skips expensive API calls when no new data exists, reducing token usage
+- **Computed summaries** — TIR, average glucose, GMI, daily insulin totals all computed locally from your pump events
+- **Full pump settings** — see your active profile, basal schedule, Control-IQ config, alert thresholds
+
+---
+
+## Sensors at a Glance
+
+### Glucose Monitoring (10 sensors)
+| Sensor | Description |
+|--------|-------------|
+| Last glucose (mmol/L) | Latest CGM reading in mmol/L |
+| Last glucose (mg/dL) | Latest CGM reading in mg/dL |
+| Glucose delta | Change since previous reading |
+| Average glucose (mmol/L) | Daily average (computed from CGM events) |
+| Average glucose (mg/dL) | Daily average (computed from CGM events) |
+| Time in Range | % of readings 70–180 mg/dL |
+| Time below range | % of readings below 70 mg/dL |
+| Time above range | % of readings above 180 mg/dL |
+| Glucose SD / CV | Standard deviation and coefficient of variation |
+| GMI | Glucose Management Indicator |
+
+### Insulin Delivery (10 sensors)
+| Sensor | Description |
+|--------|-------------|
+| Active insulin (IOB) | Insulin on board |
+| Basal rate | Current basal rate (U/hr) |
+| Last bolus | Most recent bolus amount and timestamp |
+| Last meal bolus | Most recent meal bolus (units) |
+| Total daily insulin | TDI for today |
+| Daily bolus / basal totals | Split with basal percentage |
+| Daily bolus count | Number of boluses today |
+| Daily carbs | Total carbs entered today |
+| Last carb entry | Most recent carb entry with timestamp |
+
+### Pump Status (7 sensors)
+| Sensor | Description |
+|--------|-------------|
+| Control-IQ status | Open Loop / Closed Loop |
+| Activity mode | Normal / Sleep / Exercise / Eating Soon |
+| Pump suspended | Suspended / Active |
+| Cartridge insulin | Remaining insulin (units) |
+| Last cartridge change | Timestamp of last cartridge fill |
+| Last site change | Timestamp (derived from cartridge fill) |
+| Last tubing change | Timestamp of last tubing prime |
+
+### Pump Settings (11 sensors)
+| Sensor | Description |
+|--------|-------------|
+| Active basal profile | Profile name with full schedule as attributes |
+| Control-IQ enabled | On / Off |
+| Control-IQ weight | Configured weight (kg) |
+| Control-IQ TDI | Configured total daily insulin |
+| Max bolus | Maximum bolus limit (units) |
+| Basal rate limit | Maximum basal rate (U/hr) |
+| CGM high/low alerts | Alert thresholds (mg/dL) |
+| BG high/low thresholds | BG alert thresholds (mg/dL) |
+| Low insulin alert | Low reservoir threshold (units) |
+
+### Device Info & Timestamps (7 sensors)
+| Sensor | Description |
+|--------|-------------|
+| Last glucose update | When the last CGM reading was received |
+| Last pump upload | When the pump last uploaded to Tandem Source |
+| Last update | Integration data refresh timestamp |
+| Pump serial number | Device serial |
+| Pump model | Model name |
+| Software version | Firmware version |
+| CGM usage | Percentage of time CGM was active |
+
+### Long-Term Statistics
+Three metrics are imported into HA's statistics engine every poll cycle:
+- **CGM glucose** — for native Statistics Graph cards
+- **Insulin on board (IOB)** — track IOB trends over days/weeks
+- **Basal rate** — monitor basal delivery patterns
+
+---
 
 ## Installation
 
-### Method 1: HACS (Recommended)
+### HACS (Recommended)
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jnctech&repository=ha-tandem-pump&category=integration)
+
+Or manually:
 1. Open **HACS** in Home Assistant
 2. Go to **Integrations** > **3-dot menu** > **Custom repositories**
-3. Add repository URL: `https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink`
+3. Add: `https://github.com/jnctech/ha-tandem-pump`
 4. Category: **Integration**
-5. Click **Add**, then find "Carelink" and click **Download**
+5. Click **Add**, find **"Tandem t:slim Pump"** and click **Download**
 6. Restart Home Assistant
 
-### Method 2: Manual
+### Manual Installation
 
-1. Copy the `custom_components/carelink/` folder into your Home Assistant `config/custom_components/` directory:
-   ```
-   config/
-   └── custom_components/
-       └── carelink/
-           ├── __init__.py
-           ├── api.py
-           ├── tandem_api.py
-           ├── config_flow.py
-           ├── const.py
-           ├── sensor.py
-           ├── binary_sensor.py
-           ├── nightscout_uploader.py
-           ├── manifest.json
-           ├── strings.json
-           └── translations/
-               └── en.json
-   ```
-2. Restart Home Assistant
-
-## Configuration
-
-1. Go to **Settings** > **Devices & Services** > **Add Integration**
-2. Search for **"Carelink"**
-3. Select **Tandem t:slim** as the platform
-4. Fill in:
-   - **Email**: Your Tandem Source account email
-   - **Password**: Your Tandem Source account password
-   - **Region**: `EU` or `US` (depending on your Tandem Source URL)
-   - **Scan interval**: Polling frequency in seconds (default: 300, range: 60–900)
-   - Leave Nightscout fields blank (see below if you want Nightscout later)
-5. Click **Submit**
-
-## Sensors Created
-
-Once configured, the integration creates these sensors:
-
-| Sensor | Description |
-|--------|-------------|
-| Last SG (mmol/L) | Latest glucose reading in mmol/L |
-| Last SG (mg/dL) | Latest glucose reading in mg/dL |
-| SG Delta (mg/dL) | Change since previous reading |
-| Active Insulin (IOB) | Insulin on board |
-| Basal Rate | Current basal rate (U/hr) |
-| Last Bolus Amount | Most recent bolus (units) |
-| Last Bolus Time | Timestamp of most recent bolus |
-| Last Bolus Type | Normal, Extended, or Automatic |
-| Last Meal Bolus | Most recent meal bolus (units) |
-| Last Meal Time | Timestamp of most recent meal bolus |
-| Control-IQ Status | Current Control-IQ mode |
-| Pump Battery | Battery level |
-| Reservoir Level | Insulin remaining (units) |
-| Pump Serial Number | Device serial |
-| Average Reading | Average glucose (from dashboard) |
-| Time in Range (%) | Percentage of time in target range |
-| CGM Inactive (%) | Percentage of time CGM was inactive |
-| Pump Model | Pump model name |
-| Last Update | Timestamp of last data sync |
+Copy `custom_components/carelink/` to your HA `config/custom_components/` directory and restart.
 
 ---
 
-## Optional: Nightscout Setup
+## Configuration
 
-Nightscout provides a web dashboard for glucose data visualization and remote monitoring. If you want this, here are two options:
+1. **Settings** > **Devices & Services** > **Add Integration**
+2. Search for **"Carelink"**
+3. Select **Tandem t:slim** as platform
+4. Enter your **Tandem Source** email, password, and region (EU/US)
+5. Set scan interval (default: 300 seconds)
 
-### Option A: Docker Compose (Standalone)
+### Prerequisites
+- A **Tandem t:slim X2** pump syncing to [Tandem Source](https://source.tandemdiabetes.com)
+- The **t:connect** mobile app connected to your pump (this is how data reaches Tandem Source)
+- Home Assistant **2023.1.0** or later
 
-1. Create a directory for Nightscout:
-   ```bash
-   mkdir -p ~/nightscout && cd ~/nightscout
-   ```
+---
 
-2. Create `docker-compose.yml`:
-   ```yaml
-   version: '3.8'
+## Dashboard
 
-   services:
-     mongo:
-       image: mongo:4.4
-       container_name: nightscout-mongo
-       volumes:
-         - mongo-data:/data/db
-       restart: unless-stopped
+A starter dashboard YAML with ApexCharts glucose and insulin graphs is included at [`examples/dashboard.yaml`](examples/dashboard.yaml). It provides:
+- Live glucose display with trend arrow
+- 24-hour glucose history graph (pump CGM overlay)
+- Insulin delivery graph (bolus + basal)
+- All sensor values in a grid
 
-     nightscout:
-       image: nightscout/cgm-remote-monitor:latest
-       container_name: nightscout
-       depends_on:
-         - mongo
-       ports:
-         - "1337:1337"
-       environment:
-         NODE_ENV: production
-         TZ: Europe/Amsterdam          # <-- your timezone
-         MONGO_CONNECTION: mongodb://mongo:27017/nightscout
-         API_SECRET: your-api-secret-min-12-chars   # <-- change this!
-         DISPLAY_UNITS: mmol                         # or "mg/dl"
-         ENABLE: careportal basal iob cob cage sage pump openaps
-         AUTH_DEFAULT_ROLES: readable
-         BASE_URL: http://your-ha-ip:1337            # <-- your HA server IP
-       restart: unless-stopped
+---
 
-   volumes:
-     mongo-data:
-   ```
+## How It Works
 
-3. Start it:
-   ```bash
-   docker compose up -d
-   ```
+This integration connects to the **Tandem Source Reports API** — the same API that powers the Tandem Source website. It decodes the proprietary binary pump event format (26-byte records with Tandem epoch timestamps) to extract all sensor data.
 
-4. Verify at `http://your-ha-ip:1337`
+**Data flow:** Pump → t:connect app → Tandem Source cloud → This integration → Home Assistant
 
-### Option B: Portainer
+The integration polls every 5 minutes (configurable) and:
+1. Checks lightweight metadata to see if new data exists (skip if unchanged)
+2. Fetches binary pump events (15 event types) when new data is available
+3. Decodes events, computes summaries, extracts settings
+4. Imports long-term statistics for HA's native graph cards
+5. Marks sensors as `unavailable` if data is older than 30 minutes
 
-1. Open **Portainer** > **Stacks** > **Add stack**
-2. Name: `nightscout`
-3. Paste the same `docker-compose.yml` content from Option A above into the **Web editor**
-4. Update the environment values (timezone, API_SECRET, BASE_URL)
-5. Click **Deploy the stack**
-6. Verify at `http://your-ha-ip:1337`
+---
 
-### Connecting Nightscout to the Integration
+## Medtronic Carelink Support
 
-Once Nightscout is running, reconfigure the integration:
+This integration was forked from [@yo-han's Carelink integration](https://github.com/yo-han/Home-Assistant-Carelink). The Medtronic Carelink code path is preserved but **has not been tested** under this fork. If you use a Medtronic pump, please use the [original repository](https://github.com/yo-han/Home-Assistant-Carelink) for verified support.
 
-1. Go to **Settings** > **Devices & Services** > **Carelink** > **Configure**
-2. Enter:
-   - **Nightscout URL**: `http://your-ha-ip:1337` (or use the Docker hostname if HA runs in Docker too, e.g., `http://nightscout:1337`)
-   - **Nightscout API Secret**: The `API_SECRET` value from your Docker config
-3. Click **Submit**
+---
 
-The integration will then upload glucose data to Nightscout on each poll cycle.
+## Optional: Nightscout
 
-### Important Notes for Nightscout
+The integration can optionally upload glucose data to a [Nightscout](http://www.nightscout.info/) instance. Configure the Nightscout URL and API secret in the integration options. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for Nightscout setup details.
 
-- `API_SECRET` must be at least 12 characters
-- If Home Assistant and Nightscout run on the same Docker network, use the container name (`http://nightscout:1337`) as the URL
-- For external access, set up a reverse proxy (e.g., Nginx Proxy Manager, Caddy, or Traefik) with HTTPS
-- Default Nightscout port is `1337` — change the left side of the port mapping if needed (e.g., `8080:1337`)
+---
+
+## Troubleshooting
+
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues including:
+- Integration not loading
+- Authentication failures
+- Sensors stuck on "Unknown"
+- Data not updating
+
+---
+
+## Contributing
+
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, branch strategy, and testing requirements.
+
+---
+
+## Credits
+
+- Tandem Source integration by [@jnctech](https://github.com/jnctech)
+- Original Carelink integration by [@yo-han](https://github.com/yo-han/Home-Assistant-Carelink)
+- Carelink API based on work by [@ondrej1024](https://github.com/ondrej1024)
+- Binary event format reference from [tconnectsync](https://github.com/jwoglom/tconnectsync) by [@jwoglom](https://github.com/jwoglom)

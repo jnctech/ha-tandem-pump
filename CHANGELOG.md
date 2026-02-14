@@ -169,10 +169,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Guardian Connect CGM
 - Nightscout upload capability
 
-[1.2.0]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.4-beta...v1.0.0
-[0.1.4-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.3-beta...v0.1.4-beta
-[0.1.3-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.1-beta...v0.1.3-beta
-[0.1.1-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/2024.1.0...v0.1.1-beta
-[2024.1.0]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/releases/tag/2024.1.0
+[1.2.0]: https://github.com/jnctech/ha-tandem-pump/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/jnctech/ha-tandem-pump/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/jnctech/ha-tandem-pump/compare/v0.1.4-beta...v1.0.0
+[0.1.4-beta]: https://github.com/jnctech/ha-tandem-pump/compare/v0.1.3-beta...v0.1.4-beta
+[0.1.3-beta]: https://github.com/jnctech/ha-tandem-pump/compare/v0.1.1-beta...v0.1.3-beta
+[0.1.1-beta]: https://github.com/jnctech/ha-tandem-pump/compare/2024.1.0...v0.1.1-beta
+[2024.1.0]: https://github.com/jnctech/ha-tandem-pump/releases/tag/2024.1.0

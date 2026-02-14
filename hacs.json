@@ -1,5 +1,5 @@
 {
-  "name": "Carelink Integration",
+  "name": "Tandem t:slim Pump",
   "hacs": "1.6.0",
   "render_readme": true,
   "homeassistant": "2023.1.0"

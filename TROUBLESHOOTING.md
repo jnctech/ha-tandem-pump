@@ -10,7 +10,7 @@ Common issues and solutions for the Tandem Source / Carelink integration.
 
 **Solutions**:
 1. Ensure custom repository is added correctly:
-   - URL: `https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink`
+   - URL: `https://github.com/jnctech/ha-tandem-pump`
    - Category: Integration
 
 2. Restart Home Assistant after adding repository
@@ -229,7 +229,7 @@ cat config/custom_components/carelink/manifest.json | grep version
 
 If issues persist:
 
-1. **Check existing issues**: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/issues
+1. **Check existing issues**: https://github.com/jnctech/ha-tandem-pump/issues
 2. **Create new issue**:
    - Include HA version
    - Include integration version

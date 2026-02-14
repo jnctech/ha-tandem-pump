@@ -7,43 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.0-rc2] - 2026-02-14
-
-### Fixed
-- **Carelink coordinator**: Added historical SG replay and statistics import (Issue #9, PR #8)
-  - Process ALL valid SG readings from API polls, not just the latest two
-  - Replay intermediate readings so HA's recorder captures full glucose history
-  - Import correctly-timestamped long-term statistics for Statistics Graph cards
-  - Store reading history in sensor attributes for custom cards (e.g. ApexCharts)
-
-### Housekeeping
-- Removed untested Medtronic token tools (carelink-token-generator/, token-tool/, utils/)
-- Removed fork template boilerplate (.devcontainer.json, .prettierrc, dependabot.yml, repository.yaml)
-- Fixed remaining yo-han repo references → jnctech
-- Added Tandem-tested disclaimer to README and info.md
-
-## [0.2.0-rc1] - 2026-02-14
+## [1.0.0] - 2026-02-14
 
 ### Added
 - **Historical data import**: Import ALL pump events between polls instead of only the latest reading
-  - State replay: Intermediate events replayed through coordinator so recorder captures each state change
-  - Long-term statistics: CGM, IOB, and basal rate imported via `async_import_statistics()` with correct 5-minute timestamps
+  - Long-term statistics: CGM, IOB, and basal rate imported via `async_import_statistics()` with correct timestamps
   - Entity attributes: Recent readings arrays (24 CGM, 10 bolus, 10 basal) available for custom cards (e.g., ApexCharts)
+- **Carelink coordinator**: Process ALL valid SG readings from API polls, not just the latest two
+  - Import correctly-timestamped long-term statistics for Statistics Graph cards
+  - Store reading history in sensor attributes for custom cards
 - Event sequence number tracking to deduplicate events across polls
 - Compact attribute keys to stay within Home Assistant's 16KB attribute limit
+- Added `recorder` to manifest `after_dependencies` (ensures recorder loads first for `async_import_statistics`)
 
 ### Changed
 - `_parse_pump_events()` now processes ALL events in the fetch window, not just the latest of each type
-- Data coordinator schedules replay and statistics import tasks after each update cycle
 
 ### Fixed
+- **CRITICAL**: Fixed glucose graph spikes caused by historical replay mechanism (#9)
+  - `async_set_updated_data()` replaced entire coordinator data dict during replay, causing sensors to oscillate between real values and `None` when dashboard keys were missing
+  - Removed replay infrastructure entirely; historical data now handled solely via long-term statistics import
+- Fixed `sensor.py` `setdefault` → `.get()` to prevent mutation of coordinator.data during sensor reads
 - Glucose history graphs no longer show staircase pattern between polls
 - Intermediate CGM readings, boluses, and basal changes between syncs are no longer discarded
 
 ### Housekeeping
-- Removed diagnostic/troubleshooting docs and scripts from repository (archived to dev-notes/)
+- Removed untested Medtronic token tools (carelink-token-generator/, token-tool/, utils/)
+- Removed fork template boilerplate (.devcontainer.json, .prettierrc, dependabot.yml, repository.yaml)
+- Removed diagnostic/troubleshooting docs and scripts from repository
+- Fixed remaining yo-han repo references → jnctech
 - Fixed CODEOWNERS: updated from upstream author to @jnctech
 - Fixed HACS custom repository URL in README
+- Added Tandem-tested disclaimer to README and info.md
 - Updated info.md to reflect Tandem Source scope and proper attribution
 
 ## [0.1.4-beta] - 2026-02-13
@@ -121,8 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Guardian Connect CGM
 - Nightscout upload capability
 
-[0.2.0-rc2]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.2.0-rc1...v0.2.0-rc2
-[0.2.0-rc1]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.4-beta...v0.2.0-rc1
+[1.0.0]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.4-beta...v1.0.0
 [0.1.4-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.3-beta...v0.1.4-beta
 [0.1.3-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/v0.1.1-beta...v0.1.3-beta
 [0.1.1-beta]: https://github.com/jnctech/Home-Assistant-Tandem-Source-Carelink/compare/2024.1.0...v0.1.1-beta

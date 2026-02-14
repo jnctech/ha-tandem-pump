@@ -1,7 +1,6 @@
 """Medtronic Carelink / Tandem t:slim integration."""
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import re
@@ -356,7 +355,6 @@ class CarelinkCoordinator(DataUpdateCoordinator):
         self.client = hass.data[DOMAIN][entry.entry_id][CLIENT]
         self.timezone = hass.config.time_zone
         self._last_sg_timestamp: str | None = None
-        self._pending_replay_sgs: list[dict] = []
 
         if UPLOADER in hass.data[DOMAIN][entry.entry_id]:
             self.uploader = hass.data[DOMAIN][entry.entry_id][UPLOADER]
@@ -427,7 +425,7 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             if prev_sg:
                 data[SENSOR_KEY_SG_DELTA] = (float(current_sg["sg"]) - float(prev_sg["sg"]))
 
-        # ── Historical SG readings for replay and statistics ──────────
+        # ── Historical SG readings for statistics ─────────────────────
         all_valid_sgs = [
             sg for sg in recent_data["sgs"]
             if sg.get("sensorState") == "NO_ERROR_MESSAGE"
@@ -440,22 +438,6 @@ class CarelinkCoordinator(DataUpdateCoordinator):
         )
 
         if all_valid_sgs:
-            # Queue intermediate readings for replay
-            self._pending_replay_sgs = []
-            if self._last_sg_timestamp is not None:
-                try:
-                    last_seen_dt = convert_date_to_isodate(
-                        self._last_sg_timestamp
-                    )
-                    self._pending_replay_sgs = [
-                        sg for sg in all_valid_sgs[:-1]
-                        if convert_date_to_isodate(sg["timestamp"])
-                        > last_seen_dt
-                    ]
-                except Exception:
-                    pass
-            self._last_sg_timestamp = all_valid_sgs[-1]["timestamp"]
-
             # Store readings history as attributes for custom cards
             _MAX_SG_HISTORY = 24  # ~2 hours of 5-min readings
             recent_sgs = all_valid_sgs[-_MAX_SG_HISTORY:]
@@ -477,9 +459,6 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             data[f"{SENSOR_KEY_LASTSG_MMOL}_attributes"] = {
                 "readings": sg_readings_mmol,
             }
-        else:
-            self._pending_replay_sgs = []
-
         # Sensors
 
         data[SENSOR_KEY_PUMP_BATTERY_LEVEL] = recent_data.setdefault(
@@ -727,12 +706,6 @@ class CarelinkCoordinator(DataUpdateCoordinator):
 
         _LOGGER.debug("_async_update_data: %s", sanitize_for_logging(data))
 
-        # Schedule replay of intermediate SG readings
-        if self._pending_replay_sgs:
-            self.hass.async_create_task(
-                self._replay_historical_sgs(data, timezone)
-            )
-
         # Import correctly-timestamped statistics
         if all_valid_sgs:
             self.hass.async_create_task(
@@ -740,58 +713,6 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             )
 
         return data
-
-    # ── Historical SG replay ────────────────────────────────────────
-
-    async def _replay_historical_sgs(
-        self, base_data: dict, tz: ZoneInfo
-    ) -> None:
-        """Replay intermediate SG readings so the recorder captures history.
-
-        Each intermediate reading is set as the coordinator's data, which
-        triggers entity listeners and writes a state to the recorder.
-        Readings are replayed in chronological order.
-        """
-        events = self._pending_replay_sgs
-        self._pending_replay_sgs = []
-
-        if not events:
-            return
-
-        _LOGGER.info(
-            "Carelink: Replaying %d intermediate SG readings", len(events)
-        )
-
-        for sg in events:
-            try:
-                replay_data = dict(base_data)
-                # Strip readings history from replayed states to avoid
-                # bloating the recorder with repeated large attribute payloads
-                for key in list(replay_data):
-                    if key.endswith("_attributes") and isinstance(
-                        replay_data.get(key), dict
-                    ) and "readings" in replay_data.get(key, {}):
-                        replay_data[key] = {}
-
-                sg_val = sg["sg"]
-                date_time_local = convert_date_to_isodate(sg["timestamp"])
-                replay_data[SENSOR_KEY_LASTSG_MGDL] = sg_val
-                replay_data[SENSOR_KEY_LASTSG_MMOL] = float(
-                    round(sg_val * 0.0555, 2)
-                )
-                replay_data[SENSOR_KEY_LASTSG_TIMESTAMP] = (
-                    date_time_local.replace(tzinfo=tz)
-                )
-
-                self.async_set_updated_data(replay_data)
-                await asyncio.sleep(0)
-
-            except Exception as e:
-                _LOGGER.warning(
-                    "Carelink: Error replaying SG reading: %s", e
-                )
-
-        _LOGGER.debug("Carelink: SG replay complete")
 
     # ── Long-term statistics import ─────────────────────────────────
 
@@ -918,7 +839,6 @@ class TandemCoordinator(DataUpdateCoordinator):
         # Historical data tracking
         self._last_max_date: str | None = None  # maxDateWithEvents from metadata
         self._last_event_seq: int = 0  # Last processed event sequence number
-        self._pending_replay_events: list[dict] = []  # Events to replay
 
         if UPLOADER in hass.data[DOMAIN][entry.entry_id]:
             self.uploader = hass.data[DOMAIN][entry.entry_id][UPLOADER]
@@ -1048,14 +968,6 @@ class TandemCoordinator(DataUpdateCoordinator):
         _LOGGER.debug(
             "Tandem _async_update_data: %d keys", len(data)
         )
-
-        # ── Schedule replay of intermediate events ───────────────────────
-        # After the coordinator updates with the latest values, replay
-        # intermediate events so the recorder captures full history.
-        if self._pending_replay_events:
-            self.hass.async_create_task(
-                self._replay_historical_events(data)
-            )
 
         # ── Import long-term statistics with correct timestamps ──────────
         if pump_events:
@@ -1314,37 +1226,6 @@ class TandemCoordinator(DataUpdateCoordinator):
         bolus_delivery.sort(key=lambda e: e["timestamp"])
         basal_rate_changes.sort(key=lambda e: e["timestamp"])
         basal_delivery.sort(key=lambda e: e["timestamp"])
-
-        # ── Build intermediate events for replay ─────────────────────
-        # Collect all events except the latest of each type; these will
-        # be replayed after the coordinator update so the recorder
-        # captures them as individual state changes.
-        self._pending_replay_events = []
-
-        if len(cgm_readings) > 1:
-            for reading in cgm_readings[:-1]:
-                self._pending_replay_events.append(reading)
-
-        all_bolus = bolus_completed + bolus_delivery
-        all_bolus.sort(key=lambda e: e["timestamp"])
-        if len(all_bolus) > 1:
-            for bolus in all_bolus[:-1]:
-                self._pending_replay_events.append(bolus)
-
-        all_basal = basal_rate_changes + basal_delivery
-        all_basal.sort(key=lambda e: e["timestamp"])
-        if len(all_basal) > 1:
-            for basal in all_basal[:-1]:
-                self._pending_replay_events.append(basal)
-
-        # Sort replay events chronologically
-        self._pending_replay_events.sort(key=lambda e: e["timestamp"])
-
-        if self._pending_replay_events:
-            _LOGGER.info(
-                "Tandem: %d intermediate events queued for replay",
-                len(self._pending_replay_events),
-            )
 
         # ── Populate current sensor values from latest events ────────
 
@@ -1610,133 +1491,6 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] = UNAVAILABLE
             data[TANDEM_TIME_IN_RANGE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CGM_USAGE] = UNAVAILABLE
-
-    # ── Historical data replay ───────────────────────────────────────
-
-    async def _replay_historical_events(self, base_data: dict) -> None:
-        """Replay intermediate events so the recorder captures full history.
-
-        Each intermediate event is set as the coordinator's data, which
-        triggers entity listeners and writes a state to the recorder.
-        Events are replayed in chronological order with a brief yield
-        between each to allow the event loop to process state changes.
-
-        Only sensor keys affected by the event type are updated; static
-        device info keys (serial, model, etc.) are preserved from base_data.
-        """
-        events = self._pending_replay_events
-        self._pending_replay_events = []
-
-        if not events:
-            return
-
-        _LOGGER.info(
-            "Tandem: Replaying %d intermediate events for history", len(events)
-        )
-
-        tz = ZoneInfo(self.timezone)
-
-        for evt in events:
-            replay_data = dict(base_data)  # Shallow copy of current data
-            # Strip readings history from replayed states to avoid
-            # bloating the recorder with repeated large attribute payloads
-            for key in list(replay_data):
-                if key.endswith("_attributes") and isinstance(
-                    replay_data.get(key), dict
-                ) and "readings" in replay_data.get(key, {}):
-                    replay_data[key] = {}
-            eid = evt.get("event_id")
-
-            try:
-                if eid == 256:  # CGM_DATA_GXB
-                    sg_mgdl = evt.get("glucose_mgdl", 0)
-                    if sg_mgdl and sg_mgdl > 0:
-                        replay_data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = int(sg_mgdl)
-                        replay_data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = round(
-                            sg_mgdl * 0.0555, 2
-                        )
-                        replay_data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = (
-                            evt["timestamp"].replace(tzinfo=tz)
-                        )
-
-                elif eid == 20:  # BOLUS_COMPLETED
-                    insulin = evt.get("insulin_delivered", 0)
-                    if insulin:
-                        replay_data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = round(
-                            float(insulin), 2
-                        )
-                    replay_data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = (
-                        evt["timestamp"].replace(tzinfo=tz)
-                    )
-                    replay_data[TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS] = {
-                        "event_type": evt.get("event_name", ""),
-                        "insulin_requested": evt.get("insulin_requested"),
-                        "bolus_id": evt.get("bolus_id"),
-                        "completion_status": evt.get("completion_status"),
-                    }
-                    iob = evt.get("iob")
-                    if iob is not None:
-                        replay_data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = round(
-                            float(iob), 2
-                        )
-
-                elif eid == 280:  # BOLUS_DELIVERY
-                    insulin = evt.get("insulin_delivered", 0)
-                    if insulin:
-                        replay_data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = round(
-                            float(insulin), 2
-                        )
-                    replay_data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = (
-                        evt["timestamp"].replace(tzinfo=tz)
-                    )
-                    replay_data[TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS] = {
-                        "event_type": evt.get("event_name", ""),
-                        "bolus_id": evt.get("bolus_id"),
-                        "bolus_type": evt.get("bolus_type"),
-                        "delivery_status": evt.get("delivery_status"),
-                    }
-                    # Detect meal bolus
-                    btype = evt.get("bolus_type", 0)
-                    if btype & 0x10:
-                        meal_ins = evt.get("insulin_delivered", 0)
-                        replay_data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = (
-                            round(float(meal_ins), 2) if meal_ins else UNAVAILABLE
-                        )
-                        replay_data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {
-                            "bolus_type": btype,
-                            "bolus_id": evt.get("bolus_id"),
-                        }
-
-                elif eid in (3, 279):  # BASAL_RATE_CHANGE or BASAL_DELIVERY
-                    rate = evt.get("commanded_rate")
-                    if rate is not None:
-                        replay_data[TANDEM_SENSOR_KEY_BASAL_RATE] = round(
-                            float(rate), 3
-                        )
-                    commanded_source = evt.get("commanded_source")
-                    if commanded_source is not None:
-                        source_map = {
-                            0: "Suspended", 1: "Profile", 2: "Temp Rate",
-                            3: "Algorithm", 4: "Temp + Algorithm",
-                        }
-                        replay_data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = (
-                            source_map.get(
-                                commanded_source, f"Source_{commanded_source}"
-                            )
-                        )
-
-                self.async_set_updated_data(replay_data)
-                # Yield to the event loop so each state change is processed
-                await asyncio.sleep(0)
-
-            except Exception as e:
-                _LOGGER.warning(
-                    "Tandem: Error replaying event %s: %s",
-                    evt.get("event_name", "unknown"),
-                    e,
-                )
-
-        _LOGGER.debug("Tandem: Historical event replay complete")
 
     # ── Long-term statistics import ──────────────────────────────────
 

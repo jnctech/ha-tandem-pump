@@ -1,5 +1,7 @@
 """Constants for the carelink integration."""
 
+from datetime import timedelta
+
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntityDescription,
@@ -513,6 +515,26 @@ TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS = "tandem_control_iq_status"
 TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP = "tandem_last_update_timestamp"
 TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS = "tandem_last_meal_bolus"
 TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS = "tandem_last_meal_bolus_attributes"
+
+# ── Staleness detection (Issue #11) ─────────────────────────────────────
+# Tandem Reports API is historical — pump uploads periodically, not in real-time.
+# When data is older than this threshold, sensors are marked unavailable so HA
+# stops recording stale values (which would create misleading flat lines in graphs).
+TANDEM_DATA_STALE_MINUTES = 30
+TANDEM_DATA_STALE_TIMEDELTA = timedelta(minutes=TANDEM_DATA_STALE_MINUTES)
+
+# Sensors that remain available even when pump data is stale.
+# Timestamps and diagnostics should stay visible so the user can see
+# when data was last received and what pump they're connected to.
+TANDEM_SENSORS_ALWAYS_AVAILABLE = (
+    TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
+    TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP,
+    TANDEM_SENSOR_KEY_LAST_UPLOAD,
+    TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP,
+    TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
+    TANDEM_SENSOR_KEY_PUMP_SERIAL_INFO,
+    TANDEM_SENSOR_KEY_PUMP_MODEL_INFO,
+)
 
 TANDEM_SENSORS = (
     SensorEntityDescription(

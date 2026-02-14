@@ -355,6 +355,8 @@ class CarelinkCoordinator(DataUpdateCoordinator):
         self.uploader = None
         self.client = hass.data[DOMAIN][entry.entry_id][CLIENT]
         self.timezone = hass.config.time_zone
+        self._last_sg_timestamp: str | None = None
+        self._pending_replay_sgs: list[dict] = []
 
         if UPLOADER in hass.data[DOMAIN][entry.entry_id]:
             self.uploader = hass.data[DOMAIN][entry.entry_id][UPLOADER]
@@ -424,6 +426,59 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             data[SENSOR_KEY_LASTSG_MGDL] = current_sg["sg"]
             if prev_sg:
                 data[SENSOR_KEY_SG_DELTA] = (float(current_sg["sg"]) - float(prev_sg["sg"]))
+
+        # ── Historical SG readings for replay and statistics ──────────
+        all_valid_sgs = [
+            sg for sg in recent_data["sgs"]
+            if sg.get("sensorState") == "NO_ERROR_MESSAGE"
+            and sg.get("sg") is not None
+            and sg.get("sg", 0) > 0
+            and "timestamp" in sg
+        ]
+        all_valid_sgs.sort(
+            key=lambda x: convert_date_to_isodate(x["timestamp"])
+        )
+
+        if all_valid_sgs:
+            # Queue intermediate readings for replay
+            self._pending_replay_sgs = []
+            if self._last_sg_timestamp is not None:
+                try:
+                    last_seen_dt = convert_date_to_isodate(
+                        self._last_sg_timestamp
+                    )
+                    self._pending_replay_sgs = [
+                        sg for sg in all_valid_sgs[:-1]
+                        if convert_date_to_isodate(sg["timestamp"])
+                        > last_seen_dt
+                    ]
+                except Exception:
+                    pass
+            self._last_sg_timestamp = all_valid_sgs[-1]["timestamp"]
+
+            # Store readings history as attributes for custom cards
+            _MAX_SG_HISTORY = 24  # ~2 hours of 5-min readings
+            recent_sgs = all_valid_sgs[-_MAX_SG_HISTORY:]
+            sg_readings_mgdl = []
+            sg_readings_mmol = []
+            for sg in recent_sgs:
+                ts_iso = convert_date_to_isodate(
+                    sg["timestamp"]
+                ).replace(tzinfo=timezone).isoformat()
+                sg_readings_mgdl.append(
+                    {"t": ts_iso, "v": sg["sg"]}
+                )
+                sg_readings_mmol.append(
+                    {"t": ts_iso, "v": round(float(sg["sg"]) * 0.0555, 2)}
+                )
+            data[f"{SENSOR_KEY_LASTSG_MGDL}_attributes"] = {
+                "readings": sg_readings_mgdl,
+            }
+            data[f"{SENSOR_KEY_LASTSG_MMOL}_attributes"] = {
+                "readings": sg_readings_mmol,
+            }
+        else:
+            self._pending_replay_sgs = []
 
         # Sensors
 
@@ -672,7 +727,171 @@ class CarelinkCoordinator(DataUpdateCoordinator):
 
         _LOGGER.debug("_async_update_data: %s", sanitize_for_logging(data))
 
+        # Schedule replay of intermediate SG readings
+        if self._pending_replay_sgs:
+            self.hass.async_create_task(
+                self._replay_historical_sgs(data, timezone)
+            )
+
+        # Import correctly-timestamped statistics
+        if all_valid_sgs:
+            self.hass.async_create_task(
+                self._import_sg_statistics(all_valid_sgs, timezone)
+            )
+
         return data
+
+    # ── Historical SG replay ────────────────────────────────────────
+
+    async def _replay_historical_sgs(
+        self, base_data: dict, tz: ZoneInfo
+    ) -> None:
+        """Replay intermediate SG readings so the recorder captures history.
+
+        Each intermediate reading is set as the coordinator's data, which
+        triggers entity listeners and writes a state to the recorder.
+        Readings are replayed in chronological order.
+        """
+        events = self._pending_replay_sgs
+        self._pending_replay_sgs = []
+
+        if not events:
+            return
+
+        _LOGGER.info(
+            "Carelink: Replaying %d intermediate SG readings", len(events)
+        )
+
+        for sg in events:
+            try:
+                replay_data = dict(base_data)
+                # Strip readings history from replayed states to avoid
+                # bloating the recorder with repeated large attribute payloads
+                for key in list(replay_data):
+                    if key.endswith("_attributes") and isinstance(
+                        replay_data.get(key), dict
+                    ) and "readings" in replay_data.get(key, {}):
+                        replay_data[key] = {}
+
+                sg_val = sg["sg"]
+                date_time_local = convert_date_to_isodate(sg["timestamp"])
+                replay_data[SENSOR_KEY_LASTSG_MGDL] = sg_val
+                replay_data[SENSOR_KEY_LASTSG_MMOL] = float(
+                    round(sg_val * 0.0555, 2)
+                )
+                replay_data[SENSOR_KEY_LASTSG_TIMESTAMP] = (
+                    date_time_local.replace(tzinfo=tz)
+                )
+
+                self.async_set_updated_data(replay_data)
+                await asyncio.sleep(0)
+
+            except Exception as e:
+                _LOGGER.warning(
+                    "Carelink: Error replaying SG reading: %s", e
+                )
+
+        _LOGGER.debug("Carelink: SG replay complete")
+
+    # ── Long-term statistics import ─────────────────────────────────
+
+    async def _import_sg_statistics(
+        self, valid_sgs: list[dict], tz: ZoneInfo
+    ) -> None:
+        """Import SG readings as HA long-term statistics with correct timestamps.
+
+        Creates correctly-timestamped 5-minute statistics entries so
+        Statistics Graph cards show accurate historical data.
+        """
+        try:
+            from homeassistant.components.recorder.statistics import (
+                async_import_statistics,
+            )
+            from homeassistant.components.recorder.models import (
+                StatisticData,
+                StatisticMetaData,
+            )
+        except ImportError:
+            _LOGGER.debug(
+                "Carelink: Recorder statistics API not available, skipping"
+            )
+            return
+
+        cgm_stats_mmol: list = []
+        cgm_stats_mgdl: list = []
+
+        for sg in valid_sgs:
+            try:
+                ts = convert_date_to_isodate(sg["timestamp"]).replace(
+                    tzinfo=tz
+                )
+                sg_val = sg["sg"]
+
+                # Round down to 5-minute boundary for statistics period
+                minute = (ts.minute // 5) * 5
+                period_start = ts.replace(
+                    minute=minute, second=0, microsecond=0
+                )
+
+                mmol_val = round(float(sg_val) * 0.0555, 2)
+                cgm_stats_mmol.append(StatisticData(
+                    start=period_start,
+                    mean=mmol_val,
+                    min=mmol_val,
+                    max=mmol_val,
+                    state=mmol_val,
+                ))
+                cgm_stats_mgdl.append(StatisticData(
+                    start=period_start,
+                    mean=float(sg_val),
+                    min=float(sg_val),
+                    max=float(sg_val),
+                    state=float(sg_val),
+                ))
+            except Exception as e:
+                _LOGGER.debug("Error creating statistic from SG: %s", e)
+
+        entity_prefix = f"sensor.{DOMAIN}"
+
+        if cgm_stats_mmol:
+            try:
+                mmol_meta = StatisticMetaData(
+                    has_mean=True,
+                    has_sum=False,
+                    name="Last glucose level mmol",
+                    source="recorder",
+                    statistic_id=f"{entity_prefix}_last_glucose_level_mmol",
+                    unit_of_measurement="mmol/L",
+                )
+                async_import_statistics(self.hass, mmol_meta, cgm_stats_mmol)
+                _LOGGER.debug(
+                    "Carelink: Imported %d mmol statistics",
+                    len(cgm_stats_mmol),
+                )
+            except Exception as e:
+                _LOGGER.warning(
+                    "Carelink: Failed to import mmol statistics: %s", e
+                )
+
+        if cgm_stats_mgdl:
+            try:
+                mgdl_meta = StatisticMetaData(
+                    has_mean=True,
+                    has_sum=False,
+                    name="Last glucose level mg/dl",
+                    source="recorder",
+                    statistic_id=f"{entity_prefix}_last_glucose_level_mg_dl",
+                    unit_of_measurement="mg/dL",
+                )
+                async_import_statistics(self.hass, mgdl_meta, cgm_stats_mgdl)
+                _LOGGER.debug(
+                    "Carelink: Imported %d mg/dl statistics",
+                    len(cgm_stats_mgdl),
+                )
+            except Exception as e:
+                _LOGGER.warning(
+                    "Carelink: Failed to import mg/dl statistics: %s", e
+                )
 
 
 # ═══════════════════════════════════════════════════════════════════════════

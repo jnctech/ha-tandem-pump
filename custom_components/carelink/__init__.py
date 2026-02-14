@@ -1785,7 +1785,12 @@ class TandemCoordinator(DataUpdateCoordinator):
         carbs_entered: list[dict],
         data: dict,
     ) -> None:
-        """Compute daily insulin summary from bolus and basal events."""
+        """Compute daily insulin summary from bolus and basal events.
+
+        Only events from "today" (in pump timezone) are included so that
+        the totals reflect a single calendar day, not the full 2-day
+        fetch window.
+        """
         _unavailable_keys = (
             TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN,
             TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL,
@@ -1794,6 +1799,29 @@ class TandemCoordinator(DataUpdateCoordinator):
             TANDEM_SENSOR_KEY_DAILY_CARBS,
             TANDEM_SENSOR_KEY_DAILY_BOLUS_COUNT,
         )
+
+        # Filter events to "today" in pump timezone
+        tz = ZoneInfo(self.timezone)
+        today = datetime.now(tz).date()
+
+        def _today_only(events: list[dict]) -> list[dict]:
+            result = []
+            for e in events:
+                ts = e.get("timestamp")
+                if not ts:
+                    continue
+                if ts.tzinfo is None:
+                    # Naive timestamp — assume UTC
+                    ts = ts.replace(tzinfo=ZoneInfo("UTC"))
+                if ts.astimezone(tz).date() == today:
+                    result.append(e)
+            return result
+
+        bolus_completed = _today_only(bolus_completed)
+        bolex_completed = _today_only(bolex_completed)
+        basal_delivery = _today_only(basal_delivery)
+        basal_rate_changes = _today_only(basal_rate_changes)
+        carbs_entered = _today_only(carbs_entered)
 
         # Daily bolus total: sum insulin_delivered from completed boluses
         all_bolus = bolus_completed + bolex_completed

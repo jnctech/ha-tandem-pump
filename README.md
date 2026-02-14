@@ -1,5 +1,7 @@
 # Tandem t:slim Pump Integration for Home Assistant
 
+> **Tested with Tandem t:slim X2.** Medtronic Carelink support is inherited from the [original integration](https://github.com/yo-han/Home-Assistant-Carelink) by @yo-han but has not been tested under this fork. For verified Medtronic support, please refer to the original repo.
+
 ## Documentation
 
 - [Troubleshooting Guide](TROUBLESHOOTING.md) - Common issues and solutions

@@ -6,14 +6,16 @@ Custom component for Home Assistant to monitor **Tandem t:slim insulin pumps** v
 
 ## Supported devices
 
-### Tandem
+### Tandem (tested)
 - Tandem t:slim X2 pump with Control-IQ technology
 - Compatible with Tandem Source (EU and US regions)
 
-### Medtronic
+### Medtronic (inherited, not tested under this fork)
 - Medtronic MiniMed 780G pump
-- Medtronic MiniMed 770G pump (*to be confirmed*)
-- Medtronic Guardian Connect CGM (*to be confirmed*)
+- Medtronic MiniMed 770G pump
+- Medtronic Guardian Connect CGM
+
+> **Note:** Medtronic Carelink support was inherited from the [original integration](https://github.com/yo-han/Home-Assistant-Carelink) by @yo-han. It has **not been tested** under this fork. If you use Medtronic devices, please refer to the [original repo](https://github.com/yo-han/Home-Assistant-Carelink) for verified Carelink support, or open an issue if you'd like to help test.
 
 ## Features
 - Real-time glucose monitoring (mg/dL and mmol/L)

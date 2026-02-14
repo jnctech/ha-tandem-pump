@@ -244,9 +244,11 @@ If issues persist:
 
 ## Known Issues
 
-### Current (Unreleased - bugfix/sensor-population-unknown-state)
+### v0.2.0-rc1
 
-**Resolved**: Primary sensor population now works via Source Reports pumpevents API (PR #4).
+**Resolved**: Primary sensor population now works via Source Reports pumpevents API.
+
+**Added**: Historical data import with state replay and long-term statistics.
 
 **Remaining** (Issue #5): The following sensors still show "Unknown":
 - **Average Glucose, Time in Range, CGM Usage**: Require dashboard_summary from ControlIQ API (returns 404). Planned fix: compute from CGM event history.

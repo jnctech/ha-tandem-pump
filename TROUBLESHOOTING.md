@@ -95,7 +95,7 @@ The ControlIQ API endpoints return 404 errors, leaving all sensors unpopulated. 
 
 1. **No recent data from pump**
    - Ensure pump has synced to Source recently (check Source website)
-   - Tandem pumps sync when connected to phone with t:connect app
+   - Tandem pumps sync when connected to phone with Tandem t:slim mobile app
 
 2. **API authentication expired**
    - Wait for next polling cycle (default: 5 minutes)
@@ -112,7 +112,7 @@ The ControlIQ API endpoints return 404 errors, leaving all sensors unpopulated. 
 
 **Expected Behavior**:
 - Integration polls API every 5 minutes (default scan interval)
-- Not real-time — depends on pump sync frequency via t:connect mobile app
+- Not real-time — depends on pump sync frequency via Tandem t:slim mobile app
 - Adjust scan interval in configuration if needed (60–900 seconds)
 
 **If updates are slower than expected**:

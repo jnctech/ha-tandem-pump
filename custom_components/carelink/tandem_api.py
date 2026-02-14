@@ -890,25 +890,29 @@ def parse_dotnet_date(date_str) -> datetime | None:
     """Parse .NET /Date(epoch_ms)/ or /Date(epoch_ms+offset)/ format.
 
     Also handles plain ISO 8601 date strings and epoch integers.
+    Always returns UTC-aware datetimes so callers can safely use .astimezone().
     """
     if date_str is None:
         return None
 
     if isinstance(date_str, (int, float)):
-        return datetime.fromtimestamp(date_str / 1000 if date_str > 1e12 else date_str)
+        return datetime.fromtimestamp(
+            date_str / 1000 if date_str > 1e12 else date_str,
+            tz=timezone.utc,
+        )
 
     if isinstance(date_str, str):
         # .NET date format: /Date(1234567890000)/ or /Date(1234567890000+0000)/
         match = re.match(r"/Date\((\d+)([+-]\d+)?\)/", date_str)
         if match:
             epoch_ms = int(match.group(1))
-            return datetime.fromtimestamp(epoch_ms / 1000)
+            return datetime.fromtimestamp(epoch_ms / 1000, tz=timezone.utc)
 
         # ISO 8601 format
         try:
-            return datetime.fromisoformat(date_str.replace("Z", "+00:00")).replace(
-                tzinfo=None
-            )
+            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            # Convert to UTC and keep timezone-aware
+            return dt.astimezone(timezone.utc)
         except (ValueError, AttributeError):
             pass
 

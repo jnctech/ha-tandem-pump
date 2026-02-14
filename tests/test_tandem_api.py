@@ -24,36 +24,43 @@ class TestParseDotnetDate:
     """Tests for the parse_dotnet_date helper function."""
 
     def test_basic_dotnet_format(self):
-        """Test parsing /Date(epoch_ms)/ format."""
+        """Test parsing /Date(epoch_ms)/ format returns UTC-aware datetime."""
         result = parse_dotnet_date("/Date(1705320000000)/")
         assert isinstance(result, datetime)
+        assert result.tzinfo is not None
         assert result.year == 2024
         assert result.month == 1
         assert result.day == 15
 
     def test_dotnet_format_with_positive_offset(self):
-        """Test parsing /Date(epoch_ms+0200)/ format."""
+        """Test parsing /Date(epoch_ms+0200)/ format returns UTC-aware datetime."""
         result = parse_dotnet_date("/Date(1705320000000+0200)/")
         assert isinstance(result, datetime)
+        assert result.tzinfo is not None
 
     def test_dotnet_format_with_negative_offset(self):
-        """Test parsing /Date(epoch_ms-0500)/ format."""
+        """Test parsing /Date(epoch_ms-0500)/ format returns UTC-aware datetime."""
         result = parse_dotnet_date("/Date(1705320000000-0500)/")
         assert isinstance(result, datetime)
+        assert result.tzinfo is not None
 
     def test_iso8601_format(self):
-        """Test parsing ISO 8601 format."""
+        """Test parsing ISO 8601 format returns UTC-aware datetime."""
         result = parse_dotnet_date("2024-01-15T12:00:00Z")
         assert isinstance(result, datetime)
+        assert result.tzinfo is not None
         assert result.year == 2024
         assert result.month == 1
         assert result.day == 15
         assert result.hour == 12
 
     def test_iso8601_with_offset(self):
-        """Test parsing ISO 8601 with timezone offset."""
+        """Test parsing ISO 8601 with timezone offset converts to UTC."""
         result = parse_dotnet_date("2024-01-15T12:00:00+02:00")
         assert isinstance(result, datetime)
+        assert result.tzinfo is not None
+        # +02:00 means the UTC time is 10:00
+        assert result.hour == 10
 
     def test_none_input(self):
         """Test that None input returns None."""
@@ -71,12 +78,14 @@ class TestParseDotnetDate:
         """Test /Date(0)/ parses as Unix epoch."""
         result = parse_dotnet_date("/Date(0)/")
         assert isinstance(result, datetime)
+        assert result.tzinfo is not None
         assert result.year == 1970
 
     def test_integer_input(self):
         """Test that integer input is treated as epoch seconds."""
         result = parse_dotnet_date(12345)
         assert isinstance(result, datetime)
+        assert result.tzinfo is not None
 
 
 # ═══════════════════════════════════════════════════════════════════════════

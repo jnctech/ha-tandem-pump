@@ -151,7 +151,7 @@ from .const import (
     TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT,
 )
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -973,7 +973,15 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[DEVICE_PUMP_NAME] = metadata.get("patientName", "Tandem Pump")
             data[TANDEM_SENSOR_KEY_PUMP_SERIAL_INFO] = metadata.get("serialNumber")
             data[TANDEM_SENSOR_KEY_PUMP_MODEL_INFO] = metadata.get("modelNumber")
-            data[TANDEM_SENSOR_KEY_SOFTWARE_VERSION] = metadata.get("softwareVersion")
+            sw_version = metadata.get("softwareVersion")
+            if not sw_version:
+                _LOGGER.debug(
+                    "Tandem softwareVersion not in metadata (keys: %s), "
+                    "trying partNumber as fallback",
+                    list(metadata.keys()),
+                )
+                sw_version = metadata.get("partNumber")
+            data[TANDEM_SENSOR_KEY_SOFTWARE_VERSION] = sw_version or UNAVAILABLE
 
             # Parse last upload timestamp
             # lastUpload is a dict {uploadId, lastUploadedAt, settings}, not a string
@@ -988,8 +996,8 @@ class TandemCoordinator(DataUpdateCoordinator):
             if last_uploaded_at:
                 upload_dt = parse_dotnet_date(last_uploaded_at)
                 if upload_dt:
-                    upload_aware = upload_dt.replace(
-                        tzinfo=ZoneInfo(self.timezone)
+                    upload_aware = upload_dt.astimezone(
+                        ZoneInfo(self.timezone)
                     )
                     data[TANDEM_SENSOR_KEY_LAST_UPLOAD] = upload_aware
                     data[TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP] = upload_aware
@@ -1110,8 +1118,8 @@ class TandemCoordinator(DataUpdateCoordinator):
                     data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = round(sg_mgdl * 0.0555, 2)
 
                     if latest_dt:
-                        data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = latest_dt.replace(
-                            tzinfo=ZoneInfo(self.timezone)
+                        data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = latest_dt.astimezone(
+                            ZoneInfo(self.timezone)
                         )
 
                     # Calculate delta from previous reading
@@ -1159,8 +1167,8 @@ class TandemCoordinator(DataUpdateCoordinator):
                     or last_bolus.get("RequestDateTime")
                 )
                 if bolus_dt:
-                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = bolus_dt.replace(
-                        tzinfo=ZoneInfo(self.timezone)
+                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = bolus_dt.astimezone(
+                        ZoneInfo(self.timezone)
                     )
                 else:
                     data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = UNAVAILABLE
@@ -1618,9 +1626,19 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = (
                 last_cart["timestamp"].astimezone(tz)
             )
-            data[TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN] = last_cart.get(
-                "insulin_volume", UNAVAILABLE
-            )
+            fill_volume = last_cart.get("insulin_volume")
+            # Tandem API often returns 0.0 for insulin_volume — treat as unknown.
+            # Users can set the fill volume via the Cartridge Fill Volume number
+            # entity, which is used to estimate remaining insulin.
+            if fill_volume and fill_volume > 0:
+                data[TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN] = fill_volume
+            else:
+                _LOGGER.debug(
+                    "Cartridge fill volume is %s — Tandem API limitation. "
+                    "Set the 'Cartridge fill volume' number entity to track remaining insulin.",
+                    fill_volume,
+                )
+                data[TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN] = UNAVAILABLE
         else:
             data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN] = UNAVAILABLE

@@ -26,7 +26,7 @@ import re
 import ssl
 import struct
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode, urlparse, parse_qs
 
 import certifi
@@ -109,7 +109,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
         seq = struct.unpack_from(">I", chunk, 6)[0]
         payload = chunk[10:26]  # 16-byte data payload
 
-        ts = datetime.utcfromtimestamp(TANDEM_EPOCH + ts_raw)
+        ts = datetime.fromtimestamp(TANDEM_EPOCH + ts_raw, tz=timezone.utc)
         event_id_counts[event_id] = event_id_counts.get(event_id, 0) + 1
 
         evt = {

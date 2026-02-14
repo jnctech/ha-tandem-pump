@@ -1,9 +1,12 @@
 """Tests for historical data import: _parse_pump_events, replay, and statistics."""
 from __future__ import annotations
 
+import sys
+import types
 from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
+from dataclasses import dataclass
 
 import pytest
 
@@ -735,6 +738,61 @@ class TestReplayHistoricalEvents:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+@dataclass
+class _MockStatisticData:
+    """Lightweight stand-in for homeassistant.components.recorder.models.StatisticData."""
+    start: Any = None
+    mean: Any = None
+    min: Any = None
+    max: Any = None
+    state: Any = None
+    sum: Any = None
+
+
+@dataclass
+class _MockStatisticMetaData:
+    """Lightweight stand-in for homeassistant.components.recorder.models.StatisticMetaData."""
+    has_mean: bool = False
+    has_sum: bool = False
+    name: str = ""
+    source: str = ""
+    statistic_id: str = ""
+    unit_of_measurement: str = ""
+
+
+def _install_mock_recorder_modules(mock_import_fn):
+    """Install fake recorder modules so the lazy import inside _import_statistics works.
+
+    Returns a cleanup function that removes the modules.
+    """
+    recorder_mod = types.ModuleType("homeassistant.components.recorder")
+    stats_mod = types.ModuleType("homeassistant.components.recorder.statistics")
+    models_mod = types.ModuleType("homeassistant.components.recorder.models")
+
+    stats_mod.async_import_statistics = mock_import_fn
+    models_mod.StatisticData = _MockStatisticData
+    models_mod.StatisticMetaData = _MockStatisticMetaData
+
+    keys = [
+        "homeassistant.components.recorder",
+        "homeassistant.components.recorder.statistics",
+        "homeassistant.components.recorder.models",
+    ]
+    saved = {k: sys.modules.get(k) for k in keys}
+    sys.modules["homeassistant.components.recorder"] = recorder_mod
+    sys.modules["homeassistant.components.recorder.statistics"] = stats_mod
+    sys.modules["homeassistant.components.recorder.models"] = models_mod
+
+    def cleanup():
+        for k in keys:
+            if saved[k] is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = saved[k]
+
+    return cleanup
+
+
 class TestImportStatistics:
     """Tests for the _import_statistics method."""
 
@@ -773,9 +831,9 @@ class TestImportStatistics:
             _make_cgm_event(seq=3, glucose_mgdl=140, minutes_ago=0),
         ]
 
-        with patch(
-            "custom_components.carelink.async_import_statistics"
-        ) as mock_import:
+        mock_import = MagicMock()
+        cleanup = _install_mock_recorder_modules(mock_import)
+        try:
             await coordinator._import_statistics(events)
 
             # Should be called once for CGM stats (no IOB or basal in events)
@@ -785,6 +843,8 @@ class TestImportStatistics:
             stats = call_args[0][2]
             assert meta.unit_of_measurement == "mmol/L"
             assert len(stats) == 3
+        finally:
+            cleanup()
 
     async def test_statistics_period_rounded_to_5_min(
         self, hass: HomeAssistant
@@ -826,14 +886,16 @@ class TestImportStatistics:
             "glucose_mgdl": 120,
         }]
 
-        with patch(
-            "custom_components.carelink.async_import_statistics"
-        ) as mock_import:
+        mock_import = MagicMock()
+        cleanup = _install_mock_recorder_modules(mock_import)
+        try:
             await coordinator._import_statistics(events)
 
             stats = mock_import.call_args[0][2]
             assert stats[0].start.minute == 5
             assert stats[0].start.second == 0
+        finally:
+            cleanup()
 
     async def test_statistics_handles_import_error(self, hass: HomeAssistant):
         """Test that import errors are handled gracefully."""
@@ -866,12 +928,13 @@ class TestImportStatistics:
 
         events = [_make_cgm_event(seq=1, glucose_mgdl=120)]
 
-        with patch(
-            "custom_components.carelink.async_import_statistics",
-            side_effect=Exception("DB error"),
-        ):
+        mock_import = MagicMock(side_effect=Exception("DB error"))
+        cleanup = _install_mock_recorder_modules(mock_import)
+        try:
             # Should not raise
             await coordinator._import_statistics(events)
+        finally:
+            cleanup()
 
 
 # ═══════════════════════════════════════════════════════════════════════════

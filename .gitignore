@@ -185,3 +185,4 @@ api_debug_*.json
 # Local testing files
 local_test_*.py
 test_local_*.py
+run-tests.cmd

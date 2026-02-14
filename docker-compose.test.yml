@@ -1,19 +1,39 @@
-version: '3.8'
-
-# Local testing environment for Home Assistant Carelink integration
-# Usage:
-#   docker-compose -f docker-compose.test.yml up -d
-#   Open http://localhost:8123 to access Home Assistant
-#   docker-compose -f docker-compose.test.yml down -v  (to cleanup)
+# Testing environment for Home Assistant Carelink integration
+#
+# Run unit tests (default):
+#   docker compose -f docker-compose.test.yml run --rm pytest
+#
+# Run specific tests:
+#   docker compose -f docker-compose.test.yml run --rm pytest -k "test_historical"
+#
+# Run with coverage:
+#   docker compose -f docker-compose.test.yml run --rm pytest --cov=custom_components.carelink --cov-report=term-missing
+#
+# Rebuild after changing requirements.txt or Dockerfile.test:
+#   docker compose -f docker-compose.test.yml build pytest
+#
+# Run Home Assistant for manual integration testing:
+#   docker compose -f docker-compose.test.yml up -d homeassistant
+#   Open http://localhost:8123
 
 services:
+  # ── Unit test runner ────────────────────────────────────────────────────
+  pytest:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    volumes:
+      # Bind-mount source so edits are reflected without rebuild
+      - ./custom_components:/app/custom_components:ro
+      - ./tests:/app/tests:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+
+  # ── Manual HA integration testing ───────────────────────────────────────
   homeassistant:
     image: ghcr.io/home-assistant/home-assistant:stable
     container_name: carelink-ha-test
     volumes:
-      # Mount the custom component
       - ./custom_components/carelink:/config/custom_components/carelink:ro
-      # Mount test config directory (created on first run)
       - ./test_config:/config
     ports:
       - "8123:8123"

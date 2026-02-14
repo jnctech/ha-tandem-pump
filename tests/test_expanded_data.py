@@ -57,8 +57,11 @@ from custom_components.carelink.tandem_api import (
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-# Use UTC-aware "now" so events are always "today" for daily summary filters
-BASE_TS = datetime.now(timezone.utc)
+# Use midday UTC today so events remain "today" even in far-west timezones
+# (e.g. US/Pacific = UTC-8).  Using plain datetime.now(utc) would fail if
+# the Docker host clock is near midnight UTC.
+_now = datetime.now(timezone.utc)
+BASE_TS = _now.replace(hour=12, minute=0, second=0, microsecond=0)
 
 
 def _make_cgm_event(seq: int, glucose_mgdl: int, minutes_ago: int = 0) -> dict:

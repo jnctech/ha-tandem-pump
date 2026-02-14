@@ -186,7 +186,100 @@ def mock_tandem_recent_data() -> dict[str, Any]:
             "serialNumber": "12345678",
             "modelNumber": "t:slim X2",
             "softwareVersion": "7.6.0",
-            "lastUpload": "/Date(1705320000000)/",
+            "lastUpload": {
+                "uploadId": 999,
+                "lastUploadedAt": "/Date(1705320000000)/",
+                "settings": {
+                    "profiles": {
+                        "activeIdp": 0,
+                        "profile": [
+                            {
+                                "name": "TestProfile",
+                                "idp": 0,
+                                "insulinDuration": 300,
+                                "carbEntry": 1,
+                                "tDependentSegs": [
+                                    {
+                                        "startTime": 0,
+                                        "basalRate": 1200,
+                                        "isf": 54,
+                                        "carbRatio": 10000,
+                                        "targetBg": 110,
+                                    },
+                                    {
+                                        "startTime": 480,
+                                        "basalRate": 800,
+                                        "isf": 72,
+                                        "carbRatio": 12000,
+                                        "targetBg": 110,
+                                    },
+                                ],
+                            },
+                            {
+                                "name": "Sick",
+                                "idp": 1,
+                                "insulinDuration": 300,
+                                "carbEntry": 1,
+                                "tDependentSegs": [
+                                    {
+                                        "startTime": 0,
+                                        "basalRate": 600,
+                                        "isf": 72,
+                                        "carbRatio": 15000,
+                                        "targetBg": 120,
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    "controlIQSettings": {
+                        "ClosedLoop": 1,
+                        "Weight": 74,
+                        "WeightUnit": 2,
+                        "TotalDailyInsulin": 60,
+                        "sleepSchedules": [
+                            {
+                                "activeDays": 127,
+                                "startTime": 1439,
+                                "endTime": 360,
+                                "enabled": 1,
+                            },
+                        ],
+                    },
+                    "pumpSettings": {
+                        "basalLimit": 2000,
+                        "maxBolus": 14000,
+                        "quickBolus": {
+                            "incrementsUnits": 500,
+                            "incrementsCarbs": 2000,
+                            "active": 0,
+                            "dataEntryType": 0,
+                            "status": 0,
+                        },
+                    },
+                    "alertsAndReminders": {
+                        "autoShutDownEnabled": 0,
+                        "lowInsulinThreshold": 20,
+                        "lowBgThreshold": 70,
+                        "highBgThreshold": 214,
+                        "siteChangeDays": 3,
+                    },
+                    "cgmSettings": {
+                        "highGlucoseAlert": {
+                            "mgPerDl": 200,
+                            "enabled": 1,
+                            "duration": 0,
+                            "status": 7,
+                        },
+                        "lowGlucoseAlert": {
+                            "mgPerDl": 80,
+                            "enabled": 1,
+                            "duration": 0,
+                            "status": 7,
+                        },
+                    },
+                },
+            },
         },
         "pumper_info": {
             "firstName": "Test",
@@ -239,7 +332,11 @@ def mock_tandem_recent_data_minimal() -> dict[str, Any]:
             "serialNumber": "12345678",
             "modelNumber": "t:slim X2",
             "softwareVersion": "7.6.0",
-            "lastUpload": "/Date(1705320000000)/",
+            "lastUpload": {
+                "uploadId": 999,
+                "lastUploadedAt": "/Date(1705320000000)/",
+                "settings": None,
+            },
         },
         "pumper_info": {
             "firstName": "Test",

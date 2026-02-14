@@ -11,7 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cartridge fill volume input**: New number entity (`number.carelink_cartridge_fill_volume`) allows users to manually set cartridge fill volume when changing cartridges, since the Tandem API does not report this value (#14)
 
 ### Fixed
-- **Glucose timestamp showing future time**: `parse_dotnet_date()` now returns UTC-aware datetimes; all therapy timeline timestamps use `.astimezone()` instead of `.replace(tzinfo=...)` for correct UTC-to-local conversion (#13)
+- **Glucose timestamp showing future time**: Fixed two independent timezone bugs (#13)
+  - `parse_dotnet_date()` now returns UTC-aware datetimes; therapy timeline timestamps use `.astimezone()` for correct UTC-to-local conversion
+  - Binary event decoder timestamps are **local pump time**, not UTC — decoder now creates naive datetimes, callers use `.replace(tzinfo=tz)` to label them correctly (previously stamped UTC onto local values, shifting data by the UTC offset)
 - **Cartridge insulin showing 0**: Sensor now shows "Unknown" instead of misleading "0" when the Tandem API returns 0.0 for insulin volume (#14)
 - **Software version not populated**: Added fallback to `partNumber` metadata field and debug logging when `softwareVersion` is missing from the API response (#15)
 - **Last carb entry high y-axis**: Removed `state_class=MEASUREMENT` from the "Last carb entry" sensor to prevent HA from tracking it as long-term statistics, which caused misleading y-axis scaling on graphs (#16)

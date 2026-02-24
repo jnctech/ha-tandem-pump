@@ -763,7 +763,11 @@ class TandemSourceClient:
 
     # ── Unified data fetch ───────────────────────────────────────────────
 
-    async def get_recent_data(self, pump_timezone: str | None = None) -> dict:
+    async def get_recent_data(
+        self,
+        pump_timezone: str | None = None,
+        fallback_date: str | None = None,
+    ) -> dict:
         """Fetch all available recent data from Tandem Source APIs.
 
         Parallelises independent API calls where possible.
@@ -773,6 +777,11 @@ class TandemSourceClient:
                            Used for the date range so we don't miss recent
                            data when the HA server is in a different zone.
                            Falls back to UTC if not provided.
+            fallback_date: ISO date string (e.g. "2026-02-20T21:48:08") of the
+                           last known maxDateWithEvents.  When the primary fetch
+                           returns no pump_events (pump hasn't synced recently),
+                           a second fetch is attempted around this date so the
+                           dashboard can show the last-known pump state.
 
         Returns a unified dict with keys:
             pump_metadata: dict or None
@@ -830,6 +839,39 @@ class TandemSourceClient:
                 )
             except Exception as e:
                 _LOGGER.warning("Failed to fetch pump events: %s", e)
+
+            # ── Historical fallback ───────────────────────────────────
+            # When the pump hasn't synced recently (e.g. Dexcom sensor
+            # expired, Bluetooth gap), the recent date range returns
+            # nothing.  Fall back to the last-known event date so the
+            # dashboard can show site/cartridge/tubing changes and the
+            # last bolus rather than all-unknown.  CGM/IOB sensors will
+            # still correctly show as unavailable via staleness detection.
+            if not data["pump_events"] and fallback_date:
+                try:
+                    fallback_dt = datetime.fromisoformat(
+                        fallback_date[:10]  # take just YYYY-MM-DD
+                    )
+                    # Only bother if the fallback date is actually earlier
+                    # than the range we already tried.
+                    if fallback_dt.strftime("%Y-%m-%d") < start_iso:
+                        fb_start = (fallback_dt - timedelta(days=1)).strftime(
+                            "%Y-%m-%d"
+                        )
+                        fb_end = fallback_dt.strftime("%Y-%m-%d")
+                        _LOGGER.info(
+                            "Tandem: No recent pump events — fetching last-known "
+                            "event range %s to %s for static sensor data",
+                            fb_start,
+                            fb_end,
+                        )
+                        data["pump_events"] = await self.get_pump_events(
+                            device_id, fb_start, fb_end
+                        )
+                except Exception as e:
+                    _LOGGER.debug(
+                        "Tandem: Historical event fallback failed: %s", e
+                    )
         else:
             _LOGGER.debug(
                 "Tandem: No tconnectDeviceId in metadata, skipping pump events"

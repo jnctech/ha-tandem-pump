@@ -930,6 +930,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         try:
             recent_data = await self.client.get_recent_data(
                 pump_timezone=self.timezone,
+                fallback_date=max_date_str,
             )
         except TandemApiError as err:
             raise UpdateFailed(f"Tandem API error: {err}") from err
@@ -1079,6 +1080,13 @@ class TandemCoordinator(DataUpdateCoordinator):
 
     def _parse_therapy_timeline(self, timeline: dict | None, data: dict) -> None:
         """Parse therapy timeline data into sensor values."""
+        # Keys only populated by _parse_pump_events — always default to UNAVAILABLE
+        # when falling back to this path so sensors show unavailable, not unknown.
+        data[TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE] = UNAVAILABLE
+
         if not timeline:
             data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = UNAVAILABLE

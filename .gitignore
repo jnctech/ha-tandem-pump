@@ -187,6 +187,10 @@ local_test_*.py
 test_local_*.py
 run-tests.cmd
 
+# Windows artifacts
+nul
+*/nul
+
 # Dev artifacts (removed from repo)
 VERSION
 .vscode/

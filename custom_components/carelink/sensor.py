@@ -46,28 +46,17 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][entry.entry_id][COORDINATOR]
     platform_type = hass.data[DOMAIN][entry.entry_id].get(PLATFORM_TYPE, PLATFORM_CARELINK)
 
-    _LOGGER.info("Setting up sensor platform for %s (entry: %s)", platform_type, entry.entry_id)
-
-    # Choose the right sensor definitions based on platform
     sensor_definitions = TANDEM_SENSORS if platform_type == PLATFORM_TANDEM else SENSORS
 
-    _LOGGER.info("Creating %d sensor entities for %s", len(sensor_definitions), platform_type)
-
-    entities = []
-
-    for sensor_description in sensor_definitions:
-
-        entity_name = f"{DOMAIN} {sensor_description.name}"
-
-        entities.append(
-            CarelinkSensorEntity(
-                coordinator, sensor_description, entity_name, platform_type
-            )
+    entities = [
+        CarelinkSensorEntity(
+            coordinator, desc, f"{DOMAIN} {desc.name}", platform_type
         )
+        for desc in sensor_definitions
+    ]
 
-    _LOGGER.debug("Adding %d entities to Home Assistant", len(entities))
     async_add_entities(entities)
-    _LOGGER.info("Sensor setup completed - %d entities added", len(entities))
+    _LOGGER.info("Sensor setup: %d entities for %s", len(entities), platform_type)
 
 
 class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
@@ -142,10 +131,7 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
             DEVICE_PUMP_MANUFACTURER, "Medtronic"
         )
         return DeviceInfo(
-            identifiers={
-                # Serial numbers are unique identifiers within a specific domain
-                (DOMAIN, self.coordinator.data[DEVICE_PUMP_SERIAL])
-            },
+            identifiers={(DOMAIN, self.coordinator.data[DEVICE_PUMP_SERIAL])},
             name=self.coordinator.data[DEVICE_PUMP_NAME],
             manufacturer=manufacturer,
             model=self.coordinator.data[DEVICE_PUMP_MODEL],
@@ -157,6 +143,6 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        attrKey = "{}_attributes".format(self.sensor_description.key)
-
-        return self.coordinator.data.get(attrKey, {})
+        return self.coordinator.data.get(
+            f"{self.sensor_description.key}_attributes", {}
+        )

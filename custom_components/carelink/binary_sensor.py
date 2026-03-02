@@ -1,3 +1,4 @@
+"""Support for Carelink / Tandem binary sensors."""
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -31,25 +32,16 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up carelink sensor platform."""
-
+    """Set up carelink binary sensor platform."""
     coordinator = hass.data[DOMAIN][entry.entry_id][COORDINATOR]
     platform_type = hass.data[DOMAIN][entry.entry_id].get(PLATFORM_TYPE, PLATFORM_CARELINK)
 
-    # Choose the right binary sensor definitions based on platform
     sensor_definitions = TANDEM_BINARY_SENSORS if platform_type == PLATFORM_TANDEM else BINARY_SENSORS
 
-    entities = []
-
-    for sensor_description in sensor_definitions:
-
-        entity_name = f"{DOMAIN} {sensor_description.name}"
-
-        entities.append(
-            # pylint: disable=too-many-function-args
-            CarelinkConnectivityEntity(
-                coordinator, sensor_description, entity_name)
-        )
+    entities = [
+        CarelinkConnectivityEntity(coordinator, desc)
+        for desc in sensor_definitions
+    ]
 
     async_add_entities(entities)
 
@@ -61,13 +53,11 @@ class CarelinkConnectivityEntity(CoordinatorEntity, BinarySensorEntity):
         self,
         coordinator: DataUpdateCoordinator,
         sensor_description,
-        entity_name,
     ):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
         self.coordinator = coordinator
         self.sensor_description = sensor_description
-        self.entity_name = entity_name
 
     @property
     def name(self) -> str:
@@ -92,10 +82,7 @@ class CarelinkConnectivityEntity(CoordinatorEntity, BinarySensorEntity):
             DEVICE_PUMP_MANUFACTURER, "Medtronic"
         )
         return DeviceInfo(
-            identifiers={
-                # Serial numbers are unique identifiers within a specific domain
-                (DOMAIN, self.coordinator.data[DEVICE_PUMP_SERIAL])
-            },
+            identifiers={(DOMAIN, self.coordinator.data[DEVICE_PUMP_SERIAL])},
             name=self.coordinator.data[DEVICE_PUMP_NAME],
             manufacturer=manufacturer,
             model=self.coordinator.data[DEVICE_PUMP_MODEL],
@@ -104,7 +91,7 @@ class CarelinkConnectivityEntity(CoordinatorEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         """Return the status of the requested attribute."""
-        return self.coordinator.data.setdefault(self.sensor_description.key, None) is True
+        return self.coordinator.data.get(self.sensor_description.key) is True
 
     @property
     def entity_category(self):

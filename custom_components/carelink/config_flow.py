@@ -29,12 +29,12 @@ _LOGGER = logging.getLogger(__name__)
 async def validate_carelink_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Validate Carelink (Medtronic) user input."""
     client = CarelinkClient(
-        data.setdefault("cl_refresh_token", None),
-        data.setdefault("cl_token", None),
-        data.setdefault("cl_client_id", None),
-        data.setdefault("cl_client_secret", None),
-        data.setdefault("cl_mag_identifier", None),
-        data.setdefault("patientId", None),
+        data.get("cl_refresh_token"),
+        data.get("cl_token"),
+        data.get("cl_client_id"),
+        data.get("cl_client_secret"),
+        data.get("cl_mag_identifier"),
+        data.get("patientId"),
         config_path=hass.config.path()
     )
 
@@ -81,10 +81,9 @@ async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> di
 
 async def _validate_nightscout(hass: HomeAssistant, data: dict[str, Any]) -> None:
     """Validate Nightscout configuration if provided."""
-    nightscout_url = data.setdefault("nightscout_url", None)
-    nightscout_api = data.setdefault("nightscout_api", None)
+    nightscout_url = data.get("nightscout_url")
+    nightscout_api = data.get("nightscout_api")
 
-    # Strip whitespace from URL if provided
     if nightscout_url:
         nightscout_url = nightscout_url.strip()
         data["nightscout_url"] = nightscout_url
@@ -94,7 +93,6 @@ async def _validate_nightscout(hass: HomeAssistant, data: dict[str, Any]) -> Non
         raise CannotConnect
 
     if nightscout_api and nightscout_url:
-        # Validate URL format using urlparse
         parsed = urlparse(nightscout_url)
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             raise CannotConnect

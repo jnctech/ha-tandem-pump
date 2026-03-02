@@ -223,15 +223,15 @@ class NightscoutUploader:
 
     async def __set_data(self, host, data, data_type):
         printdbg("__set_data()")
-        if len(data) == 0:
+        if not data:
             return False
         success = True
         url = f"{host}/api/v1/{data_type}"
         try:
             for entry in data:
                 response = await self.post_async(url, headers=self.__common_headers, data=json.dumps(entry))
-                if not response.status_code == 200:
-                    raise ValueError("__set_data() session response is not OK " + str(response.status_code))
+                if response.status_code != 200:
+                    raise ValueError(f"__set_data() session response is not OK: {response.status_code}")
         except httpx.TimeoutException as error:
             printdbg(f"__set_data() failed: request timeout - {error}")
             success = False

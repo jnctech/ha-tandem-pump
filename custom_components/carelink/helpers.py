@@ -24,7 +24,6 @@ def is_data_stale(coordinator_data: dict) -> bool:
 
     now = dt_util.utcnow()
 
-    # Ensure timezone-aware comparison
     if last_sg_time.tzinfo is None:
         last_sg_time = last_sg_time.replace(tzinfo=now.tzinfo)
 

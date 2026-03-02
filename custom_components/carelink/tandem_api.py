@@ -517,7 +517,7 @@ class TandemSourceClient:
 
         try:
             claims = json.loads(base64.urlsafe_b64decode(payload))
-        except (json.JSONDecodeError, Exception) as e:
+        except Exception as e:
             raise TandemAuthError(f"Cannot decode JWT payload: {e}") from e
 
         self.pumper_id = claims.get("pumperId")
@@ -916,7 +916,7 @@ class TandemSourceClient:
     async def _fetch_pump_metadata(self) -> dict | None:
         """Fetch and extract first pump metadata entry."""
         metadata_list = await self.get_pump_event_metadata()
-        if metadata_list and isinstance(metadata_list, list) and len(metadata_list) > 0:
+        if isinstance(metadata_list, list) and metadata_list:
             return metadata_list[0]
         if isinstance(metadata_list, dict):
             return metadata_list

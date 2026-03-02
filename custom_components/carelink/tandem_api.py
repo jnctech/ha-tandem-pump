@@ -86,7 +86,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
     """
     try:
         raw_bytes = base64.b64decode(raw_b64)
-    except Exception as e:
+    except (ValueError, base64.binascii.Error) as e:
         _LOGGER.error("Failed to base64-decode pump events: %s", e)
         return []
 
@@ -574,6 +574,8 @@ class TandemSourceClient:
             _LOGGER.info("Tandem: Got 401, attempting re-login")
             self.access_token = None
             await self.login()
+            if not self.access_token:
+                raise TandemAuthError("Re-authentication succeeded but no token obtained")
             resp = await client.get(url, headers=self._api_headers())
 
         if resp.status_code != 200:

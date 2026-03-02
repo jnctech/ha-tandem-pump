@@ -257,8 +257,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if platform_type == PLATFORM_TANDEM:
         return await _async_setup_tandem_entry(hass, entry, config)
-    else:
-        return await _async_setup_carelink_entry(hass, entry, config)
+    return await _async_setup_carelink_entry(hass, entry, config)
 
 
 async def _async_setup_carelink_entry(
@@ -315,7 +314,6 @@ async def _async_setup_tandem_entry(
         password=config["tandem_password"],
         region=config.get("tandem_region", "EU"),
     )
-    _LOGGER.debug("Tandem client created for region: %s", config.get("tandem_region", "EU"))
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         TANDEM_CLIENT: tandem_client,
@@ -328,28 +326,18 @@ async def _async_setup_tandem_entry(
             config["nightscout_api"]
         )
         hass.data[DOMAIN][entry.entry_id][UPLOADER] = nightscout_uploader
-        _LOGGER.debug("Nightscout uploader configured")
 
     coordinator = TandemCoordinator(
         hass, entry, update_interval=timedelta(seconds=config[SCAN_INTERVAL])
     )
-    _LOGGER.info("TandemCoordinator created with update interval: %d seconds", config[SCAN_INTERVAL])
 
-    _LOGGER.info("Performing first coordinator refresh...")
-    try:
-        await coordinator.async_config_entry_first_refresh()
-        _LOGGER.info("First coordinator refresh completed successfully")
-        _LOGGER.debug("Coordinator data keys after first refresh: %s", list(coordinator.data.keys()) if coordinator.data else "None")
-    except Exception as e:
-        _LOGGER.error("First coordinator refresh FAILED: %s", e, exc_info=True)
-        raise
+    await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id][COORDINATOR] = coordinator
 
-    _LOGGER.info("Forwarding entry setups to platforms: %s", PLATFORMS)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    _LOGGER.info("Tandem entry setup completed successfully")
+    _LOGGER.info("Tandem entry setup completed")
     return True
 
 
@@ -406,7 +394,7 @@ class CarelinkCoordinator(DataUpdateCoordinator):
         recent_data = await self.client.get_recent_data()
 
         if recent_data is None:
-            recent_data = dict()
+            recent_data = {}
         if recent_data and 'patientData' in recent_data:
             recent_data=recent_data['patientData']
 
@@ -417,13 +405,11 @@ class CarelinkCoordinator(DataUpdateCoordinator):
 
             data[SENSOR_KEY_CLIENT_TIMEZONE] = client_timezone
 
-            timezone_map = MS_TIMEZONE_TO_IANA_MAP.setdefault(
+            timezone_map = MS_TIMEZONE_TO_IANA_MAP.get(
                 client_timezone, DEFAULT_TIME_ZONE
             )
 
             timezone = ZoneInfo(str(timezone_map))
-
-            _LOGGER.debug("Using timezone %s", DEFAULT_TIME_ZONE)
 
         except Exception as error:
             _LOGGER.error(
@@ -431,18 +417,17 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             )
             timezone = ZoneInfo("Europe/London")
 
-        _LOGGER.debug("Using timezone %s", DEFAULT_TIME_ZONE)
+        _LOGGER.debug("Using timezone %s", timezone)
 
-        # nightscout uploader
         if self.uploader:
             await self.uploader.send_recent_data(recent_data, timezone)
 
-        recent_data["lastConduitDateTime"] = recent_data.setdefault("lastConduitDateTime", "")
-        recent_data["activeInsulin"] = recent_data.setdefault("activeInsulin", {})
-        recent_data["therapyAlgorithmState"] = recent_data.setdefault("therapyAlgorithmState", {})
-        recent_data["lastAlarm"] = recent_data.setdefault("lastAlarm", {})
-        recent_data["markers"] = recent_data.setdefault("markers", [])
-        recent_data["sgs"] = recent_data.setdefault("sgs", [])
+        recent_data.setdefault("lastConduitDateTime", "")
+        recent_data.setdefault("activeInsulin", {})
+        recent_data.setdefault("therapyAlgorithmState", {})
+        recent_data.setdefault("lastAlarm", {})
+        recent_data.setdefault("markers", [])
+        recent_data.setdefault("sgs", [])
 
         # Last Update fetch
 
@@ -499,46 +484,43 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             }
         # Sensors
 
-        data[SENSOR_KEY_PUMP_BATTERY_LEVEL] = recent_data.setdefault(
+        data[SENSOR_KEY_PUMP_BATTERY_LEVEL] = recent_data.get(
             "pumpBatteryLevelPercent", UNAVAILABLE
         )
-        data[SENSOR_KEY_CONDUIT_BATTERY_LEVEL] = recent_data.setdefault(
+        data[SENSOR_KEY_CONDUIT_BATTERY_LEVEL] = recent_data.get(
             "conduitBatteryLevel", UNAVAILABLE
         )
-        data[SENSOR_KEY_SENSOR_BATTERY_LEVEL] = recent_data.setdefault(
+        data[SENSOR_KEY_SENSOR_BATTERY_LEVEL] = recent_data.get(
             "gstBatteryLevel", UNAVAILABLE
         )
-        data[SENSOR_KEY_SENSOR_DURATION_HOURS] = recent_data.setdefault(
+        data[SENSOR_KEY_SENSOR_DURATION_HOURS] = recent_data.get(
             "sensorDurationHours", UNAVAILABLE
         )
-        data[SENSOR_KEY_SENSOR_DURATION_MINUTES] = recent_data.setdefault(
+        data[SENSOR_KEY_SENSOR_DURATION_MINUTES] = recent_data.get(
             "sensorDurationMinutes", UNAVAILABLE
         )
-        data[SENSOR_KEY_RESERVOIR_LEVEL] = recent_data.setdefault(
+        data[SENSOR_KEY_RESERVOIR_LEVEL] = recent_data.get(
             "reservoirLevelPercent", UNAVAILABLE
         )
-        data[SENSOR_KEY_RESERVOIR_AMOUNT] = recent_data.setdefault(
+        data[SENSOR_KEY_RESERVOIR_AMOUNT] = recent_data.get(
             "reservoirAmount", UNAVAILABLE
         )
-        data[SENSOR_KEY_RESERVOIR_REMAINING_UNITS] = recent_data.setdefault(
+        data[SENSOR_KEY_RESERVOIR_REMAINING_UNITS] = recent_data.get(
             "reservoirRemainingUnits", UNAVAILABLE
         )
-        data[SENSOR_KEY_LASTSG_TREND] = recent_data.setdefault(
+        data[SENSOR_KEY_LASTSG_TREND] = recent_data.get(
             "lastSGTrend", UNAVAILABLE
         )
 
-        data[SENSOR_KEY_TIME_TO_NEXT_CALIB_HOURS] = recent_data.setdefault(
+        data[SENSOR_KEY_TIME_TO_NEXT_CALIB_HOURS] = recent_data.get(
             "timeToNextCalibHours", UNAVAILABLE
         )
 
         if recent_data["activeInsulin"]:
             if "amount" in recent_data["activeInsulin"]:
-                # Active insulin sensor
                 active_insulin = recent_data["activeInsulin"]
 
-                amount = recent_data["activeInsulin"].setdefault(
-                    "amount", UNAVAILABLE
-                )
+                amount = recent_data["activeInsulin"].get("amount")
                 if amount is not None and float(amount) >= 0:
                     data[SENSOR_KEY_ACTIVE_INSULIN] = round(float(amount), 2)
 
@@ -590,13 +572,13 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             recent_data["therapyAlgorithmState"] is not None
             and "autoModeShieldState" in recent_data["therapyAlgorithmState"]
         ):
-            data[SENSOR_KEY_ACTIVE_BASAL_PATTERN] = recent_data["therapyAlgorithmState"].setdefault(
+            data[SENSOR_KEY_ACTIVE_BASAL_PATTERN] = recent_data["therapyAlgorithmState"].get(
                 "autoModeShieldState", UNAVAILABLE
             )
         else:
             data[SENSOR_KEY_ACTIVE_BASAL_PATTERN] = UNAVAILABLE
 
-        average_sg_raw = recent_data.setdefault("averageSG", UNAVAILABLE)
+        average_sg_raw = recent_data.get("averageSG")
         if average_sg_raw is not None:
             data[SENSOR_KEY_AVG_GLUCOSE_MMOL] = float(
                 round(average_sg_raw * 0.0555, 2)
@@ -606,19 +588,19 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             data[SENSOR_KEY_AVG_GLUCOSE_MMOL] = UNAVAILABLE
             data[SENSOR_KEY_AVG_GLUCOSE_MGDL] = UNAVAILABLE
 
-        data[SENSOR_KEY_BELOW_HYPO_LIMIT] = recent_data.setdefault(
+        data[SENSOR_KEY_BELOW_HYPO_LIMIT] = recent_data.get(
             "belowHypoLimit", UNAVAILABLE
         )
-        data[SENSOR_KEY_ABOVE_HYPER_LIMIT] = recent_data.setdefault(
+        data[SENSOR_KEY_ABOVE_HYPER_LIMIT] = recent_data.get(
             "aboveHyperLimit", UNAVAILABLE
         )
-        data[SENSOR_KEY_TIME_IN_RANGE] = recent_data.setdefault(
+        data[SENSOR_KEY_TIME_IN_RANGE] = recent_data.get(
             "timeInRange", UNAVAILABLE
         )
-        data[SENSOR_KEY_MAX_AUTO_BASAL_RATE] = recent_data.setdefault(
+        data[SENSOR_KEY_MAX_AUTO_BASAL_RATE] = recent_data.get(
             "maxAutoBasalRate", UNAVAILABLE
         )
-        data[SENSOR_KEY_SG_BELOW_LIMIT] = recent_data.setdefault(
+        data[SENSOR_KEY_SG_BELOW_LIMIT] = recent_data.get(
             "sgBelowLimit", UNAVAILABLE
         )
 
@@ -686,61 +668,56 @@ class CarelinkCoordinator(DataUpdateCoordinator):
 
         # Binary Sensors
 
-        data[BINARY_SENSOR_KEY_PUMP_COMM_STATE] = recent_data.setdefault(
+        data[BINARY_SENSOR_KEY_PUMP_COMM_STATE] = recent_data.get(
             "pumpCommunicationState", UNAVAILABLE
         )
-        data[BINARY_SENSOR_KEY_SENSOR_COMM_STATE] = recent_data.setdefault(
+        data[BINARY_SENSOR_KEY_SENSOR_COMM_STATE] = recent_data.get(
             "gstCommunicationState", UNAVAILABLE
         )
-        data[BINARY_SENSOR_KEY_CONDUIT_IN_RANGE] = recent_data.setdefault(
+        data[BINARY_SENSOR_KEY_CONDUIT_IN_RANGE] = recent_data.get(
             "conduitInRange", UNAVAILABLE
         )
-        data[BINARY_SENSOR_KEY_CONDUIT_PUMP_IN_RANGE] = recent_data.setdefault(
+        data[BINARY_SENSOR_KEY_CONDUIT_PUMP_IN_RANGE] = recent_data.get(
             "conduitMedicalDeviceInRange", UNAVAILABLE
         )
-        data[BINARY_SENSOR_KEY_CONDUIT_SENSOR_IN_RANGE] = recent_data.setdefault(
+        data[BINARY_SENSOR_KEY_CONDUIT_SENSOR_IN_RANGE] = recent_data.get(
             "conduitSensorInRange", UNAVAILABLE
         )
 
         # Device info
 
-        data[DEVICE_PUMP_SERIAL] = recent_data.setdefault(
+        data[DEVICE_PUMP_SERIAL] = recent_data.get(
             "conduitSerialNumber", UNAVAILABLE
         )
         data[DEVICE_PUMP_NAME] = (
-            recent_data.setdefault("firstName", "Name")
+            recent_data.get("firstName", "Name")
             + " "
-            + recent_data.setdefault("lastName", "Unvailable")
+            + recent_data.get("lastName", "Unavailable")
         )
-        data[DEVICE_PUMP_MODEL] = recent_data.setdefault("pumpModelNumber", UNAVAILABLE)
+        data[DEVICE_PUMP_MODEL] = recent_data.get("pumpModelNumber", UNAVAILABLE)
         data[DEVICE_PUMP_MANUFACTURER] = "Medtronic"
 
-        data[SENSOR_KEY_APP_MODEL_TYPE] = recent_data.setdefault(
+        data[SENSOR_KEY_APP_MODEL_TYPE] = recent_data.get(
             "appModelType", UNAVAILABLE
         )
 
-        # Add device info when available
-
-        if "medicalDeviceInformation" in recent_data:
-
-            data[SENSOR_KEY_MEDICAL_DEVICE_MANUFACTURER] = recent_data[
-                "medicalDeviceInformation"
-            ].setdefault("manufacturer", UNAVAILABLE)
-
-            data[SENSOR_KEY_MEDICAL_DEVICE_MODEL_NUMBER] = recent_data[
-                "medicalDeviceInformation"
-            ].setdefault("modelNumber", UNAVAILABLE)
-
-            data[SENSOR_KEY_MEDICAL_DEVICE_HARDWARE_REVISION] = recent_data[
-                "medicalDeviceInformation"
-            ].setdefault("hardwareRevision", UNAVAILABLE)
-
-            data[SENSOR_KEY_MEDICAL_DEVICE_FIRMWARE_REVISION] = recent_data[
-                "medicalDeviceInformation"
-            ].setdefault("firmwareRevision", UNAVAILABLE)
-            data[SENSOR_KEY_MEDICAL_DEVICE_SYSTEM_ID] = recent_data[
-                "medicalDeviceInformation"
-            ].setdefault("systemId", UNAVAILABLE)
+        device_info = recent_data.get("medicalDeviceInformation")
+        if device_info:
+            data[SENSOR_KEY_MEDICAL_DEVICE_MANUFACTURER] = device_info.get(
+                "manufacturer", UNAVAILABLE
+            )
+            data[SENSOR_KEY_MEDICAL_DEVICE_MODEL_NUMBER] = device_info.get(
+                "modelNumber", UNAVAILABLE
+            )
+            data[SENSOR_KEY_MEDICAL_DEVICE_HARDWARE_REVISION] = device_info.get(
+                "hardwareRevision", UNAVAILABLE
+            )
+            data[SENSOR_KEY_MEDICAL_DEVICE_FIRMWARE_REVISION] = device_info.get(
+                "firmwareRevision", UNAVAILABLE
+            )
+            data[SENSOR_KEY_MEDICAL_DEVICE_SYSTEM_ID] = device_info.get(
+                "systemId", UNAVAILABLE
+            )
 
         _LOGGER.debug("_async_update_data: %s", sanitize_for_logging(data))
 
@@ -898,7 +875,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         try:
             metadata_list = await self.client.get_pump_event_metadata()
             metadata_entry = None
-            if metadata_list and isinstance(metadata_list, list) and len(metadata_list) > 0:
+            if isinstance(metadata_list, list) and metadata_list:
                 metadata_entry = metadata_list[0]
             elif isinstance(metadata_list, dict):
                 metadata_entry = metadata_list
@@ -930,6 +907,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         try:
             recent_data = await self.client.get_recent_data(
                 pump_timezone=self.timezone,
+                fallback_date=max_date_str,
             )
         except TandemApiError as err:
             raise UpdateFailed(f"Tandem API error: {err}") from err
@@ -1035,12 +1013,6 @@ class TandemCoordinator(DataUpdateCoordinator):
         pump_events = recent_data.get("pump_events")
         timeline = recent_data.get("therapy_timeline")
 
-        _LOGGER.debug(
-            "TandemCoordinator: Data sources - pump_events=%s, therapy_timeline=%s",
-            "present" if pump_events else "MISSING",
-            "present" if timeline else "MISSING",
-        )
-
         try:
             if pump_events:
                 _LOGGER.debug("TandemCoordinator: Parsing pump events (Source Reports API)")
@@ -1079,6 +1051,13 @@ class TandemCoordinator(DataUpdateCoordinator):
 
     def _parse_therapy_timeline(self, timeline: dict | None, data: dict) -> None:
         """Parse therapy timeline data into sensor values."""
+        # Keys only populated by _parse_pump_events — always default to UNAVAILABLE
+        # when falling back to this path so sensors show unavailable, not unknown.
+        data[TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE] = UNAVAILABLE
+
         if not timeline:
             data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = UNAVAILABLE
@@ -2220,76 +2199,63 @@ class TandemCoordinator(DataUpdateCoordinator):
 # Helper functions (Carelink)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def get_sg(sgs: list, pos: int) -> dict:
-    """Retrieve previous sg from list"""
-
+def get_sg(sgs: list, pos: int) -> dict | None:
+    """Retrieve sensor glucose reading at position from sorted valid readings."""
     try:
-        array = [sg for sg in sgs if "sensorState" in sg.keys() and sg["sensorState"] == "NO_ERROR_MESSAGE"]
-        sorted_array = sorted(
-            array,
+        valid = [
+            sg for sg in sgs
+            if sg.get("sensorState") == "NO_ERROR_MESSAGE"
+        ]
+        sorted_sgs = sorted(
+            valid,
             key=lambda x: convert_date_to_isodate(x["timestamp"]),
             reverse=True,
         )
-
-        if len(sorted_array) > pos:
-            return sorted_array[pos]
-        else:
-            return None
+        if pos < len(sorted_sgs):
+            return sorted_sgs[pos]
+        return None
     except Exception as error:
-        _LOGGER.error(
-            "the sg data could not be tracked correctly. A unknown error happened while parsing the data.",
-            error,
-        )
+        _LOGGER.error("Error retrieving SG data at position %d: %s", pos, error)
         return None
 
-def get_active_notification(last_alarm: list, notifications: list) -> dict:
-    """Retrieve active notification from notifications list"""
+def get_active_notification(last_alarm: dict, notifications: dict) -> dict | None:
+    """Retrieve active notification from notifications list."""
     try:
-        filtered_array = notifications["clearedNotifications"]
-        if filtered_array:
-            sorted_array = sorted(
-                filtered_array,
+        cleared = notifications.get("clearedNotifications")
+        if cleared:
+            sorted_cleared = sorted(
+                cleared,
                 key=lambda x: convert_date_to_isodate(x["dateTime"]),
                 reverse=True,
             )
-            for entry in sorted_array:
+            for entry in sorted_cleared:
                 if last_alarm["GUID"] == entry["referenceGUID"]:
                     return None
             return last_alarm
     except Exception as error:
-        _LOGGER.error(
-            "Check if your Carelink data contains an active notification, it seems to be missing.", error
-        )
+        _LOGGER.error("Error checking active notifications: %s", error)
         return last_alarm
 
-def get_last_marker(marker_type: str, markers: list) -> dict:
-    """Retrieve last marker from type in 24h marker list"""
-
+def get_last_marker(marker_type: str, markers: list) -> dict | None:
+    """Retrieve the most recent marker of the given type from the 24h marker list."""
     try:
-        filtered_array = [marker for marker in markers if marker["type"] == marker_type]
-        sorted_array = sorted(
-            filtered_array,
+        filtered = [m for m in markers if m["type"] == marker_type]
+        sorted_markers = sorted(
+            filtered,
             key=lambda x: convert_date_to_isodate(x["timestamp"]),
             reverse=True,
         )
 
-        last_marker = sorted_array[0]
+        last_marker = sorted_markers[0]
         for k in ["version", "kind", "index", "views"]:
             last_marker.pop(k, None)
         return {
             "DATETIME": convert_date_to_isodate(last_marker["timestamp"]),
             "ATTRS": last_marker,
         }
-    except (IndexError, KeyError) as index_error:
-        _LOGGER.debug(
-            "the marker with type '%s' could not be tracked correctly. Check if your Carelink data contains a key with the name %s, it seems to be missing.",
-            marker_type,
-            index_error,
-        )
+    except (IndexError, KeyError) as err:
+        _LOGGER.debug("No '%s' marker found: %s", marker_type, err)
         return None
     except Exception as error:
-        _LOGGER.error(
-            "the marker with type '%s' could not be tracked correctly. A unknown error happened while parsing the data.",
-            error,
-        )
+        _LOGGER.error("Error parsing '%s' marker: %s", marker_type, error)
         return None

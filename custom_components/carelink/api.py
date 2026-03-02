@@ -27,10 +27,8 @@ import aiofiles
 
 import httpx
 
-# Version string
 VERSION = "0.4"
 
-# Constants
 AUTH_EXPIRE_DEADLINE_MINUTES = 10
 AUTH_FILE_PREFIX = "carelink_logindata"
 LEGACY_AUTH_FILE = "custom_components/carelink/logindata.json"
@@ -149,30 +147,26 @@ class CarelinkClient:
 
     async def __get_data(self, path, query_params, request_body):
         printdbg("__get_data()")
-        if path is None:
-            url = self.__session_config["baseUrlCumulus"] + "/display/message"
-        else:
-            url = path
-        payload = query_params
-        data = request_body
+        url = path if path is not None else (
+            self.__session_config["baseUrlCumulus"] + "/display/message"
+        )
         jsondata = None
 
         # Get auth token
         if await self.__handle_authorization_token():
             try:
-                # Add header
                 headers = self.__common_headers
                 if "mag-identifier" in self.__token_data:
                     headers["mag-identifier"] = self.__token_data["mag-identifier"]
                 headers["Authorization"] = "Bearer " + self.__token_data["access_token"]
-                if data is None:
+                if request_body is None:
                     headers["Accept"] = "application/json, text/plain, */*"
                     headers["Content-Type"] = "application/json; charset=utf-8"
                     response = await self.fetch_async(
-                        url, headers=headers, params=payload
+                        url, headers=headers, params=query_params
                     )
                     self.__last_response_code = response.status_code
-                    if not response.status_code == 200:
+                    if response.status_code != 200:
                         raise ValueError(
                             f"__get_data() session response is not OK: {response.status_code}"
                         )
@@ -183,9 +177,9 @@ class CarelinkClient:
                         "application/signed-exchange;v=b3;q=0.9"
                     )
                     headers["Content-Type"] = "application/x-www-form-urlencoded"
-                    response = await self.post_async(url, headers=headers, data=data)
+                    response = await self.post_async(url, headers=headers, data=request_body)
                     self.__last_response_code = response.status_code
-                    if not response.status_code == 200:
+                    if response.status_code != 200:
                         raise ValueError(
                             f"__get_data() session response is not OK: {response.status_code}"
                         )
@@ -201,13 +195,9 @@ class CarelinkClient:
         return jsondata
 
     def __select_patient(self, patients):
-        patient = None
-        if patients is not None:
-            for p in patients:
-                if p["status"] == "ACTIVE":
-                    patient = p
-                    break
-        return patient
+        if patients is None:
+            return None
+        return next((p for p in patients if p["status"] == "ACTIVE"), None)
 
     async def __get_patients(self):
         printdbg("__get_patients()")
@@ -228,7 +218,7 @@ class CarelinkClient:
         try:
             resp = await self.fetch_async(CARELINK_CONFIG_URL, self.__common_headers)
             self.__last_response_code = resp.status_code
-            if not resp.status_code == 200:
+            if resp.status_code != 200:
                 raise ValueError(
                     f"__get_config_settings() CARELINK_CONFIG_URL response is not OK: {resp.status_code}"
                 )
@@ -258,7 +248,7 @@ class CarelinkClient:
 
             resp = await self.fetch_async(config[sso_configuration_key], self.__common_headers)
             self.__last_response_code = resp.status_code
-            if not resp.status_code == 200:
+            if resp.status_code != 200:
                 raise ValueError(
                     f"__get_config_settings() SSOConfiguration response is not OK: {resp.status_code}"
                 )
@@ -385,7 +375,6 @@ class CarelinkClient:
                         printdbg(e)
                     return
             self.__initialized = True
-        return
 
     async def __refresh_token(self, config, token_data):
         printdbg("__refresh_token")

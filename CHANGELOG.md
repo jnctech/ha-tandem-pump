@@ -5,6 +5,15 @@ All notable changes to the Tandem Source / Carelink integration will be document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - develop
+
+### Fixed
+- **Sensors showing "unknown" when pump not syncing recently**: When no pump events were returned for the current date range, four sensor keys (`last_carbs_timestamp`, `last_cartridge_change`, `last_site_change`, `last_tubing_change`) were missing entirely from the coordinator data dict, causing sensors to show "unknown" instead of "unavailable" (#17)
+  - `_parse_therapy_timeline()` now always initialises these four keys to `UNAVAILABLE` before processing
+- **No sensor data after extended sync gap**: When the current date range contains no pump events (e.g. pump hasn't synced in several days), the integration now fetches events from the last-known date range (`maxDateWithEvents`) as a fallback, restoring display of last-known pump state instead of all sensors going blank (#17)
+- **Base64 decode exception too broad**: Tightened exception handling in `decode_pump_events()` to catch only `ValueError` and `binascii.Error` instead of bare `Exception`
+- **Bearer None on 401 re-login**: Added guard to raise `TandemAuthError` if re-login succeeds but no token is obtained, preventing a second API call with `Authorization: Bearer None`
+
 ## [1.2.1] - 2026-02-14
 
 ### Added

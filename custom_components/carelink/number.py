@@ -1,4 +1,5 @@
 """Number entity for user-configurable cartridge fill volume."""
+
 from __future__ import annotations
 
 import logging
@@ -72,7 +73,8 @@ class CartridgeFillVolumeNumber(RestoreEntity, NumberEntity):
             except (ValueError, TypeError) as err:
                 _LOGGER.warning(
                     "Carelink: Could not restore cartridge fill volume from state %r: %s",
-                    last_state.state, err,
+                    last_state.state,
+                    err,
                 )
 
     async def async_set_native_value(self, value: float) -> None:
@@ -84,12 +86,8 @@ class CartridgeFillVolumeNumber(RestoreEntity, NumberEntity):
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
         return DeviceInfo(
-            identifiers={
-                (DOMAIN, self._coordinator.data.get(DEVICE_PUMP_SERIAL, "unknown"))
-            },
+            identifiers={(DOMAIN, self._coordinator.data.get(DEVICE_PUMP_SERIAL, "unknown"))},
             name=self._coordinator.data.get(DEVICE_PUMP_NAME, "Tandem Pump"),
-            manufacturer=self._coordinator.data.get(
-                DEVICE_PUMP_MANUFACTURER, "Tandem Diabetes Care"
-            ),
+            manufacturer=self._coordinator.data.get(DEVICE_PUMP_MANUFACTURER, "Tandem Diabetes Care"),
             model=self._coordinator.data.get(DEVICE_PUMP_MODEL, "t:slim X2"),
         )

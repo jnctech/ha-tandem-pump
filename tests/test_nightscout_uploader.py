@@ -1,4 +1,5 @@
 """Tests for the Nightscout uploader."""
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.carelink.nightscout_uploader import NightscoutUploader
@@ -20,7 +21,6 @@ class TestNightscoutUploaderInit:
         )
         # URL should be lowercased and trailing slash removed
         assert str(uploader._NightscoutUploader__nightscout_url) == "https://nightscout.example.com"
-
 
     def test_init_secret_hashing(self):
         """Test that secret is hashed with SHA1."""
@@ -71,9 +71,7 @@ class TestNightscoutUploaderRequests:
         mock_client.get = AsyncMock(return_value=mock_response)
         mock_nightscout_uploader._async_client = mock_client
 
-        response = await mock_nightscout_uploader.fetch_async(
-            "https://test.com", headers={}
-        )
+        response = await mock_nightscout_uploader.fetch_async("https://test.com", headers={})
 
         assert response.status_code == 200
         mock_client.get.assert_called_once()
@@ -87,9 +85,7 @@ class TestNightscoutUploaderRequests:
         mock_client.post = AsyncMock(return_value=mock_response)
         mock_nightscout_uploader._async_client = mock_client
 
-        response = await mock_nightscout_uploader.post_async(
-            "https://test.com", headers={}, data="{}"
-        )
+        response = await mock_nightscout_uploader.post_async("https://test.com", headers={}, data="{}")
 
         assert response.status_code == 200
         mock_client.post.assert_called_once()
@@ -103,9 +99,7 @@ class TestNightscoutUploaderServerConnection:
         mock_response = MagicMock()
         mock_response.status_code = 200
 
-        with patch.object(
-            mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock
-        ) as mock_fetch:
+        with patch.object(mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock) as mock_fetch:
             mock_fetch.return_value = mock_response
 
             result = await mock_nightscout_uploader.reachServer()
@@ -117,9 +111,7 @@ class TestNightscoutUploaderServerConnection:
         mock_response = MagicMock()
         mock_response.status_code = 401
 
-        with patch.object(
-            mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock
-        ) as mock_fetch:
+        with patch.object(mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock) as mock_fetch:
             mock_fetch.return_value = mock_response
 
             result = await mock_nightscout_uploader.reachServer()
@@ -135,9 +127,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 100}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         assert trend == "Flat"
         assert delta == 0
@@ -147,9 +137,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 110}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         assert trend == "SingleUp"
         assert delta == 10
@@ -159,9 +147,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 90}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         assert trend == "SingleDown"
         assert delta == -10
@@ -171,9 +157,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 120}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         assert trend == "DoubleUp"
         assert delta == 20
@@ -183,9 +167,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 80}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         assert trend == "DoubleDown"
         assert delta == -20
@@ -195,9 +177,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 0}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         assert trend == "null"
         assert delta == "null"
@@ -208,9 +188,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 131}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         assert trend == "TripleUp"
         assert delta == 31
@@ -220,9 +198,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 69}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         assert trend == "TripleDown"
         assert delta == -31
@@ -232,9 +208,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 130}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         # delta=30 is NOT > 30, so should be DoubleUp (delta > 15)
         assert trend == "DoubleUp"
@@ -245,9 +219,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 70}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         # delta=-30 is NOT < -30, so should be DoubleDown (delta < -15)
         assert trend == "DoubleDown"
@@ -258,9 +230,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 115}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         # delta=15 is NOT > 15, so should be SingleUp (delta > 5)
         assert trend == "SingleUp"
@@ -271,9 +241,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 85}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         # delta=-15 is NOT < -15, so should be SingleDown (delta < -5)
         assert trend == "SingleDown"
@@ -284,9 +252,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 103}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         # delta=3 is > 0 but not > 5, so FortyFiveUp
         assert trend == "FortyFiveUp"
@@ -297,9 +263,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 97}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         # delta=-3 is < 0 but not < -5, so FortyFiveDown
         assert trend == "FortyFiveDown"
@@ -310,9 +274,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 105}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         # delta=5 is NOT > 5, so should be FortyFiveUp (delta > 0)
         assert trend == "FortyFiveUp"
@@ -323,9 +285,7 @@ class TestNightscoutDataTransformation:
         present = {"sg": 95}
         past = {"sg": 100}
 
-        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(
-            present, past
-        )
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend(present, past)
 
         # delta=-5 is NOT < -5, so should be FortyFiveDown (delta < 0)
         assert trend == "FortyFiveDown"
@@ -333,14 +293,10 @@ class TestNightscoutDataTransformation:
 
     def test_get_note(self, mock_nightscout_uploader):
         """Test note formatting."""
-        result = mock_nightscout_uploader._NightscoutUploader__getNote(
-            "BC_SID_TEST_MESSAGE"
-        )
+        result = mock_nightscout_uploader._NightscoutUploader__getNote("BC_SID_TEST_MESSAGE")
         assert result == "TEST_MESSAGE"
 
-        result = mock_nightscout_uploader._NightscoutUploader__getNote(
-            "BC_MESSAGE_ANOTHER_TEST"
-        )
+        result = mock_nightscout_uploader._NightscoutUploader__getNote("BC_MESSAGE_ANOTHER_TEST")
         assert result == "ANOTHER_TEST"
 
 
@@ -350,6 +306,7 @@ class TestNightscoutSSLContext:
     def test_async_client_ssl_verification_enabled(self, mock_nightscout_uploader):
         """async_client should be created with SSL verification, not disabled."""
         import httpx
+
         client = mock_nightscout_uploader.async_client
         assert isinstance(client, httpx.AsyncClient)
         # The client must not have SSL verification disabled
@@ -368,8 +325,11 @@ class TestNightscoutServerConnectionErrors:
     async def test_reach_server_timeout(self, mock_nightscout_uploader):
         """Server timeout leaves is_reachable False."""
         import httpx
+
         with patch.object(
-            mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock,
+            mock_nightscout_uploader,
+            "fetch_async",
+            new_callable=AsyncMock,
             side_effect=httpx.TimeoutException("timed out"),
         ):
             result = await mock_nightscout_uploader.reachServer()
@@ -378,8 +338,11 @@ class TestNightscoutServerConnectionErrors:
     async def test_reach_server_connect_error(self, mock_nightscout_uploader):
         """Connection error leaves is_reachable False."""
         import httpx
+
         with patch.object(
-            mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock,
+            mock_nightscout_uploader,
+            "fetch_async",
+            new_callable=AsyncMock,
             side_effect=httpx.ConnectError("connection refused"),
         ):
             result = await mock_nightscout_uploader.reachServer()
@@ -388,8 +351,11 @@ class TestNightscoutServerConnectionErrors:
     async def test_reach_server_generic_request_error(self, mock_nightscout_uploader):
         """Generic network error leaves is_reachable False."""
         import httpx
+
         with patch.object(
-            mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock,
+            mock_nightscout_uploader,
+            "fetch_async",
+            new_callable=AsyncMock,
             side_effect=httpx.RequestError("network error"),
         ):
             result = await mock_nightscout_uploader.reachServer()
@@ -400,7 +366,9 @@ class TestNightscoutServerConnectionErrors:
         mock_response = MagicMock()
         mock_response.status_code = 500
         with patch.object(
-            mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock,
+            mock_nightscout_uploader,
+            "fetch_async",
+            new_callable=AsyncMock,
             return_value=mock_response,
         ):
             result = await mock_nightscout_uploader.reachServer()
@@ -411,7 +379,9 @@ class TestNightscoutServerConnectionErrors:
         mock_response = MagicMock()
         mock_response.status_code = 200
         with patch.object(
-            mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock,
+            mock_nightscout_uploader,
+            "fetch_async",
+            new_callable=AsyncMock,
             return_value=mock_response,
         ) as mock_fetch:
             await mock_nightscout_uploader.reachServer()
@@ -425,6 +395,7 @@ class TestNightscoutSGSEntries:
     def test_single_entry_has_null_trend(self, mock_nightscout_uploader):
         """First SGS entry must have null trend — no prior reading to compare against."""
         from zoneinfo import ZoneInfo
+
         tz = ZoneInfo("UTC")
         sgs = [{"timestamp": "2024-01-15T12:00:00.000Z", "sg": 120}]
         entries = mock_nightscout_uploader._NightscoutUploader__getSGSEntries(sgs, tz)
@@ -435,6 +406,7 @@ class TestNightscoutSGSEntries:
     def test_second_entry_gets_computed_trend(self, mock_nightscout_uploader):
         """Second entry should have a real trend computed against the first."""
         from zoneinfo import ZoneInfo
+
         tz = ZoneInfo("UTC")
         # sgs[0] is most-recent (sg=120); sgs[1] is older (sg=130).
         # Trend for entry 1: __ns_trend(sgs[1], sgs[0]) = 130-120 = +10 → SingleUp
@@ -450,6 +422,7 @@ class TestNightscoutSGSEntries:
     def test_multiple_entries_first_always_null(self, mock_nightscout_uploader):
         """With N entries, index 0 is always null regardless of values."""
         from zoneinfo import ZoneInfo
+
         tz = ZoneInfo("UTC")
         sgs = [
             {"timestamp": "2024-01-15T12:10:00.000Z", "sg": 150},
@@ -482,11 +455,10 @@ class TestNightscoutUploadSection:
         getter.assert_called_once_with("arg1")
         mock_set.assert_called_once()
 
-    async def test_upload_section_getter_exception_logs_warning(
-        self, mock_nightscout_uploader, caplog
-    ):
+    async def test_upload_section_getter_exception_logs_warning(self, mock_nightscout_uploader, caplog):
         """__upload_section logs a WARNING when the getter raises."""
         import logging
+
         getter = MagicMock(side_effect=KeyError("missing key"))
         with patch.object(
             mock_nightscout_uploader,
@@ -511,7 +483,5 @@ class TestNightscoutUploadSection:
             return_value=False,
         ):
             # Should not raise
-            result = await mock_nightscout_uploader._NightscoutUploader__upload_section(
-                "section", getter, "treatments"
-            )
+            result = await mock_nightscout_uploader._NightscoutUploader__upload_section("section", getter, "treatments")
         assert result is False

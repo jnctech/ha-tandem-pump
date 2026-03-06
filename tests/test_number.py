@@ -1,4 +1,5 @@
 """Tests for CartridgeFillVolumeNumber entity (M1 — state restore warning)."""
+
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 

@@ -1,4 +1,5 @@
 """Tests for device_info .get() fallback in sensor and binary_sensor (C4)."""
+
 from unittest.mock import MagicMock
 
 from custom_components.carelink.const import (
@@ -48,12 +49,14 @@ class TestSensorDeviceInfoFallback:
 
     def test_device_info_full_data(self):
         """device_info returns full data when all keys present."""
-        sensor = _make_sensor({
-            DEVICE_PUMP_SERIAL: "SN-12345",
-            DEVICE_PUMP_NAME: "My Pump",
-            DEVICE_PUMP_MODEL: "t:slim X2",
-            DEVICE_PUMP_MANUFACTURER: "Tandem Diabetes Care",
-        })
+        sensor = _make_sensor(
+            {
+                DEVICE_PUMP_SERIAL: "SN-12345",
+                DEVICE_PUMP_NAME: "My Pump",
+                DEVICE_PUMP_MODEL: "t:slim X2",
+                DEVICE_PUMP_MANUFACTURER: "Tandem Diabetes Care",
+            }
+        )
         info = sensor.device_info
         assert (DOMAIN, "SN-12345") in info["identifiers"]
         assert info["name"] == "My Pump"
@@ -62,28 +65,34 @@ class TestSensorDeviceInfoFallback:
 
     def test_device_info_missing_serial_uses_unknown(self):
         """Missing DEVICE_PUMP_SERIAL falls back to 'unknown' — no KeyError."""
-        sensor = _make_sensor({
-            DEVICE_PUMP_NAME: "My Pump",
-            DEVICE_PUMP_MODEL: "t:slim X2",
-        })
+        sensor = _make_sensor(
+            {
+                DEVICE_PUMP_NAME: "My Pump",
+                DEVICE_PUMP_MODEL: "t:slim X2",
+            }
+        )
         info = sensor.device_info
         assert (DOMAIN, "unknown") in info["identifiers"]
 
     def test_device_info_missing_name_uses_pump(self):
         """Missing DEVICE_PUMP_NAME falls back to 'Pump' — no KeyError."""
-        sensor = _make_sensor({
-            DEVICE_PUMP_SERIAL: "SN-12345",
-            DEVICE_PUMP_MODEL: "t:slim X2",
-        })
+        sensor = _make_sensor(
+            {
+                DEVICE_PUMP_SERIAL: "SN-12345",
+                DEVICE_PUMP_MODEL: "t:slim X2",
+            }
+        )
         info = sensor.device_info
         assert info["name"] == "Pump"
 
     def test_device_info_missing_model_is_none(self):
         """Missing DEVICE_PUMP_MODEL returns None — no KeyError."""
-        sensor = _make_sensor({
-            DEVICE_PUMP_SERIAL: "SN-12345",
-            DEVICE_PUMP_NAME: "My Pump",
-        })
+        sensor = _make_sensor(
+            {
+                DEVICE_PUMP_SERIAL: "SN-12345",
+                DEVICE_PUMP_NAME: "My Pump",
+            }
+        )
         info = sensor.device_info
         assert info.get("model") is None
 
@@ -100,12 +109,14 @@ class TestBinarySensorDeviceInfoFallback:
 
     def test_device_info_full_data(self):
         """device_info returns full data when all keys present."""
-        bs = _make_binary_sensor({
-            DEVICE_PUMP_SERIAL: "SN-99999",
-            DEVICE_PUMP_NAME: "Carelink Pump",
-            DEVICE_PUMP_MODEL: "MMT-1780",
-            DEVICE_PUMP_MANUFACTURER: "Medtronic",
-        })
+        bs = _make_binary_sensor(
+            {
+                DEVICE_PUMP_SERIAL: "SN-99999",
+                DEVICE_PUMP_NAME: "Carelink Pump",
+                DEVICE_PUMP_MODEL: "MMT-1780",
+                DEVICE_PUMP_MANUFACTURER: "Medtronic",
+            }
+        )
         info = bs.device_info
         assert (DOMAIN, "SN-99999") in info["identifiers"]
         assert info["name"] == "Carelink Pump"

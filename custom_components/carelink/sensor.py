@@ -1,4 +1,5 @@
 """Support for Carelink / Tandem sensors."""
+
 from __future__ import annotations
 
 import logging
@@ -49,10 +50,7 @@ async def async_setup_entry(
     sensor_definitions = TANDEM_SENSORS if platform_type == PLATFORM_TANDEM else SENSORS
 
     entities = [
-        CarelinkSensorEntity(
-            coordinator, desc, f"{DOMAIN} {desc.name}", platform_type
-        )
-        for desc in sensor_definitions
+        CarelinkSensorEntity(coordinator, desc, f"{DOMAIN} {desc.name}", platform_type) for desc in sensor_definitions
     ]
 
     async_add_entities(entities)
@@ -104,7 +102,7 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
             _LOGGER.debug(
                 "Sensor %s has None value (key: %s not in coordinator.data)",
                 self.sensor_description.name,
-                self.sensor_description.key
+                self.sensor_description.key,
             )
         return value
 
@@ -127,9 +125,7 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
-        manufacturer = self.coordinator.data.get(
-            DEVICE_PUMP_MANUFACTURER, "Medtronic"
-        )
+        manufacturer = self.coordinator.data.get(DEVICE_PUMP_MANUFACTURER, "Medtronic")
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.data.get(DEVICE_PUMP_SERIAL, "unknown"))},
             name=self.coordinator.data.get(DEVICE_PUMP_NAME, "Pump"),
@@ -143,6 +139,4 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        return self.coordinator.data.get(
-            f"{self.sensor_description.key}_attributes", {}
-        )
+        return self.coordinator.data.get(f"{self.sensor_description.key}_attributes", {})

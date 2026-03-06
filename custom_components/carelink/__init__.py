@@ -1,4 +1,5 @@
 """Medtronic Carelink / Tandem t:slim integration."""
+
 from __future__ import annotations
 
 import logging
@@ -158,10 +159,24 @@ _LOGGER = logging.getLogger(__name__)
 
 # Fields containing personally identifiable information that should be redacted from logs
 PII_FIELDS = {
-    "firstName", "lastName", "username", "patientId", "conduitSerialNumber",
-    "medicalDeviceSerialNumber", "systemId", "email", "phone", "emailAddress",
-    "phoneNumber", "address", "dateOfBirth", "dob", "deviceSerialNumber",
-    "patientName", "patientDateOfBirth", "patientCareGiver",
+    "firstName",
+    "lastName",
+    "username",
+    "patientId",
+    "conduitSerialNumber",
+    "medicalDeviceSerialNumber",
+    "systemId",
+    "email",
+    "phone",
+    "emailAddress",
+    "phoneNumber",
+    "address",
+    "dateOfBirth",
+    "dob",
+    "deviceSerialNumber",
+    "patientName",
+    "patientDateOfBirth",
+    "patientCareGiver",
 }
 
 
@@ -170,10 +185,7 @@ def sanitize_for_logging(data, depth=0):
     if depth > 10:  # Prevent infinite recursion
         return "[MAX_DEPTH]"
     if isinstance(data, dict):
-        return {
-            k: "[REDACTED]" if k in PII_FIELDS else sanitize_for_logging(v, depth + 1)
-            for k, v in data.items()
-        }
+        return {k: "[REDACTED]" if k in PII_FIELDS else sanitize_for_logging(v, depth + 1) for k, v in data.items()}
     if isinstance(data, list):
         return [sanitize_for_logging(item, depth + 1) for item in data]
     return data
@@ -216,38 +228,28 @@ def _migrate_legacy_logindata(config_path: str, entry_id: str) -> None:
     if os.path.exists(shared_path):
         try:
             shutil.copy(shared_path, new_path)
-            _LOGGER.info(
-                "Copied logindata from shared location %s to %s",
-                shared_path,
-                new_path
-            )
+            _LOGGER.info("Copied logindata from shared location %s to %s", shared_path, new_path)
             return
         except OSError as error:
             _LOGGER.warning(
-                "Failed to copy logindata from %s to %s: %s. "
-                "Will use fallback location at runtime.",
+                "Failed to copy logindata from %s to %s: %s. Will use fallback location at runtime.",
                 shared_path,
                 new_path,
-                error
+                error,
             )
 
     # Try legacy location (old installations)
     if os.path.exists(legacy_path):
         try:
             shutil.copy(legacy_path, new_path)
-            _LOGGER.info(
-                "Migrated logindata from legacy location %s to %s",
-                legacy_path,
-                new_path
-            )
+            _LOGGER.info("Migrated logindata from legacy location %s to %s", legacy_path, new_path)
             return
         except OSError as error:
             _LOGGER.warning(
-                "Failed to migrate logindata from %s to %s: %s. "
-                "Will use fallback location at runtime.",
+                "Failed to migrate logindata from %s to %s: %s. Will use fallback location at runtime.",
                 legacy_path,
                 new_path,
-                error
+                error,
             )
 
 
@@ -264,9 +266,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return await _async_setup_carelink_entry(hass, entry, config)
 
 
-async def _async_setup_carelink_entry(
-    hass: HomeAssistant, entry: ConfigEntry, config: dict
-) -> bool:
+async def _async_setup_carelink_entry(hass: HomeAssistant, entry: ConfigEntry, config: dict) -> bool:
     """Set up a Medtronic Carelink config entry."""
     # Migrate logindata from old location if needed
     _migrate_legacy_logindata(hass.config.path(), entry.entry_id)
@@ -279,7 +279,7 @@ async def _async_setup_carelink_entry(
         config["cl_mag_identifier"],
         config["patientId"],
         config_path=hass.config.path(),
-        entry_id=entry.entry_id
+        entry_id=entry.entry_id,
     )
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
@@ -288,15 +288,10 @@ async def _async_setup_carelink_entry(
     }
 
     if config.get("nightscout_url") and config.get("nightscout_api"):
-        nightscout_uploader = NightscoutUploader(
-            config["nightscout_url"],
-            config["nightscout_api"]
-        )
+        nightscout_uploader = NightscoutUploader(config["nightscout_url"], config["nightscout_api"])
         hass.data[DOMAIN][entry.entry_id][UPLOADER] = nightscout_uploader
 
-    coordinator = CarelinkCoordinator(
-        hass, entry, update_interval=timedelta(seconds=config[SCAN_INTERVAL])
-    )
+    coordinator = CarelinkCoordinator(hass, entry, update_interval=timedelta(seconds=config[SCAN_INTERVAL]))
 
     await coordinator.async_config_entry_first_refresh()
 
@@ -307,9 +302,7 @@ async def _async_setup_carelink_entry(
     return True
 
 
-async def _async_setup_tandem_entry(
-    hass: HomeAssistant, entry: ConfigEntry, config: dict
-) -> bool:
+async def _async_setup_tandem_entry(hass: HomeAssistant, entry: ConfigEntry, config: dict) -> bool:
     """Set up a Tandem t:slim Source config entry."""
     _LOGGER.info("Setting up Tandem entry: %s", entry.entry_id)
 
@@ -325,15 +318,10 @@ async def _async_setup_tandem_entry(
     }
 
     if config.get("nightscout_url") and config.get("nightscout_api"):
-        nightscout_uploader = NightscoutUploader(
-            config["nightscout_url"],
-            config["nightscout_api"]
-        )
+        nightscout_uploader = NightscoutUploader(config["nightscout_url"], config["nightscout_api"])
         hass.data[DOMAIN][entry.entry_id][UPLOADER] = nightscout_uploader
 
-    coordinator = TandemCoordinator(
-        hass, entry, update_interval=timedelta(seconds=config[SCAN_INTERVAL])
-    )
+    coordinator = TandemCoordinator(hass, entry, update_interval=timedelta(seconds=config[SCAN_INTERVAL]))
 
     await coordinator.async_config_entry_first_refresh()
 
@@ -374,6 +362,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 # Carelink (Medtronic) Coordinator
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class CarelinkCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the Carelink API."""
 
@@ -402,8 +391,8 @@ class CarelinkCoordinator(DataUpdateCoordinator):
 
         if recent_data is None:
             recent_data = {}
-        if recent_data and 'patientData' in recent_data:
-            recent_data=recent_data['patientData']
+        if recent_data and "patientData" in recent_data:
+            recent_data = recent_data["patientData"]
 
         _LOGGER.debug("Before Data parsing %s", sanitize_for_logging(recent_data))
         try:
@@ -412,16 +401,12 @@ class CarelinkCoordinator(DataUpdateCoordinator):
 
             data[SENSOR_KEY_CLIENT_TIMEZONE] = client_timezone
 
-            timezone_map = MS_TIMEZONE_TO_IANA_MAP.get(
-                client_timezone, DEFAULT_TIME_ZONE
-            )
+            timezone_map = MS_TIMEZONE_TO_IANA_MAP.get(client_timezone, DEFAULT_TIME_ZONE)
 
             timezone = ZoneInfo(str(timezone_map))
 
         except Exception as error:
-            _LOGGER.error(
-                "Can not set timezone to %s. The error was: %s", timezone_map, error
-            )
+            _LOGGER.error("Can not set timezone to %s. The error was: %s", timezone_map, error)
             timezone = ZoneInfo("Europe/London")
 
         _LOGGER.debug("Using timezone %s", timezone)
@@ -454,19 +439,18 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             data[SENSOR_KEY_LASTSG_MMOL] = float(round(current_sg["sg"] * 0.0555, 2))
             data[SENSOR_KEY_LASTSG_MGDL] = current_sg["sg"]
             if prev_sg:
-                data[SENSOR_KEY_SG_DELTA] = (float(current_sg["sg"]) - float(prev_sg["sg"]))
+                data[SENSOR_KEY_SG_DELTA] = float(current_sg["sg"]) - float(prev_sg["sg"])
 
         # ── Historical SG readings for statistics ─────────────────────
         all_valid_sgs = [
-            sg for sg in recent_data["sgs"]
+            sg
+            for sg in recent_data["sgs"]
             if sg.get("sensorState") == "NO_ERROR_MESSAGE"
             and sg.get("sg") is not None
             and sg.get("sg", 0) > 0
             and "timestamp" in sg
         ]
-        all_valid_sgs.sort(
-            key=lambda x: convert_date_to_isodate(x["timestamp"])
-        )
+        all_valid_sgs.sort(key=lambda x: convert_date_to_isodate(x["timestamp"]))
 
         if all_valid_sgs:
             # Store readings history as attributes for custom cards
@@ -475,15 +459,9 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             sg_readings_mgdl = []
             sg_readings_mmol = []
             for sg in recent_sgs:
-                ts_iso = convert_date_to_isodate(
-                    sg["timestamp"]
-                ).replace(tzinfo=timezone).isoformat()
-                sg_readings_mgdl.append(
-                    {"t": ts_iso, "v": sg["sg"]}
-                )
-                sg_readings_mmol.append(
-                    {"t": ts_iso, "v": round(float(sg["sg"]) * 0.0555, 2)}
-                )
+                ts_iso = convert_date_to_isodate(sg["timestamp"]).replace(tzinfo=timezone).isoformat()
+                sg_readings_mgdl.append({"t": ts_iso, "v": sg["sg"]})
+                sg_readings_mmol.append({"t": ts_iso, "v": round(float(sg["sg"]) * 0.0555, 2)})
             data[f"{SENSOR_KEY_LASTSG_MGDL}_attributes"] = {
                 "readings": sg_readings_mgdl,
             }
@@ -492,37 +470,17 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             }
         # Sensors
 
-        data[SENSOR_KEY_PUMP_BATTERY_LEVEL] = recent_data.get(
-            "pumpBatteryLevelPercent", UNAVAILABLE
-        )
-        data[SENSOR_KEY_CONDUIT_BATTERY_LEVEL] = recent_data.get(
-            "conduitBatteryLevel", UNAVAILABLE
-        )
-        data[SENSOR_KEY_SENSOR_BATTERY_LEVEL] = recent_data.get(
-            "gstBatteryLevel", UNAVAILABLE
-        )
-        data[SENSOR_KEY_SENSOR_DURATION_HOURS] = recent_data.get(
-            "sensorDurationHours", UNAVAILABLE
-        )
-        data[SENSOR_KEY_SENSOR_DURATION_MINUTES] = recent_data.get(
-            "sensorDurationMinutes", UNAVAILABLE
-        )
-        data[SENSOR_KEY_RESERVOIR_LEVEL] = recent_data.get(
-            "reservoirLevelPercent", UNAVAILABLE
-        )
-        data[SENSOR_KEY_RESERVOIR_AMOUNT] = recent_data.get(
-            "reservoirAmount", UNAVAILABLE
-        )
-        data[SENSOR_KEY_RESERVOIR_REMAINING_UNITS] = recent_data.get(
-            "reservoirRemainingUnits", UNAVAILABLE
-        )
-        data[SENSOR_KEY_LASTSG_TREND] = recent_data.get(
-            "lastSGTrend", UNAVAILABLE
-        )
+        data[SENSOR_KEY_PUMP_BATTERY_LEVEL] = recent_data.get("pumpBatteryLevelPercent", UNAVAILABLE)
+        data[SENSOR_KEY_CONDUIT_BATTERY_LEVEL] = recent_data.get("conduitBatteryLevel", UNAVAILABLE)
+        data[SENSOR_KEY_SENSOR_BATTERY_LEVEL] = recent_data.get("gstBatteryLevel", UNAVAILABLE)
+        data[SENSOR_KEY_SENSOR_DURATION_HOURS] = recent_data.get("sensorDurationHours", UNAVAILABLE)
+        data[SENSOR_KEY_SENSOR_DURATION_MINUTES] = recent_data.get("sensorDurationMinutes", UNAVAILABLE)
+        data[SENSOR_KEY_RESERVOIR_LEVEL] = recent_data.get("reservoirLevelPercent", UNAVAILABLE)
+        data[SENSOR_KEY_RESERVOIR_AMOUNT] = recent_data.get("reservoirAmount", UNAVAILABLE)
+        data[SENSOR_KEY_RESERVOIR_REMAINING_UNITS] = recent_data.get("reservoirRemainingUnits", UNAVAILABLE)
+        data[SENSOR_KEY_LASTSG_TREND] = recent_data.get("lastSGTrend", UNAVAILABLE)
 
-        data[SENSOR_KEY_TIME_TO_NEXT_CALIB_HOURS] = recent_data.get(
-            "timeToNextCalibHours", UNAVAILABLE
-        )
+        data[SENSOR_KEY_TIME_TO_NEXT_CALIB_HOURS] = recent_data.get("timeToNextCalibHours", UNAVAILABLE)
 
         if recent_data["activeInsulin"]:
             if "amount" in recent_data["activeInsulin"]:
@@ -548,7 +506,7 @@ class CarelinkCoordinator(DataUpdateCoordinator):
 
             date_time_local = convert_date_to_isodate(last_alarm["dateTime"])
 
-            last_alarm["dateTime"]=date_time_local
+            last_alarm["dateTime"] = date_time_local
             # Handle both numeric and string faultId values (Simplera sensor uses strings like 'alert.sg.threshold.low')
             fault_id = last_alarm.get("faultId")
             if fault_id is not None:
@@ -588,36 +546,22 @@ class CarelinkCoordinator(DataUpdateCoordinator):
 
         average_sg_raw = recent_data.get("averageSG")
         if average_sg_raw is not None:
-            data[SENSOR_KEY_AVG_GLUCOSE_MMOL] = float(
-                round(average_sg_raw * 0.0555, 2)
-            )
+            data[SENSOR_KEY_AVG_GLUCOSE_MMOL] = float(round(average_sg_raw * 0.0555, 2))
             data[SENSOR_KEY_AVG_GLUCOSE_MGDL] = average_sg_raw
         else:
             data[SENSOR_KEY_AVG_GLUCOSE_MMOL] = UNAVAILABLE
             data[SENSOR_KEY_AVG_GLUCOSE_MGDL] = UNAVAILABLE
 
-        data[SENSOR_KEY_BELOW_HYPO_LIMIT] = recent_data.get(
-            "belowHypoLimit", UNAVAILABLE
-        )
-        data[SENSOR_KEY_ABOVE_HYPER_LIMIT] = recent_data.get(
-            "aboveHyperLimit", UNAVAILABLE
-        )
-        data[SENSOR_KEY_TIME_IN_RANGE] = recent_data.get(
-            "timeInRange", UNAVAILABLE
-        )
-        data[SENSOR_KEY_MAX_AUTO_BASAL_RATE] = recent_data.get(
-            "maxAutoBasalRate", UNAVAILABLE
-        )
-        data[SENSOR_KEY_SG_BELOW_LIMIT] = recent_data.get(
-            "sgBelowLimit", UNAVAILABLE
-        )
+        data[SENSOR_KEY_BELOW_HYPO_LIMIT] = recent_data.get("belowHypoLimit", UNAVAILABLE)
+        data[SENSOR_KEY_ABOVE_HYPER_LIMIT] = recent_data.get("aboveHyperLimit", UNAVAILABLE)
+        data[SENSOR_KEY_TIME_IN_RANGE] = recent_data.get("timeInRange", UNAVAILABLE)
+        data[SENSOR_KEY_MAX_AUTO_BASAL_RATE] = recent_data.get("maxAutoBasalRate", UNAVAILABLE)
+        data[SENSOR_KEY_SG_BELOW_LIMIT] = recent_data.get("sgBelowLimit", UNAVAILABLE)
 
         last_meal_marker = get_last_marker("MEAL", recent_data["markers"])
 
         if last_meal_marker is not None:
-            data[SENSOR_KEY_LAST_MEAL_MARKER] = last_meal_marker["DATETIME"].replace(
-                tzinfo=timezone
-            )
+            data[SENSOR_KEY_LAST_MEAL_MARKER] = last_meal_marker["DATETIME"].replace(tzinfo=timezone)
             data[SENSOR_KEY_LAST_MEAL_MARKER_ATTRS] = last_meal_marker["ATTRS"]
         else:
             data[SENSOR_KEY_LAST_MEAL_MARKER] = UNAVAILABLE
@@ -625,123 +569,77 @@ class CarelinkCoordinator(DataUpdateCoordinator):
         last_insuline_marker = get_last_marker("INSULIN", recent_data["markers"])
 
         if last_insuline_marker is not None:
-            data[SENSOR_KEY_LAST_INSULIN_MARKER] = last_insuline_marker[
-                "DATETIME"
-            ].replace(tzinfo=timezone)
+            data[SENSOR_KEY_LAST_INSULIN_MARKER] = last_insuline_marker["DATETIME"].replace(tzinfo=timezone)
             data[SENSOR_KEY_LAST_INSULIN_MARKER_ATTRS] = last_insuline_marker["ATTRS"]
         else:
             data[SENSOR_KEY_LAST_INSULIN_MARKER] = UNAVAILABLE
 
-        last_autobasal_marker = get_last_marker(
-            "AUTO_BASAL_DELIVERY", recent_data["markers"]
-        )
+        last_autobasal_marker = get_last_marker("AUTO_BASAL_DELIVERY", recent_data["markers"])
 
         if last_autobasal_marker is not None:
-            data[SENSOR_KEY_LAST_AUTO_BASAL_DELIVERY_MARKER] = last_autobasal_marker[
-                "DATETIME"
-            ].replace(tzinfo=timezone)
-            data[
-                SENSOR_KEY_LAST_AUTO_BASAL_DELIVERY_MARKER_ATTRS
-            ] = last_autobasal_marker["ATTRS"]
+            data[SENSOR_KEY_LAST_AUTO_BASAL_DELIVERY_MARKER] = last_autobasal_marker["DATETIME"].replace(
+                tzinfo=timezone
+            )
+            data[SENSOR_KEY_LAST_AUTO_BASAL_DELIVERY_MARKER_ATTRS] = last_autobasal_marker["ATTRS"]
         else:
             data[SENSOR_KEY_LAST_AUTO_BASAL_DELIVERY_MARKER] = UNAVAILABLE
 
-        last_auto_mode_status_marker = get_last_marker(
-            "AUTO_MODE_STATUS", recent_data["markers"]
-        )
+        last_auto_mode_status_marker = get_last_marker("AUTO_MODE_STATUS", recent_data["markers"])
 
         if last_auto_mode_status_marker is not None:
-            data[
-                SENSOR_KEY_LAST_AUTO_MODE_STATUS_MARKER
-            ] = last_auto_mode_status_marker["DATETIME"].replace(tzinfo=timezone)
-            data[
-                SENSOR_KEY_LAST_AUTO_MODE_STATUS_MARKER_ATTRS
-            ] = last_auto_mode_status_marker["ATTRS"]
+            data[SENSOR_KEY_LAST_AUTO_MODE_STATUS_MARKER] = last_auto_mode_status_marker["DATETIME"].replace(
+                tzinfo=timezone
+            )
+            data[SENSOR_KEY_LAST_AUTO_MODE_STATUS_MARKER_ATTRS] = last_auto_mode_status_marker["ATTRS"]
         else:
             data[SENSOR_KEY_LAST_AUTO_MODE_STATUS_MARKER] = UNAVAILABLE
 
-        last_low_glucose_marker = get_last_marker(
-            "LOW_GLUCOSE_SUSPENDED", recent_data["markers"]
-        )
+        last_low_glucose_marker = get_last_marker("LOW_GLUCOSE_SUSPENDED", recent_data["markers"])
 
         if last_low_glucose_marker is not None:
-            data[
-                SENSOR_KEY_LAST_LOW_GLUCOSE_SUSPENDED_MARKER
-            ] = last_low_glucose_marker["DATETIME"].replace(tzinfo=timezone)
-            data[
-                SENSOR_KEY_LAST_LOW_GLUCOSE_SUSPENDED_MARKER_ATTRS
-            ] = last_low_glucose_marker["ATTRS"]
+            data[SENSOR_KEY_LAST_LOW_GLUCOSE_SUSPENDED_MARKER] = last_low_glucose_marker["DATETIME"].replace(
+                tzinfo=timezone
+            )
+            data[SENSOR_KEY_LAST_LOW_GLUCOSE_SUSPENDED_MARKER_ATTRS] = last_low_glucose_marker["ATTRS"]
         else:
             data[SENSOR_KEY_LAST_LOW_GLUCOSE_SUSPENDED_MARKER] = UNAVAILABLE
 
         # Binary Sensors
 
-        data[BINARY_SENSOR_KEY_PUMP_COMM_STATE] = recent_data.get(
-            "pumpCommunicationState", UNAVAILABLE
-        )
-        data[BINARY_SENSOR_KEY_SENSOR_COMM_STATE] = recent_data.get(
-            "gstCommunicationState", UNAVAILABLE
-        )
-        data[BINARY_SENSOR_KEY_CONDUIT_IN_RANGE] = recent_data.get(
-            "conduitInRange", UNAVAILABLE
-        )
-        data[BINARY_SENSOR_KEY_CONDUIT_PUMP_IN_RANGE] = recent_data.get(
-            "conduitMedicalDeviceInRange", UNAVAILABLE
-        )
-        data[BINARY_SENSOR_KEY_CONDUIT_SENSOR_IN_RANGE] = recent_data.get(
-            "conduitSensorInRange", UNAVAILABLE
-        )
+        data[BINARY_SENSOR_KEY_PUMP_COMM_STATE] = recent_data.get("pumpCommunicationState", UNAVAILABLE)
+        data[BINARY_SENSOR_KEY_SENSOR_COMM_STATE] = recent_data.get("gstCommunicationState", UNAVAILABLE)
+        data[BINARY_SENSOR_KEY_CONDUIT_IN_RANGE] = recent_data.get("conduitInRange", UNAVAILABLE)
+        data[BINARY_SENSOR_KEY_CONDUIT_PUMP_IN_RANGE] = recent_data.get("conduitMedicalDeviceInRange", UNAVAILABLE)
+        data[BINARY_SENSOR_KEY_CONDUIT_SENSOR_IN_RANGE] = recent_data.get("conduitSensorInRange", UNAVAILABLE)
 
         # Device info
 
-        data[DEVICE_PUMP_SERIAL] = recent_data.get(
-            "conduitSerialNumber", UNAVAILABLE
-        )
-        data[DEVICE_PUMP_NAME] = (
-            recent_data.get("firstName", "Name")
-            + " "
-            + recent_data.get("lastName", "Unavailable")
-        )
+        data[DEVICE_PUMP_SERIAL] = recent_data.get("conduitSerialNumber", UNAVAILABLE)
+        data[DEVICE_PUMP_NAME] = recent_data.get("firstName", "Name") + " " + recent_data.get("lastName", "Unavailable")
         data[DEVICE_PUMP_MODEL] = recent_data.get("pumpModelNumber", UNAVAILABLE)
         data[DEVICE_PUMP_MANUFACTURER] = "Medtronic"
 
-        data[SENSOR_KEY_APP_MODEL_TYPE] = recent_data.get(
-            "appModelType", UNAVAILABLE
-        )
+        data[SENSOR_KEY_APP_MODEL_TYPE] = recent_data.get("appModelType", UNAVAILABLE)
 
         device_info = recent_data.get("medicalDeviceInformation")
         if device_info:
-            data[SENSOR_KEY_MEDICAL_DEVICE_MANUFACTURER] = device_info.get(
-                "manufacturer", UNAVAILABLE
-            )
-            data[SENSOR_KEY_MEDICAL_DEVICE_MODEL_NUMBER] = device_info.get(
-                "modelNumber", UNAVAILABLE
-            )
-            data[SENSOR_KEY_MEDICAL_DEVICE_HARDWARE_REVISION] = device_info.get(
-                "hardwareRevision", UNAVAILABLE
-            )
-            data[SENSOR_KEY_MEDICAL_DEVICE_FIRMWARE_REVISION] = device_info.get(
-                "firmwareRevision", UNAVAILABLE
-            )
-            data[SENSOR_KEY_MEDICAL_DEVICE_SYSTEM_ID] = device_info.get(
-                "systemId", UNAVAILABLE
-            )
+            data[SENSOR_KEY_MEDICAL_DEVICE_MANUFACTURER] = device_info.get("manufacturer", UNAVAILABLE)
+            data[SENSOR_KEY_MEDICAL_DEVICE_MODEL_NUMBER] = device_info.get("modelNumber", UNAVAILABLE)
+            data[SENSOR_KEY_MEDICAL_DEVICE_HARDWARE_REVISION] = device_info.get("hardwareRevision", UNAVAILABLE)
+            data[SENSOR_KEY_MEDICAL_DEVICE_FIRMWARE_REVISION] = device_info.get("firmwareRevision", UNAVAILABLE)
+            data[SENSOR_KEY_MEDICAL_DEVICE_SYSTEM_ID] = device_info.get("systemId", UNAVAILABLE)
 
         _LOGGER.debug("_async_update_data: %s", sanitize_for_logging(data))
 
         # Import correctly-timestamped statistics
         if all_valid_sgs:
-            self.hass.async_create_task(
-                self._import_sg_statistics(all_valid_sgs, timezone)
-            )
+            self.hass.async_create_task(self._import_sg_statistics(all_valid_sgs, timezone))
 
         return data
 
     # ── Long-term statistics import ─────────────────────────────────
 
-    async def _import_sg_statistics(
-        self, valid_sgs: list[dict], tz: ZoneInfo
-    ) -> None:
+    async def _import_sg_statistics(self, valid_sgs: list[dict], tz: ZoneInfo) -> None:
         """Import SG readings as HA long-term statistics with correct timestamps.
 
         Creates correctly-timestamped 5-minute statistics entries so
@@ -756,9 +654,7 @@ class CarelinkCoordinator(DataUpdateCoordinator):
                 StatisticMetaData,
             )
         except ImportError:
-            _LOGGER.debug(
-                "Carelink: Recorder statistics API not available, skipping"
-            )
+            _LOGGER.debug("Carelink: Recorder statistics API not available, skipping")
             return
 
         cgm_stats_mmol: list = []
@@ -766,36 +662,37 @@ class CarelinkCoordinator(DataUpdateCoordinator):
 
         for sg in valid_sgs:
             try:
-                ts = convert_date_to_isodate(sg["timestamp"]).replace(
-                    tzinfo=tz
-                )
+                ts = convert_date_to_isodate(sg["timestamp"]).replace(tzinfo=tz)
                 sg_val = sg["sg"]
 
                 # Round down to 5-minute boundary for statistics period
                 minute = (ts.minute // 5) * 5
-                period_start = ts.replace(
-                    minute=minute, second=0, microsecond=0
-                )
+                period_start = ts.replace(minute=minute, second=0, microsecond=0)
 
                 mmol_val = round(float(sg_val) * 0.0555, 2)
-                cgm_stats_mmol.append(StatisticData(
-                    start=period_start,
-                    mean=mmol_val,
-                    min=mmol_val,
-                    max=mmol_val,
-                    state=mmol_val,
-                ))
-                cgm_stats_mgdl.append(StatisticData(
-                    start=period_start,
-                    mean=float(sg_val),
-                    min=float(sg_val),
-                    max=float(sg_val),
-                    state=float(sg_val),
-                ))
+                cgm_stats_mmol.append(
+                    StatisticData(
+                        start=period_start,
+                        mean=mmol_val,
+                        min=mmol_val,
+                        max=mmol_val,
+                        state=mmol_val,
+                    )
+                )
+                cgm_stats_mgdl.append(
+                    StatisticData(
+                        start=period_start,
+                        mean=float(sg_val),
+                        min=float(sg_val),
+                        max=float(sg_val),
+                        state=float(sg_val),
+                    )
+                )
             except Exception as e:
                 _LOGGER.warning(
                     "Carelink: Failed to create statistic from SG entry (timestamp=%s): %s",
-                    sg.get("timestamp"), e,
+                    sg.get("timestamp"),
+                    e,
                 )
 
         entity_prefix = f"sensor.{DOMAIN}"
@@ -816,9 +713,7 @@ class CarelinkCoordinator(DataUpdateCoordinator):
                     len(cgm_stats_mmol),
                 )
             except Exception as e:
-                _LOGGER.warning(
-                    "Carelink: Failed to import mmol statistics: %s", e
-                )
+                _LOGGER.warning("Carelink: Failed to import mmol statistics: %s", e)
 
         if cgm_stats_mgdl:
             try:
@@ -836,14 +731,13 @@ class CarelinkCoordinator(DataUpdateCoordinator):
                     len(cgm_stats_mgdl),
                 )
             except Exception as e:
-                _LOGGER.warning(
-                    "Carelink: Failed to import mg/dl statistics: %s", e
-                )
+                _LOGGER.warning("Carelink: Failed to import mg/dl statistics: %s", e)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Tandem t:slim Coordinator
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TandemCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the Tandem Source API.
@@ -898,22 +792,17 @@ class TandemCoordinator(DataUpdateCoordinator):
             max_date_str = None
             metadata_entry = None
 
-        if (
-            max_date_str
-            and self._last_max_date
-            and max_date_str == self._last_max_date
-            and self.data
-        ):
+        if max_date_str and self._last_max_date and max_date_str == self._last_max_date and self.data:
             _LOGGER.debug(
-                "TandemCoordinator: maxDateWithEvents unchanged (%s), "
-                "returning cached data (no new pump events)",
+                "TandemCoordinator: maxDateWithEvents unchanged (%s), returning cached data (no new pump events)",
                 max_date_str,
             )
             return self.data
 
         _LOGGER.debug(
             "TandemCoordinator: maxDateWithEvents changed (%s -> %s), fetching pump events",
-            self._last_max_date, max_date_str,
+            self._last_max_date,
+            max_date_str,
         )
 
         try:
@@ -927,17 +816,13 @@ class TandemCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Tandem data fetch error: {err}") from err
 
         if not isinstance(recent_data, dict):
-            raise UpdateFailed(
-                f"get_recent_data() returned {type(recent_data)}, expected dict"
-            )
+            raise UpdateFailed(f"get_recent_data() returned {type(recent_data)}, expected dict")
 
         # Save maxDateWithEvents for next poll comparison
         if max_date_str:
             self._last_max_date = max_date_str
 
-        _LOGGER.debug(
-            "Tandem before data parsing: %s", sanitize_for_logging(recent_data)
-        )
+        _LOGGER.debug("Tandem before data parsing: %s", sanitize_for_logging(recent_data))
 
         # Log what data sources are available
         _LOGGER.debug(
@@ -955,9 +840,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         pumper_info = recent_data.get("pumper_info")
 
         if metadata:
-            _LOGGER.debug(
-                "Tandem metadata keys: %s", list(metadata.keys())
-            )
+            _LOGGER.debug("Tandem metadata keys: %s", list(metadata.keys()))
             data[DEVICE_PUMP_SERIAL] = metadata.get("serialNumber", "unknown")
             data[DEVICE_PUMP_MODEL] = metadata.get("modelNumber", "t:slim X2")
             data[DEVICE_PUMP_NAME] = metadata.get("patientName", "Tandem Pump")
@@ -966,8 +849,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             sw_version = metadata.get("softwareVersion")
             if not sw_version:
                 _LOGGER.debug(
-                    "Tandem softwareVersion not in metadata (keys: %s), "
-                    "trying partNumber as fallback",
+                    "Tandem softwareVersion not in metadata (keys: %s), trying partNumber as fallback",
                     list(metadata.keys()),
                 )
                 sw_version = metadata.get("partNumber")
@@ -986,9 +868,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             if last_uploaded_at:
                 upload_dt = parse_dotnet_date(last_uploaded_at)
                 if upload_dt:
-                    upload_aware = upload_dt.astimezone(
-                        ZoneInfo(self.timezone)
-                    )
+                    upload_aware = upload_dt.astimezone(ZoneInfo(self.timezone))
                     data[TANDEM_SENSOR_KEY_LAST_UPLOAD] = upload_aware
                     data[TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP] = upload_aware
                 else:
@@ -1049,15 +929,11 @@ class TandemCoordinator(DataUpdateCoordinator):
             except Exception as e:
                 _LOGGER.error("TandemCoordinator: Error parsing dashboard summary: %s", e, exc_info=True)
 
-        _LOGGER.debug(
-            "Tandem _async_update_data: %d keys", len(data)
-        )
+        _LOGGER.debug("Tandem _async_update_data: %d keys", len(data))
 
         # ── Import long-term statistics with correct timestamps ──────────
         if pump_events:
-            self.hass.async_create_task(
-                self._import_statistics(pump_events)
-            )
+            self.hass.async_create_task(self._import_statistics(pump_events))
 
         return data
 
@@ -1109,9 +985,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                     data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = round(sg_mgdl * 0.0555, 2)
 
                     if latest_dt:
-                        data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = latest_dt.astimezone(
-                            ZoneInfo(self.timezone)
-                        )
+                        data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = latest_dt.astimezone(ZoneInfo(self.timezone))
 
                     # Calculate delta from previous reading
                     if self._prev_sg_mgdl is not None:
@@ -1143,9 +1017,9 @@ class TandemCoordinator(DataUpdateCoordinator):
                 # Sort by completion time, most recent first
                 sorted_boluses = sorted(
                     bolus_entries,
-                    key=lambda b: parse_dotnet_date(
-                        b.get("CompletionDateTime") or b.get("RequestDateTime", 0)
-                    ) or datetime.min,
+                    key=lambda b: (
+                        parse_dotnet_date(b.get("CompletionDateTime") or b.get("RequestDateTime", 0)) or datetime.min
+                    ),
                     reverse=True,
                 )
 
@@ -1153,14 +1027,9 @@ class TandemCoordinator(DataUpdateCoordinator):
                 insulin = last_bolus.get("InsulinDelivered", 0)
                 data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = round(float(insulin), 2) if insulin else UNAVAILABLE
 
-                bolus_dt = parse_dotnet_date(
-                    last_bolus.get("CompletionDateTime")
-                    or last_bolus.get("RequestDateTime")
-                )
+                bolus_dt = parse_dotnet_date(last_bolus.get("CompletionDateTime") or last_bolus.get("RequestDateTime"))
                 if bolus_dt:
-                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = bolus_dt.astimezone(
-                        ZoneInfo(self.timezone)
-                    )
+                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = bolus_dt.astimezone(ZoneInfo(self.timezone))
                 else:
                     data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = UNAVAILABLE
 
@@ -1191,7 +1060,9 @@ class TandemCoordinator(DataUpdateCoordinator):
 
                 if meal_bolus:
                     meal_insulin = meal_bolus.get("InsulinDelivered", 0)
-                    data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = round(float(meal_insulin), 2) if meal_insulin else UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = (
+                        round(float(meal_insulin), 2) if meal_insulin else UNAVAILABLE
+                    )
                     data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {
                         "carbs": meal_bolus.get("CarbSize"),
                         "bg": meal_bolus.get("BG"),
@@ -1282,33 +1153,33 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         for evt in pump_events:
             eid = evt.get("event_id")
-            if eid == 256:      # CGM_DATA_GXB
+            if eid == 256:  # CGM_DATA_GXB
                 cgm_readings.append(evt)
-            elif eid == 20:     # BOLUS_COMPLETED
+            elif eid == 20:  # BOLUS_COMPLETED
                 bolus_completed.append(evt)
-            elif eid == 21:     # BOLEX_COMPLETED
+            elif eid == 21:  # BOLEX_COMPLETED
                 bolex_completed.append(evt)
-            elif eid == 280:    # BOLUS_DELIVERY
+            elif eid == 280:  # BOLUS_DELIVERY
                 bolus_delivery.append(evt)
-            elif eid == 3:      # BASAL_RATE_CHANGE
+            elif eid == 3:  # BASAL_RATE_CHANGE
                 basal_rate_changes.append(evt)
-            elif eid == 279:    # BASAL_DELIVERY
+            elif eid == 279:  # BASAL_DELIVERY
                 basal_delivery.append(evt)
             elif eid in (11, 12):  # PUMPING_SUSPENDED / RESUMED
                 suspend_resume.append(evt)
-            elif eid == 16:     # BG_READING_TAKEN
+            elif eid == 16:  # BG_READING_TAKEN
                 bg_readings.append(evt)
-            elif eid == 33:     # CARTRIDGE_FILLED
+            elif eid == 33:  # CARTRIDGE_FILLED
                 cartridge_fills.append(evt)
-            elif eid == 48:     # CARBS_ENTERED
+            elif eid == 48:  # CARBS_ENTERED
                 carbs_entered.append(evt)
-            elif eid == 61:     # CANNULA_FILLED
+            elif eid == 61:  # CANNULA_FILLED
                 cannula_fills.append(evt)
-            elif eid == 63:     # TUBING_FILLED
+            elif eid == 63:  # TUBING_FILLED
                 tubing_fills.append(evt)
-            elif eid == 229:    # AA_USER_MODE_CHANGE
+            elif eid == 229:  # AA_USER_MODE_CHANGE
                 user_mode_changes.append(evt)
-            elif eid == 230:    # AA_PCM_CHANGE
+            elif eid == 230:  # AA_PCM_CHANGE
                 pcm_changes.append(evt)
 
         _LOGGER.debug(
@@ -1316,11 +1187,20 @@ class TandemCoordinator(DataUpdateCoordinator):
             "BolusDelivery: %d, BasalChange: %d, BasalDelivery: %d, "
             "Suspend/Resume: %d, BG: %d, Cartridge: %d, Carbs: %d, "
             "Cannula: %d, Tubing: %d, UserMode: %d, PCM: %d",
-            len(cgm_readings), len(bolus_completed), len(bolex_completed),
-            len(bolus_delivery), len(basal_rate_changes), len(basal_delivery),
-            len(suspend_resume), len(bg_readings), len(cartridge_fills),
-            len(carbs_entered), len(cannula_fills), len(tubing_fills),
-            len(user_mode_changes), len(pcm_changes),
+            len(cgm_readings),
+            len(bolus_completed),
+            len(bolex_completed),
+            len(bolus_delivery),
+            len(basal_rate_changes),
+            len(basal_delivery),
+            len(suspend_resume),
+            len(bg_readings),
+            len(cartridge_fills),
+            len(carbs_entered),
+            len(cannula_fills),
+            len(tubing_fills),
+            len(user_mode_changes),
+            len(pcm_changes),
         )
 
         # Update the last-seen sequence number for statistics deduplication
@@ -1355,19 +1235,13 @@ class TandemCoordinator(DataUpdateCoordinator):
 
                 if sg_mgdl and sg_mgdl > 0:
                     data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = int(sg_mgdl)
-                    data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = round(
-                        sg_mgdl * 0.0555, 2
-                    )
-                    data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = (
-                        latest["timestamp"].replace(
-                            tzinfo=ZoneInfo(self.timezone)
-                        )
+                    data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = round(sg_mgdl * 0.0555, 2)
+                    data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = latest["timestamp"].replace(
+                        tzinfo=ZoneInfo(self.timezone)
                     )
 
                     if self._prev_sg_mgdl is not None:
-                        data[TANDEM_SENSOR_KEY_SG_DELTA] = (
-                            float(sg_mgdl) - self._prev_sg_mgdl
-                        )
+                        data[TANDEM_SENSOR_KEY_SG_DELTA] = float(sg_mgdl) - self._prev_sg_mgdl
                     else:
                         data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
                     self._prev_sg_mgdl = float(sg_mgdl)
@@ -1453,16 +1327,12 @@ class TandemCoordinator(DataUpdateCoordinator):
 
                 insulin = last_bolus.get("insulin_delivered", 0)
                 if insulin:
-                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = round(
-                        float(insulin), 2
-                    )
+                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = round(float(insulin), 2)
                 else:
                     data[TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS] = UNAVAILABLE
 
-                data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = (
-                    last_bolus["timestamp"].replace(
-                        tzinfo=ZoneInfo(self.timezone)
-                    )
+                data[TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP] = last_bolus["timestamp"].replace(
+                    tzinfo=ZoneInfo(self.timezone)
                 )
 
                 data[TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS] = {
@@ -1475,16 +1345,12 @@ class TandemCoordinator(DataUpdateCoordinator):
                 # IOB from BOLUS_COMPLETED event
                 iob = last_bolus.get("iob")
                 if iob is not None:
-                    data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = round(
-                        float(iob), 2
-                    )
+                    data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = round(float(iob), 2)
                 else:
                     # Try to find IOB from any completed bolus
                     for b in reversed(bolus_completed):
                         if b.get("iob") is not None:
-                            data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = round(
-                                float(b["iob"]), 2
-                            )
+                            data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = round(float(b["iob"]), 2)
                             break
                     else:
                         data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = UNAVAILABLE
@@ -1500,9 +1366,7 @@ class TandemCoordinator(DataUpdateCoordinator):
 
                 if meal_bolus:
                     meal_ins = meal_bolus.get("insulin_delivered", 0)
-                    data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = (
-                        round(float(meal_ins), 2) if meal_ins else UNAVAILABLE
-                    )
+                    data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS] = round(float(meal_ins), 2) if meal_ins else UNAVAILABLE
                     data[TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS] = {
                         "bolus_type": meal_bolus.get("bolus_type"),
                         "bolus_id": meal_bolus.get("bolus_id"),
@@ -1536,9 +1400,7 @@ class TandemCoordinator(DataUpdateCoordinator):
 
                 rate = last_basal.get("commanded_rate")
                 if rate is not None:
-                    data[TANDEM_SENSOR_KEY_BASAL_RATE] = round(
-                        float(rate), 3
-                    )
+                    data[TANDEM_SENSOR_KEY_BASAL_RATE] = round(float(rate), 3)
                 else:
                     data[TANDEM_SENSOR_KEY_BASAL_RATE] = UNAVAILABLE
 
@@ -1547,8 +1409,11 @@ class TandemCoordinator(DataUpdateCoordinator):
                 commanded_source = last_basal.get("commanded_source")
                 if commanded_source is not None:
                     source_map = {
-                        0: "Suspended", 1: "Profile", 2: "Temp Rate",
-                        3: "Algorithm", 4: "Temp + Algorithm",
+                        0: "Suspended",
+                        1: "Profile",
+                        2: "Temp Rate",
+                        3: "Algorithm",
+                        4: "Temp + Algorithm",
                     }
                     data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = source_map.get(
                         commanded_source, f"Source_{commanded_source}"
@@ -1568,27 +1433,21 @@ class TandemCoordinator(DataUpdateCoordinator):
         # ── Pump suspend/resume state ──────────────────────────────────
         if suspend_resume:
             last_sr = suspend_resume[-1]
-            data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = (
-                "Suspended" if last_sr.get("event_id") == 11 else "Active"
-            )
+            data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = "Suspended" if last_sr.get("event_id") == 11 else "Active"
         else:
             data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = UNAVAILABLE
 
         # ── Activity mode (sleep/exercise/eating soon) ─────────────────
         if user_mode_changes:
             last_mode = user_mode_changes[-1]
-            data[TANDEM_SENSOR_KEY_ACTIVITY_MODE] = last_mode.get(
-                "current_mode", UNAVAILABLE
-            )
+            data[TANDEM_SENSOR_KEY_ACTIVITY_MODE] = last_mode.get("current_mode", UNAVAILABLE)
         else:
             data[TANDEM_SENSOR_KEY_ACTIVITY_MODE] = UNAVAILABLE
 
         # ── Control-IQ mode (open loop / closed loop) ──────────────────
         if pcm_changes:
             last_pcm = pcm_changes[-1]
-            data[TANDEM_SENSOR_KEY_CONTROL_IQ_MODE] = last_pcm.get(
-                "current_pcm", UNAVAILABLE
-            )
+            data[TANDEM_SENSOR_KEY_CONTROL_IQ_MODE] = last_pcm.get("current_pcm", UNAVAILABLE)
         else:
             data[TANDEM_SENSOR_KEY_CONTROL_IQ_MODE] = UNAVAILABLE
 
@@ -1604,9 +1463,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         if carbs_entered:
             last_carb = carbs_entered[-1]
             data[TANDEM_SENSOR_KEY_LAST_CARBS] = last_carb.get("carbs", UNAVAILABLE)
-            data[TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP] = (
-                last_carb["timestamp"].replace(tzinfo=tz)
-            )
+            data[TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP] = last_carb["timestamp"].replace(tzinfo=tz)
         else:
             data[TANDEM_SENSOR_KEY_LAST_CARBS] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP] = UNAVAILABLE
@@ -1614,9 +1471,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         # ── Cartridge change ───────────────────────────────────────────
         if cartridge_fills:
             last_cart = cartridge_fills[-1]
-            data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = (
-                last_cart["timestamp"].replace(tzinfo=tz)
-            )
+            data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = last_cart["timestamp"].replace(tzinfo=tz)
             fill_volume = last_cart.get("insulin_volume")
             # Tandem API often returns 0.0 for insulin_volume — treat as unknown.
             # Users can set the fill volume via the Cartridge Fill Volume number
@@ -1640,21 +1495,15 @@ class TandemCoordinator(DataUpdateCoordinator):
         # as a single combined event. We derive site change from the cartridge
         # fill timestamp, falling back to cannula fill if present.
         if cannula_fills:
-            data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = (
-                cannula_fills[-1]["timestamp"].replace(tzinfo=tz)
-            )
+            data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = cannula_fills[-1]["timestamp"].replace(tzinfo=tz)
         elif cartridge_fills:
-            data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = (
-                cartridge_fills[-1]["timestamp"].replace(tzinfo=tz)
-            )
+            data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = cartridge_fills[-1]["timestamp"].replace(tzinfo=tz)
         else:
             data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = UNAVAILABLE
 
         # ── Tubing change ──────────────────────────────────────────────
         if tubing_fills:
-            data[TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE] = (
-                tubing_fills[-1]["timestamp"].replace(tzinfo=tz)
-            )
+            data[TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE] = tubing_fills[-1]["timestamp"].replace(tzinfo=tz)
         else:
             data[TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE] = UNAVAILABLE
 
@@ -1666,9 +1515,12 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         try:
             self._compute_insulin_summary(
-                bolus_completed, bolex_completed,
-                basal_delivery, basal_rate_changes,
-                carbs_entered, data,
+                bolus_completed,
+                bolex_completed,
+                basal_delivery,
+                basal_rate_changes,
+                carbs_entered,
+                data,
             )
         except Exception as e:
             _LOGGER.warning("Error computing insulin summary: %s", e, exc_info=True)
@@ -1686,9 +1538,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             avg_reading = summary.get("averageReading")
             if avg_reading is not None:
                 data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] = int(avg_reading)
-                data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL] = round(
-                    float(avg_reading) * 0.0555, 2
-                )
+                data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL] = round(float(avg_reading) * 0.0555, 2)
             else:
                 data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL] = UNAVAILABLE
                 data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] = UNAVAILABLE
@@ -1718,9 +1568,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_TIME_IN_RANGE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CGM_USAGE] = UNAVAILABLE
 
-    def _parse_pump_settings(
-        self, last_upload_obj: dict | None, data: dict
-    ) -> None:
+    def _parse_pump_settings(self, last_upload_obj: dict | None, data: dict) -> None:
         """Extract pump settings from metadata.lastUpload.settings.
 
         The lastUpload field is a dict: {uploadId, lastUploadedAt, settings}.
@@ -1783,13 +1631,15 @@ class TandemCoordinator(DataUpdateCoordinator):
                         continue
                     start_mins = seg.get("startTime", 0)
                     hours, mins = divmod(start_mins, 60)
-                    schedule.append({
-                        "time": f"{hours:02d}:{mins:02d}",
-                        "basal_rate": round(rate / 1000, 3),
-                        "isf_mgdl": seg.get("isf"),
-                        "carb_ratio": round(seg.get("carbRatio", 0) / 1000, 1),
-                        "target_bg_mgdl": seg.get("targetBg"),
-                    })
+                    schedule.append(
+                        {
+                            "time": f"{hours:02d}:{mins:02d}",
+                            "basal_rate": round(rate / 1000, 3),
+                            "isf_mgdl": seg.get("isf"),
+                            "carb_ratio": round(seg.get("carbRatio", 0) / 1000, 1),
+                            "target_bg_mgdl": seg.get("targetBg"),
+                        }
+                    )
 
                 insulin_dur_mins = active_profile.get("insulinDuration", 0)
                 attrs = {
@@ -1861,9 +1711,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             if TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS not in data:
                 data[TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS] = {}
 
-    def _compute_cgm_summary(
-        self, cgm_readings: list[dict], data: dict
-    ) -> None:
+    def _compute_cgm_summary(self, cgm_readings: list[dict], data: dict) -> None:
         """Compute CGM summary statistics from raw glucose readings.
 
         Replaces the broken dashboard_summary API by computing locally:
@@ -1887,11 +1735,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             return
 
         # Extract valid glucose values
-        values = [
-            r["glucose_mgdl"]
-            for r in cgm_readings
-            if r.get("glucose_mgdl") and r["glucose_mgdl"] > 0
-        ]
+        values = [r["glucose_mgdl"] for r in cgm_readings if r.get("glucose_mgdl") and r["glucose_mgdl"] > 0]
 
         if not values:
             for key in _unavailable_keys:
@@ -1910,9 +1754,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             variance = sum((v - mean) ** 2 for v in values) / (n - 1)
             sd = math.sqrt(variance)
             data[TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV] = round(sd, 1)
-            data[TANDEM_SENSOR_KEY_GLUCOSE_CV] = round(
-                (sd / mean) * 100, 1
-            ) if mean > 0 else UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_GLUCOSE_CV] = round((sd / mean) * 100, 1) if mean > 0 else UNAVAILABLE
         else:
             data[TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_GLUCOSE_CV] = UNAVAILABLE
@@ -1925,18 +1767,12 @@ class TandemCoordinator(DataUpdateCoordinator):
         below = sum(1 for v in values if v < 70)
         above = sum(1 for v in values if v > 180)
         data[TANDEM_TIME_IN_RANGE] = round((in_range / n) * 100, 1)
-        data[TANDEM_SENSOR_KEY_TIME_BELOW_RANGE] = round(
-            (below / n) * 100, 1
-        )
-        data[TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE] = round(
-            (above / n) * 100, 1
-        )
+        data[TANDEM_SENSOR_KEY_TIME_BELOW_RANGE] = round((below / n) * 100, 1)
+        data[TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE] = round((above / n) * 100, 1)
 
         # CGM usage (readings per day: 288 at 5-min intervals)
         # Use reading count vs expected for the fetch window
-        data[TANDEM_SENSOR_KEY_CGM_USAGE] = round(
-            min((n / 288) * 100, 100.0), 1
-        )
+        data[TANDEM_SENSOR_KEY_CGM_USAGE] = round(min((n / 288) * 100, 100.0), 1)
 
         _LOGGER.debug(
             "CGM summary: avg=%d mg/dL, SD=%.1f, CV=%.1f%%, GMI=%.1f%%, "
@@ -2001,11 +1837,7 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         # Daily bolus total: sum insulin_delivered from completed boluses
         all_bolus = bolus_completed + bolex_completed
-        bolus_total = sum(
-            b.get("insulin_delivered", 0)
-            for b in all_bolus
-            if b.get("insulin_delivered")
-        )
+        bolus_total = sum(b.get("insulin_delivered", 0) for b in all_bolus if b.get("insulin_delivered"))
         data[TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL] = round(bolus_total, 2) if all_bolus else UNAVAILABLE
         data[TANDEM_SENSOR_KEY_DAILY_BOLUS_COUNT] = len(all_bolus) if all_bolus else UNAVAILABLE
 
@@ -2017,9 +1849,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             sorted_basal = sorted(basal_delivery, key=lambda e: e["timestamp"])
             for i in range(len(sorted_basal) - 1):
                 rate = sorted_basal[i].get("commanded_rate", 0) or 0
-                dt_hours = (
-                    sorted_basal[i + 1]["timestamp"] - sorted_basal[i]["timestamp"]
-                ).total_seconds() / 3600.0
+                dt_hours = (sorted_basal[i + 1]["timestamp"] - sorted_basal[i]["timestamp"]).total_seconds() / 3600.0
                 # Cap interval at 1 hour to avoid gaps inflating the total
                 dt_hours = min(dt_hours, 1.0)
                 basal_total += rate * dt_hours
@@ -2030,9 +1860,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             sorted_basal = sorted(basal_rate_changes, key=lambda e: e["timestamp"])
             for i in range(len(sorted_basal) - 1):
                 rate = sorted_basal[i].get("commanded_rate", 0) or 0
-                dt_hours = (
-                    sorted_basal[i + 1]["timestamp"] - sorted_basal[i]["timestamp"]
-                ).total_seconds() / 3600.0
+                dt_hours = (sorted_basal[i + 1]["timestamp"] - sorted_basal[i]["timestamp"]).total_seconds() / 3600.0
                 dt_hours = min(dt_hours, 1.0)
                 basal_total += rate * dt_hours
             last_rate = sorted_basal[-1].get("commanded_rate", 0) or 0
@@ -2046,9 +1874,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         if bolus_total > 0 or basal_total > 0:
             tdi = bolus_total + basal_total
             data[TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN] = round(tdi, 2)
-            data[TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT] = (
-                round((basal_total / tdi) * 100, 1) if tdi > 0 else UNAVAILABLE
-            )
+            data[TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT] = round((basal_total / tdi) * 100, 1) if tdi > 0 else UNAVAILABLE
         else:
             data[TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT] = UNAVAILABLE
@@ -2061,10 +1887,11 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_DAILY_CARBS] = UNAVAILABLE
 
         _LOGGER.debug(
-            "Insulin summary: TDI=%.2f U, bolus=%.2f U (%d), "
-            "basal=%.2f U, split=%.1f%%, carbs=%s g",
+            "Insulin summary: TDI=%.2f U, bolus=%.2f U (%d), basal=%.2f U, split=%.1f%%, carbs=%s g",
             data.get(TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN) or 0,
-            bolus_total, len(all_bolus), basal_total,
+            bolus_total,
+            len(all_bolus),
+            basal_total,
             data.get(TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT) or 0,
             data.get(TANDEM_SENSOR_KEY_DAILY_CARBS, "N/A"),
         )
@@ -2086,9 +1913,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                 StatisticMetaData,
             )
         except ImportError:
-            _LOGGER.debug(
-                "Tandem: Recorder statistics API not available, skipping"
-            )
+            _LOGGER.debug("Tandem: Recorder statistics API not available, skipping")
             return
 
         tz = ZoneInfo(self.timezone)
@@ -2112,45 +1937,49 @@ class TandemCoordinator(DataUpdateCoordinator):
 
             # Round down to the top of the hour for HA statistics
             # (HA requires timestamps at the top of the hour)
-            period_start = ts.replace(
-                minute=0, second=0, microsecond=0
-            )
+            period_start = ts.replace(minute=0, second=0, microsecond=0)
 
             if eid == 256:  # CGM
                 sg = evt.get("glucose_mgdl", 0)
                 if sg and sg > 0:
                     mmol = round(sg * 0.0555, 2)
-                    cgm_stats.append(StatisticData(
-                        start=period_start,
-                        mean=mmol,
-                        min=mmol,
-                        max=mmol,
-                        state=mmol,
-                    ))
+                    cgm_stats.append(
+                        StatisticData(
+                            start=period_start,
+                            mean=mmol,
+                            min=mmol,
+                            max=mmol,
+                            state=mmol,
+                        )
+                    )
 
             elif eid == 20:  # BOLUS_COMPLETED (has IOB)
                 iob = evt.get("iob")
                 if iob is not None:
                     iob_val = round(float(iob), 2)
-                    iob_stats.append(StatisticData(
-                        start=period_start,
-                        mean=iob_val,
-                        min=iob_val,
-                        max=iob_val,
-                        state=iob_val,
-                    ))
+                    iob_stats.append(
+                        StatisticData(
+                            start=period_start,
+                            mean=iob_val,
+                            min=iob_val,
+                            max=iob_val,
+                            state=iob_val,
+                        )
+                    )
 
             elif eid in (3, 279):  # Basal
                 rate = evt.get("commanded_rate")
                 if rate is not None:
                     rate_val = round(float(rate), 3)
-                    basal_stats.append(StatisticData(
-                        start=period_start,
-                        mean=rate_val,
-                        min=rate_val,
-                        max=rate_val,
-                        state=rate_val,
-                    ))
+                    basal_stats.append(
+                        StatisticData(
+                            start=period_start,
+                            mean=rate_val,
+                            min=rate_val,
+                            max=rate_val,
+                            state=rate_val,
+                        )
+                    )
 
         # Import each statistic type
         entity_prefix = f"sensor.{DOMAIN}"
@@ -2166,9 +1995,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                     unit_of_measurement="mmol/L",
                 )
                 async_import_statistics(self.hass, cgm_meta, cgm_stats)
-                _LOGGER.debug(
-                    "Tandem: Imported %d CGM statistics", len(cgm_stats)
-                )
+                _LOGGER.debug("Tandem: Imported %d CGM statistics", len(cgm_stats))
             except Exception as e:
                 _LOGGER.warning("Tandem: Failed to import CGM statistics: %s", e)
 
@@ -2183,9 +2010,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                     unit_of_measurement="units",
                 )
                 async_import_statistics(self.hass, iob_meta, iob_stats)
-                _LOGGER.debug(
-                    "Tandem: Imported %d IOB statistics", len(iob_stats)
-                )
+                _LOGGER.debug("Tandem: Imported %d IOB statistics", len(iob_stats))
             except Exception as e:
                 _LOGGER.warning("Tandem: Failed to import IOB statistics: %s", e)
 
@@ -2200,9 +2025,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                     unit_of_measurement="U/hr",
                 )
                 async_import_statistics(self.hass, basal_meta, basal_stats)
-                _LOGGER.debug(
-                    "Tandem: Imported %d basal statistics", len(basal_stats)
-                )
+                _LOGGER.debug("Tandem: Imported %d basal statistics", len(basal_stats))
             except Exception as e:
                 _LOGGER.warning("Tandem: Failed to import basal statistics: %s", e)
 
@@ -2211,13 +2034,11 @@ class TandemCoordinator(DataUpdateCoordinator):
 # Helper functions (Carelink)
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 def get_sg(sgs: list, pos: int) -> dict | None:
     """Retrieve sensor glucose reading at position from sorted valid readings."""
     try:
-        valid = [
-            sg for sg in sgs
-            if sg.get("sensorState") == "NO_ERROR_MESSAGE"
-        ]
+        valid = [sg for sg in sgs if sg.get("sensorState") == "NO_ERROR_MESSAGE"]
         sorted_sgs = sorted(
             valid,
             key=lambda x: convert_date_to_isodate(x["timestamp"]),
@@ -2229,6 +2050,7 @@ def get_sg(sgs: list, pos: int) -> dict | None:
     except Exception as error:
         _LOGGER.error("Error retrieving SG data at position %d: %s", pos, error)
         return None
+
 
 def get_active_notification(last_alarm: dict, notifications: dict) -> dict | None:
     """Retrieve active notification from notifications list."""
@@ -2247,6 +2069,7 @@ def get_active_notification(last_alarm: dict, notifications: dict) -> dict | Non
     except Exception as error:
         _LOGGER.error("Error checking active notifications: %s", error)
         return last_alarm
+
 
 def get_last_marker(marker_type: str, markers: list) -> dict | None:
     """Retrieve the most recent marker of the given type from the 24h marker list."""

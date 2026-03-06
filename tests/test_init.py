@@ -1,4 +1,5 @@
 """Tests for the Carelink integration __init__ module."""
+
 from datetime import datetime
 
 from custom_components.carelink import (

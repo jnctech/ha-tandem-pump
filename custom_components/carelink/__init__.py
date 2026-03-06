@@ -22,6 +22,7 @@ from homeassistant.helpers.update_coordinator import (
 from .api import CarelinkClient, LEGACY_AUTH_FILE, AUTH_FILE_PREFIX, SHARED_AUTH_FILE
 from .tandem_api import TandemSourceClient, TandemAuthError, TandemApiError, parse_dotnet_date
 from .nightscout_uploader import NightscoutUploader
+from .helpers import is_data_stale
 
 from .const import (
     CLIENT,
@@ -793,15 +794,16 @@ class TandemCoordinator(DataUpdateCoordinator):
             metadata_entry = None
 
         if max_date_str and self._last_max_date and max_date_str == self._last_max_date and self.data:
-            _LOGGER.debug(
-                "TandemCoordinator: maxDateWithEvents unchanged (%s), returning cached data (no new pump events)",
+            _LOGGER.info(
+                "[Tandem] Poll: no new pump data (maxDate=%s, serving %d cached keys)",
                 max_date_str,
+                len(self.data),
             )
             return self.data
 
-        _LOGGER.debug(
-            "TandemCoordinator: maxDateWithEvents changed (%s -> %s), fetching pump events",
-            self._last_max_date,
+        _LOGGER.info(
+            "[Tandem] New pump data: maxDate %s → %s — fetching events",
+            self._last_max_date or "(first poll)",
             max_date_str,
         )
 
@@ -825,14 +827,13 @@ class TandemCoordinator(DataUpdateCoordinator):
         _LOGGER.debug("Tandem before data parsing: %s", sanitize_for_logging(recent_data))
 
         # Log what data sources are available
-        _LOGGER.debug(
-            "Tandem data sources: pump_metadata=%s, pumper_info=%s, "
-            "pump_events=%s, therapy_timeline=%s, dashboard_summary=%s",
-            "present" if recent_data.get("pump_metadata") else "MISSING",
-            "present" if recent_data.get("pumper_info") else "MISSING",
-            "present" if recent_data.get("pump_events") else "MISSING",
-            "present" if recent_data.get("therapy_timeline") else "MISSING",
-            "present" if recent_data.get("dashboard_summary") else "MISSING",
+        _LOGGER.info(
+            "[Tandem] Fetch OK — metadata=%s  pumper=%s  pump_events=%s  therapy=%s  dashboard=%s",
+            "OK" if recent_data.get("pump_metadata") else "MISSING",
+            "OK" if recent_data.get("pumper_info") else "MISSING",
+            "OK" if recent_data.get("pump_events") else "MISSING",
+            "OK" if recent_data.get("therapy_timeline") else "MISSING",
+            "OK" if recent_data.get("dashboard_summary") else "MISSING",
         )
 
         # ── Device info from pump metadata ───────────────────────────────
@@ -929,7 +930,25 @@ class TandemCoordinator(DataUpdateCoordinator):
             except Exception as e:
                 _LOGGER.error("TandemCoordinator: Error parsing dashboard summary: %s", e, exc_info=True)
 
-        _LOGGER.debug("Tandem _async_update_data: %d keys", len(data))
+        # Diagnostic: show CGM reading, its age, and whether staleness would have fired
+        cgm_mgdl = data.get("tandem_last_sg_mgdl")
+        cgm_ts = data.get("tandem_last_sg_timestamp")
+        try:
+            if cgm_ts and hasattr(cgm_ts, "astimezone"):
+                age_secs = (datetime.now(timezone.utc) - cgm_ts.astimezone(timezone.utc)).total_seconds()
+                age_str = f"{int(age_secs / 60)}min"
+            else:
+                age_str = "N/A"
+        except Exception:
+            age_str = "?"
+        _LOGGER.info(
+            "[Tandem] Parse done: %d keys | CGM=%s mg/dL @ %s (age=%s) | stale_check=%s",
+            len(data),
+            cgm_mgdl if cgm_mgdl is not None else "N/A",
+            cgm_ts.strftime("%H:%M:%S %Z") if cgm_ts and hasattr(cgm_ts, "strftime") else "N/A",
+            age_str,
+            is_data_stale(data),
+        )
 
         # ── Import long-term statistics with correct timestamps ──────────
         if pump_events:
@@ -1995,7 +2014,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                     unit_of_measurement="mmol/L",
                 )
                 async_import_statistics(self.hass, cgm_meta, cgm_stats)
-                _LOGGER.debug("Tandem: Imported %d CGM statistics", len(cgm_stats))
+                _LOGGER.info("[Tandem] Imported %d CGM statistics", len(cgm_stats))
             except Exception as e:
                 _LOGGER.warning("Tandem: Failed to import CGM statistics: %s", e)
 
@@ -2010,7 +2029,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                     unit_of_measurement="units",
                 )
                 async_import_statistics(self.hass, iob_meta, iob_stats)
-                _LOGGER.debug("Tandem: Imported %d IOB statistics", len(iob_stats))
+                _LOGGER.info("[Tandem] Imported %d IOB statistics", len(iob_stats))
             except Exception as e:
                 _LOGGER.warning("Tandem: Failed to import IOB statistics: %s", e)
 
@@ -2025,7 +2044,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                     unit_of_measurement="U/hr",
                 )
                 async_import_statistics(self.hass, basal_meta, basal_stats)
-                _LOGGER.debug("Tandem: Imported %d basal statistics", len(basal_stats))
+                _LOGGER.info("[Tandem] Imported %d basal statistics", len(basal_stats))
             except Exception as e:
                 _LOGGER.warning("Tandem: Failed to import basal statistics: %s", e)
 

@@ -54,6 +54,7 @@ class NightscoutUploader:
         """Return the httpx client, using a certifi-backed SSL context."""
         if not self._async_client:
             ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+            ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
             self._async_client = httpx.AsyncClient(verify=ssl_ctx, timeout=30.0)
         return self._async_client
 
@@ -87,7 +88,7 @@ class NightscoutUploader:
         return response
 
     def __get_carbs(self, input_insulin, input_meal):
-        result = dict()
+        result = {}
         for marker in input_insulin:
             for entry in marker.items():
                 for meal in input_meal:
@@ -96,17 +97,17 @@ class NightscoutUploader:
         return result
 
     def __get_dict_values(self, input, key, value):
-        result = list()
+        result = []
         for marker in input:
-            markerDict = dict()
+            marker_dict = {}
             if (
                 key in marker
                 and marker["data"]
                 and marker["data"]["dataValues"]
                 and value in marker["data"]["dataValues"]
             ):
-                markerDict[marker[key]] = marker["data"]["dataValues"][value]
-                result.append(markerDict)
+                marker_dict[marker[key]] = marker["data"]["dataValues"][value]
+                result.append(marker_dict)
         return result
 
     def __traverse(self, value, key=None):
@@ -117,9 +118,9 @@ class NightscoutUploader:
             yield key, value
 
     def __get_treatments(self, input, key, value):
-        result = list()
+        result = []
         for marker in input:
-            markerDict = dict()
+            marker_dict = {}
             isType = False
             for k, v in self.__traverse(marker):
                 if key == k and v == value:
@@ -127,8 +128,8 @@ class NightscoutUploader:
                     break
             if isType:
                 for entry in marker.items():
-                    markerDict[entry[0]] = entry[1]
-                result.append(markerDict)
+                    marker_dict[entry[0]] = entry[1]
+                result.append(marker_dict)
         return result
 
     def __getDataStringFromIso(self, time, tz):
@@ -193,7 +194,7 @@ class NightscoutUploader:
         return self.__getMsgEntries(alerts, tz)
 
     def __getMsgEntries(self, raw, tz):
-        result = list()
+        result = []
         for msg in raw:
             date, date_string = self.__getDataStringFromIso(msg["dateTime"], tz)
             # Handle both numeric and string faultId values (Simplera sensor uses strings)
@@ -205,25 +206,25 @@ class NightscoutUploader:
 
             if "additionalInfo" in msg and "sg" in msg["additionalInfo"] and int(msg["additionalInfo"]["sg"]) < 400:
                 result.append(
-                    dict(
-                        timestamp=date,
-                        enteredBy=NS_USER_AGENT,
-                        created_at=date_string,
-                        eventType="Note",
-                        glucoseType="sensor",
-                        glucose=float(msg["additionalInfo"]["sg"]),
-                        notes=self.__getNote(message_id),
-                    )
+                    {
+                        "timestamp": date,
+                        "enteredBy": NS_USER_AGENT,
+                        "created_at": date_string,
+                        "eventType": "Note",
+                        "glucoseType": "sensor",
+                        "glucose": float(msg["additionalInfo"]["sg"]),
+                        "notes": self.__getNote(message_id),
+                    }
                 )
             else:
                 result.append(
-                    dict(
-                        timestamp=date,
-                        enteredBy=NS_USER_AGENT,
-                        created_at=date_string,
-                        eventType="Note",
-                        notes=self.__getNote(message_id),
-                    )
+                    {
+                        "timestamp": date,
+                        "enteredBy": NS_USER_AGENT,
+                        "created_at": date_string,
+                        "eventType": "Note",
+                        "notes": self.__getNote(message_id),
+                    }
                 )
         return result
 
@@ -253,50 +254,50 @@ class NightscoutUploader:
         return self.__getSGSEntries(sgs, tz)
 
     def __getBasalEntries(self, raw, tz):
-        result = list()
+        result = []
         for basal in raw:
             _, date_string = self.__getDataStringFromIso(basal["timestamp"], tz)
             result.append(
-                dict(
-                    enteredBy=NS_USER_AGENT,
-                    eventType="Temp Basal",
-                    duration=5,
-                    absolute=basal["data"]["dataValues"]["bolusAmount"],
-                    created_at=date_string,
-                )
+                {
+                    "enteredBy": NS_USER_AGENT,
+                    "eventType": "Temp Basal",
+                    "duration": 5,
+                    "absolute": basal["data"]["dataValues"]["bolusAmount"],
+                    "created_at": date_string,
+                }
             )
         return result
 
     def __getAutoBolusEntries(self, raw, tz):
-        result = list()
+        result = []
         for corr in raw:
             date, date_string = self.__getDataStringFromIso(corr["timestamp"], tz)
             result.append(
-                dict(
-                    device=NS_USER_AGENT,
-                    timestamp=date,
-                    enteredBy=NS_USER_AGENT,
-                    created_at=date_string,
-                    eventType="Correction Bolus",
-                    insulin=corr["data"]["dataValues"]["deliveredFastAmount"],
-                )
+                {
+                    "device": NS_USER_AGENT,
+                    "timestamp": date,
+                    "enteredBy": NS_USER_AGENT,
+                    "created_at": date_string,
+                    "eventType": "Correction Bolus",
+                    "insulin": corr["data"]["dataValues"]["deliveredFastAmount"],
+                }
             )
         return result
 
     def __getMealEntries(self, meals, tz):
-        result = list()
+        result = []
         for time, info in meals.items():
             date, date_string = self.__getDataStringFromIso(time, tz)
             result.append(
-                dict(
-                    timestamp=date,
-                    enteredBy=NS_USER_AGENT,
-                    created_at=date_string,
-                    eventType="Meal",
-                    glucoseType="sensor",
-                    carbs=info["carb"],
-                    insulin=info["insulin"],
-                )
+                {
+                    "timestamp": date,
+                    "enteredBy": NS_USER_AGENT,
+                    "created_at": date_string,
+                    "eventType": "Meal",
+                    "glucoseType": "sensor",
+                    "carbs": info["carb"],
+                    "insulin": info["insulin"],
+                }
             )
         return result
 
@@ -328,18 +329,18 @@ class NightscoutUploader:
 
     def __getDeviceStatus(self, rawdata):
         return [
-            dict(
-                device=rawdata["medicalDeviceInformation"]["modelNumber"],
-                pump=dict(
-                    battery=dict(status=rawdata["conduitBatteryStatus"], voltage=rawdata["conduitBatteryLevel"]),
-                    reservoir=rawdata["activeInsulin"]["amount"],
-                    status=dict(status=rawdata["systemStatusMessage"], suspended=rawdata["pumpSuspended"]),
-                ),
-            )
+            {
+                "device": rawdata["medicalDeviceInformation"]["modelNumber"],
+                "pump": {
+                    "battery": {"status": rawdata["conduitBatteryStatus"], "voltage": rawdata["conduitBatteryLevel"]},
+                    "reservoir": rawdata["activeInsulin"]["amount"],
+                    "status": {"status": rawdata["systemStatusMessage"], "suspended": rawdata["pumpSuspended"]},
+                },
+            }
         ]
 
     def __getSGSEntries(self, sgs, tz):
-        result = list()
+        result = []
         trend, delta = "null", "null"
         for count, sg in enumerate(sgs):
             if count == 0:
@@ -357,16 +358,16 @@ class NightscoutUploader:
                     trend, delta = "null", "null"
             date, date_string = self.__getDataStringFromIso(sg["timestamp"], tz)
             result.append(
-                dict(
-                    device=NS_USER_AGENT,
-                    direction=trend,
-                    delta=delta,
-                    type="sgv",
-                    sgv=float(sg["sg"]),
-                    date=date,
-                    dateString=date_string,
-                    noise=1,
-                )
+                {
+                    "device": NS_USER_AGENT,
+                    "direction": trend,
+                    "delta": delta,
+                    "type": "sgv",
+                    "sgv": float(sg["sg"]),
+                    "date": date,
+                    "dateString": date_string,
+                    "noise": 1,
+                }
             )
         return result
 
@@ -436,21 +437,24 @@ class NightscoutUploader:
             await self.__test_server_connection()
         return self.__is_reachable
 
-    def run_in_console(self, data):
+    def run_in_console(self, data, timezone):
         """If running this module directly"""
         print("Sending...")
         asyncio.run(self.reachServer())
         if self.__is_reachable:
-            asyncio.run(self.send_recent_data(data))
+            asyncio.run(self.send_recent_data(data, timezone))
 
 
 if __name__ == "__main__":
+    from zoneinfo import ZoneInfo
+
     test_data = {
         # fill me
     }
     parser = argparse.ArgumentParser(description="Simulate upload process to Nightscout with testdata")
     parser.add_argument("-u", "--url", dest="url", help="Nightscout URL")
     parser.add_argument("-s", "--secret", dest="secret", help="Nightscout API Secret")
+    parser.add_argument("-t", "--timezone", dest="timezone", default="UTC", help="Timezone name (e.g. Europe/London)")
 
     args = parser.parse_args()
 
@@ -462,4 +466,4 @@ if __name__ == "__main__":
 
     TESTAPI = NightscoutUploader(nightscout_url=args.url, nightscout_secret=args.secret)
 
-    TESTAPI.run_in_console(test_data)
+    TESTAPI.run_in_console(test_data, ZoneInfo(args.timezone))

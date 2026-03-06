@@ -1,6 +1,6 @@
 {
   "domain": "carelink",
-  "name": "carelink",
+  "name": "Tandem t:slim Pump",
   "after_dependencies": ["recorder"],
   "codeowners": ["@jnctech"],
   "config_flow": true,

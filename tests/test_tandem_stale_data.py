@@ -1,11 +1,10 @@
 """Tests for stale data detection (Issue #11)."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
@@ -18,28 +17,13 @@ from custom_components.carelink.const import (
     PLATFORM_TYPE,
     PLATFORM_TANDEM,
     PLATFORM_CARELINK,
-    COORDINATOR,
-    UNAVAILABLE,
-    TANDEM_DATA_STALE_MINUTES,
     TANDEM_DATA_STALE_TIMEDELTA,
     TANDEM_SENSORS_ALWAYS_AVAILABLE,
     TANDEM_SENSOR_KEY_LASTSG_MMOL,
-    TANDEM_SENSOR_KEY_LASTSG_MGDL,
     TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
-    TANDEM_SENSOR_KEY_SG_DELTA,
-    TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS,
-    TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP,
     TANDEM_SENSOR_KEY_BASAL_RATE,
     TANDEM_SENSOR_KEY_ACTIVE_INSULIN,
-    TANDEM_SENSOR_KEY_LAST_UPLOAD,
-    TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP,
-    TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
-    TANDEM_SENSOR_KEY_PUMP_SERIAL_INFO,
-    TANDEM_SENSOR_KEY_PUMP_MODEL_INFO,
     DEVICE_PUMP_SERIAL,
-    DEVICE_PUMP_MODEL,
-    DEVICE_PUMP_NAME,
-    DEVICE_PUMP_MANUFACTURER,
 )
 from custom_components.carelink.helpers import is_data_stale
 from custom_components.carelink.sensor import CarelinkSensorEntity
@@ -189,9 +173,7 @@ class TestSensorAvailability:
         """Timestamp/diagnostic sensors should stay available even when stale."""
         for sensor_key in TANDEM_SENSORS_ALWAYS_AVAILABLE:
             entity = self._make_sensor(sensor_key)
-            assert entity.available is True, (
-                f"Sensor {sensor_key} should remain available when data is stale"
-            )
+            assert entity.available is True, f"Sensor {sensor_key} should remain available when data is stale"
 
     @patch("custom_components.carelink.sensor.is_data_stale", return_value=True)
     def test_carelink_sensors_unaffected_by_staleness(self, mock_stale):
@@ -210,6 +192,7 @@ class TestSensorAvailability:
         coordinator.last_update_success = False
 
         from homeassistant.components.sensor import SensorEntityDescription
+
         description = SensorEntityDescription(
             key=TANDEM_SENSOR_KEY_LASTSG_MMOL,
             name="Test",
@@ -255,22 +238,14 @@ async def _setup_coordinator_for_stale_test(
     mock_client.close = AsyncMock()
 
     if metadata_side_effect:
-        mock_client.get_pump_event_metadata = AsyncMock(
-            side_effect=metadata_side_effect
-        )
+        mock_client.get_pump_event_metadata = AsyncMock(side_effect=metadata_side_effect)
     else:
-        mock_client.get_pump_event_metadata = AsyncMock(
-            return_value=[{"maxDateWithEvents": "2024-01-15T12:00:00"}]
-        )
+        mock_client.get_pump_event_metadata = AsyncMock(return_value=[{"maxDateWithEvents": "2024-01-15T12:00:00"}])
 
     if recent_data_side_effect:
-        mock_client.get_recent_data = AsyncMock(
-            side_effect=recent_data_side_effect
-        )
+        mock_client.get_recent_data = AsyncMock(side_effect=recent_data_side_effect)
     elif recent_data_return:
-        mock_client.get_recent_data = AsyncMock(
-            return_value=recent_data_return
-        )
+        mock_client.get_recent_data = AsyncMock(return_value=recent_data_return)
     else:
         mock_client.get_recent_data = AsyncMock(return_value=_default_recent_data())
 
@@ -279,9 +254,7 @@ async def _setup_coordinator_for_stale_test(
         PLATFORM_TYPE: PLATFORM_TANDEM,
     }
 
-    coordinator = TandemCoordinator(
-        hass, entry, update_interval=timedelta(seconds=300)
-    )
+    coordinator = TandemCoordinator(hass, entry, update_interval=timedelta(seconds=300))
 
     return coordinator, mock_client
 
@@ -302,10 +275,12 @@ def _default_recent_data() -> dict[str, Any]:
         },
         "pump_events": None,
         "therapy_timeline": {
-            "cgm": [{
-                "EventDateTime": "/Date(1705320000000)/",
-                "Readings": [{"Value": 120, "Type": "EGV"}],
-            }],
+            "cgm": [
+                {
+                    "EventDateTime": "/Date(1705320000000)/",
+                    "Readings": [{"Value": 120, "Type": "EGV"}],
+                }
+            ],
             "bolus": [],
             "basal": [],
         },
@@ -392,9 +367,7 @@ class TestCoordinatorMaxDateOptimisation:
 
         assert coordinator.data[DEVICE_PUMP_SERIAL] == first_data[DEVICE_PUMP_SERIAL]
 
-    async def test_metadata_failure_falls_through_to_full_fetch(
-        self, hass: HomeAssistant
-    ):
+    async def test_metadata_failure_falls_through_to_full_fetch(self, hass: HomeAssistant):
         """If metadata check fails, should proceed with full fetch."""
         coordinator, mock_client = await _setup_coordinator_for_stale_test(
             hass,

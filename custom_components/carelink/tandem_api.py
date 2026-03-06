@@ -14,6 +14,7 @@ Data sources:
 - Tandem Source API: pump metadata (serial, model, last upload)
 - ControlIQ API: therapy timeline (CGM, bolus, basal) and summary statistics
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -35,8 +36,7 @@ import httpx
 _LOGGER = logging.getLogger(__name__)
 
 USER_AGENT = (
-    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 )
 
 
@@ -91,9 +91,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
         return []
 
     num_events = len(raw_bytes) // EVENT_LEN
-    _LOGGER.debug(
-        "Decoding %d pump events (%d bytes)", num_events, len(raw_bytes)
-    )
+    _LOGGER.debug("Decoding %d pump events (%d bytes)", num_events, len(raw_bytes))
 
     events = []
     event_id_counts: dict[int, int] = {}
@@ -112,7 +110,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
         # Tandem timestamps are LOCAL pump time (seconds since 2008-01-01
         # midnight local).  Create a naive datetime so the coordinator can
         # attach the correct pump timezone via .replace(tzinfo=tz).
-        ts = datetime.utcfromtimestamp(TANDEM_EPOCH + ts_raw)
+        ts = datetime.fromtimestamp(TANDEM_EPOCH + ts_raw, tz=timezone.utc).replace(tzinfo=None)
         event_id_counts[event_id] = event_id_counts.get(event_id, 0) + 1
 
         evt = {
@@ -188,11 +186,12 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             suspend_reason = struct.unpack_from(">B", payload, 0)[0]
             insulin_amount = struct.unpack_from(">f", payload, 4)[0]
             reason_map = {
-                0: "User", 1: "Alarm", 2: "Malfunction", 3: "Auto (PLGS)",
+                0: "User",
+                1: "Alarm",
+                2: "Malfunction",
+                3: "Auto (PLGS)",
             }
-            evt["suspend_reason"] = reason_map.get(
-                suspend_reason, f"Reason_{suspend_reason}"
-            )
+            evt["suspend_reason"] = reason_map.get(suspend_reason, f"Reason_{suspend_reason}")
             evt["suspend_reason_id"] = suspend_reason
             evt["insulin_amount"] = round(insulin_amount, 2)
 
@@ -256,14 +255,13 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             current_mode = struct.unpack_from(">B", payload, 0)[0]
             previous_mode = struct.unpack_from(">B", payload, 1)[0]
             mode_map = {
-                0: "Normal", 1: "Sleep", 2: "Exercise", 3: "Eating Soon",
+                0: "Normal",
+                1: "Sleep",
+                2: "Exercise",
+                3: "Eating Soon",
             }
-            evt["current_mode"] = mode_map.get(
-                current_mode, f"Mode_{current_mode}"
-            )
-            evt["previous_mode"] = mode_map.get(
-                previous_mode, f"Mode_{previous_mode}"
-            )
+            evt["current_mode"] = mode_map.get(current_mode, f"Mode_{current_mode}")
+            evt["previous_mode"] = mode_map.get(previous_mode, f"Mode_{previous_mode}")
             evt["current_mode_id"] = current_mode
             evt["previous_mode_id"] = previous_mode
 
@@ -272,15 +270,13 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             current_pcm = struct.unpack_from(">B", payload, 0)[0]
             previous_pcm = struct.unpack_from(">B", payload, 1)[0]
             pcm_map = {
-                0: "No Control", 1: "Open Loop", 2: "Pining",
+                0: "No Control",
+                1: "Open Loop",
+                2: "Pining",
                 3: "Closed Loop",
             }
-            evt["current_pcm"] = pcm_map.get(
-                current_pcm, f"PCM_{current_pcm}"
-            )
-            evt["previous_pcm"] = pcm_map.get(
-                previous_pcm, f"PCM_{previous_pcm}"
-            )
+            evt["current_pcm"] = pcm_map.get(current_pcm, f"PCM_{current_pcm}")
+            evt["previous_pcm"] = pcm_map.get(previous_pcm, f"PCM_{previous_pcm}")
 
         else:
             evt["event_name"] = f"Event_{event_id}"
@@ -289,10 +285,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
         events.append(evt)
 
     # Log event ID distribution for diagnostics
-    _LOGGER.debug(
-        "Tandem: Raw event ID counts: %s",
-        dict(sorted(event_id_counts.items()))
-    )
+    _LOGGER.debug("Tandem: Raw event ID counts: %s", dict(sorted(event_id_counts.items())))
 
     return events
 
@@ -410,15 +403,11 @@ class TandemSourceClient:
             raise TandemAuthError(f"Login request failed: {e}") from e
 
         if login_resp.status_code != 200:
-            raise TandemAuthError(
-                f"Login failed with HTTP {login_resp.status_code}: {login_resp.text[:200]}"
-            )
+            raise TandemAuthError(f"Login failed with HTTP {login_resp.status_code}: {login_resp.text[:200]}")
 
         login_json = login_resp.json()
         if login_json.get("status") != "SUCCESS":
-            raise TandemAuthError(
-                f"Login rejected: {login_json.get('message', 'Unknown error')}"
-            )
+            raise TandemAuthError(f"Login rejected: {login_json.get('message', 'Unknown error')}")
 
         _LOGGER.debug("Tandem: Login credentials accepted")
 
@@ -449,9 +438,7 @@ class TandemSourceClient:
         query_params = parse_qs(parsed.query)
 
         if "code" not in query_params:
-            raise TandemAuthError(
-                f"No authorization code in redirect URL: {final_url[:200]}"
-            )
+            raise TandemAuthError(f"No authorization code in redirect URL: {final_url[:200]}")
 
         auth_code = query_params["code"][0]
         _LOGGER.debug("Tandem: Got authorization code")
@@ -475,9 +462,7 @@ class TandemSourceClient:
             raise TandemAuthError(f"Token exchange failed: {e}") from e
 
         if token_resp.status_code // 100 != 2:
-            raise TandemAuthError(
-                f"Token exchange HTTP {token_resp.status_code}: {token_resp.text[:200]}"
-            )
+            raise TandemAuthError(f"Token exchange HTTP {token_resp.status_code}: {token_resp.text[:200]}")
 
         token_json = token_resp.json()
 
@@ -517,7 +502,7 @@ class TandemSourceClient:
 
         try:
             claims = json.loads(base64.urlsafe_b64decode(payload))
-        except Exception as e:
+        except (ValueError, UnicodeDecodeError) as e:
             raise TandemAuthError(f"Cannot decode JWT payload: {e}") from e
 
         self.pumper_id = claims.get("pumperId")
@@ -552,23 +537,28 @@ class TandemSourceClient:
             try:
                 resp = await client.get(url, headers=self._api_headers())
                 break
-            except (httpx.ConnectError, httpx.ReadError, httpx.WriteError,
-                    httpx.PoolTimeout, httpx.ConnectTimeout,
-                    httpx.ReadTimeout) as exc:
+            except (
+                httpx.ConnectError,
+                httpx.ReadError,
+                httpx.WriteError,
+                httpx.PoolTimeout,
+                httpx.ConnectTimeout,
+                httpx.ReadTimeout,
+            ) as exc:
                 last_exc = exc
                 if attempt < _retries:
                     wait = 2 ** (attempt + 1)  # 2s, 4s
                     _LOGGER.debug(
-                        "Tandem: transient error on %s (attempt %d/%d), "
-                        "retrying in %ds: %s",
-                        url, attempt + 1, _retries + 1, wait, exc,
+                        "Tandem: transient error on %s (attempt %d/%d), retrying in %ds: %s",
+                        url,
+                        attempt + 1,
+                        _retries + 1,
+                        wait,
+                        exc,
                     )
                     await asyncio.sleep(wait)
                 else:
-                    raise TandemApiError(
-                        f"API GET {url} failed after {_retries + 1} attempts: "
-                        f"{exc}"
-                    ) from last_exc
+                    raise TandemApiError(f"API GET {url} failed after {_retries + 1} attempts: {exc}") from last_exc
 
         if resp.status_code == 401:
             _LOGGER.info("Tandem: Got 401, attempting re-login")
@@ -579,9 +569,7 @@ class TandemSourceClient:
             resp = await client.get(url, headers=self._api_headers())
 
         if resp.status_code != 200:
-            raise TandemApiError(
-                f"API GET {url} failed ({resp.status_code}): {resp.text[:300]}"
-            )
+            raise TandemApiError(f"API GET {url} failed ({resp.status_code}): {resp.text[:300]}")
 
         return resp.json()
 
@@ -589,9 +577,7 @@ class TandemSourceClient:
 
     async def get_pumper_info(self) -> dict:
         """Get user and pump information."""
-        return await self._api_get(
-            f"{self.urls['SOURCE_URL']}api/pumpers/pumpers/{self.pumper_id}"
-        )
+        return await self._api_get(f"{self.urls['SOURCE_URL']}api/pumpers/pumpers/{self.pumper_id}")
 
     async def get_pump_event_metadata(self) -> list:
         """Get pump event metadata (serial, model, last upload, etc.).
@@ -602,17 +588,14 @@ class TandemSourceClient:
         patientCareGiver, softwareVersion, partNumber
         """
         return await self._api_get(
-            f"{self.urls['SOURCE_URL']}api/reports/reportsfacade/"
-            f"{self.pumper_id}/pumpeventmetadata"
+            f"{self.urls['SOURCE_URL']}api/reports/reportsfacade/{self.pumper_id}/pumpeventmetadata"
         )
 
     # ── ControlIQ API endpoints ──────────────────────────────────────────
     # These use the TDC services base URL and may or may not accept the
     # Tandem Source OIDC access token. Failures are handled gracefully.
 
-    async def get_therapy_timeline(
-        self, start_date: str, end_date: str
-    ) -> dict | None:
+    async def get_therapy_timeline(self, start_date: str, end_date: str) -> dict | None:
         """Fetch therapy timeline data (basal, bolus, CGM readings).
 
         Args:
@@ -632,9 +615,7 @@ class TandemSourceClient:
             _LOGGER.debug("Therapy timeline not available: %s", e)
             return None
 
-    async def get_dashboard_summary(
-        self, start_date: str, end_date: str
-    ) -> dict | None:
+    async def get_dashboard_summary(self, start_date: str, end_date: str) -> dict | None:
         """Fetch dashboard summary statistics.
 
         Args:
@@ -654,9 +635,7 @@ class TandemSourceClient:
             _LOGGER.debug("Dashboard summary not available: %s", e)
             return None
 
-    async def get_therapy_events(
-        self, start_date: str, end_date: str
-    ) -> dict | None:
+    async def get_therapy_events(self, start_date: str, end_date: str) -> dict | None:
         """Fetch therapy events used by the webui Therapy Timeline.
 
         Args:
@@ -677,9 +656,7 @@ class TandemSourceClient:
             _LOGGER.debug("Therapy events API not available: %s", e)
             return None
 
-    async def get_pump_events(
-        self, device_id: str | int, start_date: str, end_date: str
-    ) -> list[dict] | None:
+    async def get_pump_events(self, device_id: str | int, start_date: str, end_date: str) -> list[dict] | None:
         """Fetch and decode pump events from the Source Reports API.
 
         The pumpevents endpoint returns base64-encoded binary data using
@@ -698,21 +675,21 @@ class TandemSourceClient:
 
             # Request event types we need for sensor data
             event_ids = (
-                "256,"   # CGM_DATA_GXB (glucose readings)
-                "20,"    # BOLUS_COMPLETED (IOB, delivered, requested)
-                "21,"    # BOLEX_COMPLETED (extended bolus completion)
-                "280,"   # BOLUS_DELIVERY (bolus details)
-                "3,"     # BASAL_RATE_CHANGE (basal rates)
-                "279,"   # BASAL_DELIVERY (commanded rates)
-                "11,"    # PUMPING_SUSPENDED
-                "12,"    # PUMPING_RESUMED
-                "16,"    # BG_READING_TAKEN (manual BG)
-                "33,"    # CARTRIDGE_FILLED
-                "48,"    # CARBS_ENTERED
-                "61,"    # CANNULA_FILLED (site change)
-                "63,"    # TUBING_FILLED
-                "229,"   # AA_USER_MODE_CHANGE (sleep/exercise)
-                "230"    # AA_PCM_CHANGE (Control-IQ mode)
+                "256,"  # CGM_DATA_GXB (glucose readings)
+                "20,"  # BOLUS_COMPLETED (IOB, delivered, requested)
+                "21,"  # BOLEX_COMPLETED (extended bolus completion)
+                "280,"  # BOLUS_DELIVERY (bolus details)
+                "3,"  # BASAL_RATE_CHANGE (basal rates)
+                "279,"  # BASAL_DELIVERY (commanded rates)
+                "11,"  # PUMPING_SUSPENDED
+                "12,"  # PUMPING_RESUMED
+                "16,"  # BG_READING_TAKEN (manual BG)
+                "33,"  # CARTRIDGE_FILLED
+                "48,"  # CARBS_ENTERED
+                "61,"  # CANNULA_FILLED (site change)
+                "63,"  # TUBING_FILLED
+                "229,"  # AA_USER_MODE_CHANGE (sleep/exercise)
+                "230"  # AA_PCM_CHANGE (Control-IQ mode)
             )
 
             url = (
@@ -724,7 +701,8 @@ class TandemSourceClient:
 
             _LOGGER.debug(
                 "Tandem: Fetching pump events: minDate=%s, maxDate=%s",
-                start_date, end_date,
+                start_date,
+                end_date,
             )
             _LOGGER.debug("Tandem: Pump events URL: %s", url)
 
@@ -836,9 +814,7 @@ class TandemSourceClient:
             start_iso = yesterday_pump.strftime("%Y-%m-%d")
             end_iso = now_pump.strftime("%Y-%m-%d")
             try:
-                data["pump_events"] = await self.get_pump_events(
-                    device_id, start_iso, end_iso
-                )
+                data["pump_events"] = await self.get_pump_events(device_id, start_iso, end_iso)
             except Exception as e:
                 _LOGGER.warning("Failed to fetch pump events: %s", e)
 
@@ -857,9 +833,7 @@ class TandemSourceClient:
                     # Only bother if the fallback date is actually earlier
                     # than the range we already tried.
                     if fallback_dt.strftime("%Y-%m-%d") < start_iso:
-                        fb_start = (fallback_dt - timedelta(days=1)).strftime(
-                            "%Y-%m-%d"
-                        )
+                        fb_start = (fallback_dt - timedelta(days=1)).strftime("%Y-%m-%d")
                         fb_end = fallback_dt.strftime("%Y-%m-%d")
                         _LOGGER.info(
                             "Tandem: No recent pump events — fetching last-known "
@@ -867,17 +841,11 @@ class TandemSourceClient:
                             fb_start,
                             fb_end,
                         )
-                        data["pump_events"] = await self.get_pump_events(
-                            device_id, fb_start, fb_end
-                        )
+                        data["pump_events"] = await self.get_pump_events(device_id, fb_start, fb_end)
                 except Exception as e:
-                    _LOGGER.debug(
-                        "Tandem: Historical event fallback failed: %s", e
-                    )
+                    _LOGGER.warning("Tandem: Historical event fallback failed: %s", e)
         else:
-            _LOGGER.debug(
-                "Tandem: No tconnectDeviceId in metadata, skipping pump events"
-            )
+            _LOGGER.debug("Tandem: No tconnectDeviceId in metadata, skipping pump events")
 
         # ── Phase 3: ControlIQ fallback (parallel) ───────────────────
         if not data["pump_events"]:
@@ -886,7 +854,9 @@ class TandemSourceClient:
 
             _LOGGER.debug(
                 "Tandem: No pump_events, trying ControlIQ for %s to %s (tz=%s)",
-                start_mm, end_mm, tz,
+                start_mm,
+                end_mm,
+                tz,
             )
 
             timeline_result, summary_result = await asyncio.gather(

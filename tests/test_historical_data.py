@@ -1,14 +1,13 @@
 """Tests for historical data import: _parse_pump_events, replay, and statistics."""
+
 from __future__ import annotations
 
 import sys
 import types
 from datetime import datetime, timedelta
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from dataclasses import dataclass
-
-import pytest
 
 from homeassistant.core import HomeAssistant
 
@@ -20,30 +19,19 @@ from custom_components.carelink.const import (
     PLATFORM_TYPE,
     PLATFORM_TANDEM,
     UNAVAILABLE,
-    DEVICE_PUMP_SERIAL,
-    DEVICE_PUMP_MODEL,
-    DEVICE_PUMP_NAME,
-    DEVICE_PUMP_MANUFACTURER,
     TANDEM_SENSOR_KEY_LASTSG_MMOL,
     TANDEM_SENSOR_KEY_LASTSG_MGDL,
-    TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
-    TANDEM_SENSOR_KEY_SG_DELTA,
     TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS,
     TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP,
     TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS,
     TANDEM_SENSOR_KEY_BASAL_RATE,
     TANDEM_SENSOR_KEY_ACTIVE_INSULIN,
-    TANDEM_SENSOR_KEY_LAST_UPLOAD,
     TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS,
-    TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP,
     TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS,
-    TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS,
 )
 
 
-def _make_cgm_event(
-    seq: int, glucose_mgdl: int, minutes_ago: int = 0
-) -> dict[str, Any]:
+def _make_cgm_event(seq: int, glucose_mgdl: int, minutes_ago: int = 0) -> dict[str, Any]:
     """Create a mock CGM_DATA_GXB event (event_id=256)."""
     ts = datetime(2026, 2, 14, 12, 0, 0) - timedelta(minutes=minutes_ago)
     return {
@@ -184,9 +172,13 @@ async def _setup_coordinator(
     mock_client.login = AsyncMock(return_value=True)
     mock_client.get_recent_data = AsyncMock(return_value=mock_data)
     # Metadata check returns a new maxDateWithEvents each time (forces full fetch)
-    mock_client.get_pump_event_metadata = AsyncMock(return_value=[{
-        "maxDateWithEvents": "2024-01-15T12:00:00",
-    }])
+    mock_client.get_pump_event_metadata = AsyncMock(
+        return_value=[
+            {
+                "maxDateWithEvents": "2024-01-15T12:00:00",
+            }
+        ]
+    )
     mock_client.close = AsyncMock()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
@@ -194,9 +186,7 @@ async def _setup_coordinator(
         PLATFORM_TYPE: PLATFORM_TANDEM,
     }
 
-    coordinator = TandemCoordinator(
-        hass, entry, update_interval=timedelta(seconds=300)
-    )
+    coordinator = TandemCoordinator(hass, entry, update_interval=timedelta(seconds=300))
 
     await coordinator.async_config_entry_first_refresh()
     return coordinator
@@ -217,9 +207,7 @@ class TestParsePumpEventsCGM:
         coordinator = await _setup_coordinator(hass, data)
 
         assert coordinator.data[TANDEM_SENSOR_KEY_LASTSG_MGDL] == 150
-        assert coordinator.data[TANDEM_SENSOR_KEY_LASTSG_MMOL] == round(
-            150 * 0.0555, 2
-        )
+        assert coordinator.data[TANDEM_SENSOR_KEY_LASTSG_MMOL] == round(150 * 0.0555, 2)
 
     async def test_latest_cgm_used(self, hass: HomeAssistant):
         """Test that the most recent CGM event is used for sensor state."""
@@ -252,10 +240,7 @@ class TestParsePumpEventsCGM:
 
     async def test_cgm_history_attributes(self, hass: HomeAssistant):
         """Test that CGM readings are stored in entity attributes."""
-        events = [
-            _make_cgm_event(seq=i, glucose_mgdl=100 + i * 5, minutes_ago=30 - i * 5)
-            for i in range(1, 7)
-        ]
+        events = [_make_cgm_event(seq=i, glucose_mgdl=100 + i * 5, minutes_ago=30 - i * 5) for i in range(1, 7)]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
 
@@ -292,9 +277,7 @@ class TestParsePumpEventsBolus:
     async def test_bolus_completed_values(self, hass: HomeAssistant):
         """Test BOLUS_COMPLETED populates sensor values."""
         events = [
-            _make_bolus_completed_event(
-                seq=1, insulin_delivered=3.5, iob=2.1, minutes_ago=5
-            ),
+            _make_bolus_completed_event(seq=1, insulin_delivered=3.5, iob=2.1, minutes_ago=5),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
@@ -316,12 +299,8 @@ class TestParsePumpEventsBolus:
     async def test_meal_bolus_detection(self, hass: HomeAssistant):
         """Test meal bolus is detected from bolus_type bit 4."""
         events = [
-            _make_bolus_delivery_event(
-                seq=1, insulin_delivered=4.0, bolus_type=0x10, minutes_ago=10
-            ),
-            _make_bolus_delivery_event(
-                seq=2, insulin_delivered=1.0, bolus_type=0x00, minutes_ago=5
-            ),
+            _make_bolus_delivery_event(seq=1, insulin_delivered=4.0, bolus_type=0x10, minutes_ago=10),
+            _make_bolus_delivery_event(seq=2, insulin_delivered=1.0, bolus_type=0x00, minutes_ago=5),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
@@ -331,9 +310,7 @@ class TestParsePumpEventsBolus:
     async def test_no_meal_bolus_when_no_carb_flag(self, hass: HomeAssistant):
         """Test meal bolus is UNAVAILABLE when no carb flag present."""
         events = [
-            _make_bolus_delivery_event(
-                seq=1, insulin_delivered=2.0, bolus_type=0x00
-            ),
+            _make_bolus_delivery_event(seq=1, insulin_delivered=2.0, bolus_type=0x00),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
@@ -343,9 +320,7 @@ class TestParsePumpEventsBolus:
     async def test_bolus_attrs_populated(self, hass: HomeAssistant):
         """Test bolus attributes are populated correctly."""
         events = [
-            _make_bolus_completed_event(
-                seq=1, insulin_delivered=3.5, iob=2.1
-            ),
+            _make_bolus_completed_event(seq=1, insulin_delivered=3.5, iob=2.1),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
@@ -386,9 +361,7 @@ class TestParsePumpEventsBasal:
     async def test_basal_delivery_with_source(self, hass: HomeAssistant):
         """Test BASAL_DELIVERY sets Control-IQ status from commanded_source."""
         events = [
-            _make_basal_delivery_event(
-                seq=1, commanded_rate=1.2, commanded_source=3
-            ),
+            _make_basal_delivery_event(seq=1, commanded_rate=1.2, commanded_source=3),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
@@ -399,9 +372,7 @@ class TestParsePumpEventsBasal:
     async def test_basal_suspended_status(self, hass: HomeAssistant):
         """Test suspended basal maps to 'Suspended' status."""
         events = [
-            _make_basal_delivery_event(
-                seq=1, commanded_rate=0.0, commanded_source=0
-            ),
+            _make_basal_delivery_event(seq=1, commanded_rate=0.0, commanded_source=0),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
@@ -438,9 +409,7 @@ class TestSequenceDeduplication:
 
         assert coordinator._last_event_seq == 30
 
-    async def test_stale_events_filtered_on_second_poll(
-        self, hass: HomeAssistant
-    ):
+    async def test_stale_events_filtered_on_second_poll(self, hass: HomeAssistant):
         """Test that previously-seen events are filtered on the next poll."""
         from custom_components.carelink import TandemCoordinator
 
@@ -489,9 +458,7 @@ class TestSequenceDeduplication:
             PLATFORM_TYPE: PLATFORM_TANDEM,
         }
 
-        coordinator = TandemCoordinator(
-            hass, entry, update_interval=timedelta(seconds=300)
-        )
+        coordinator = TandemCoordinator(hass, entry, update_interval=timedelta(seconds=300))
 
         # First poll
         await coordinator.async_config_entry_first_refresh()
@@ -512,6 +479,7 @@ class TestSequenceDeduplication:
 @dataclass
 class _MockStatisticData:
     """Lightweight stand-in for homeassistant.components.recorder.models.StatisticData."""
+
     start: Any = None
     mean: Any = None
     min: Any = None
@@ -523,6 +491,7 @@ class _MockStatisticData:
 @dataclass
 class _MockStatisticMetaData:
     """Lightweight stand-in for homeassistant.components.recorder.models.StatisticMetaData."""
+
     has_mean: bool = False
     has_sum: bool = False
     name: str = ""
@@ -592,9 +561,7 @@ class TestImportStatistics:
             PLATFORM_TYPE: PLATFORM_TANDEM,
         }
 
-        coordinator = TandemCoordinator(
-            hass, entry, update_interval=timedelta(seconds=300)
-        )
+        coordinator = TandemCoordinator(hass, entry, update_interval=timedelta(seconds=300))
 
         events = [
             _make_cgm_event(seq=1, glucose_mgdl=100, minutes_ago=10),
@@ -617,9 +584,7 @@ class TestImportStatistics:
         finally:
             cleanup()
 
-    async def test_statistics_period_rounded_to_hour(
-        self, hass: HomeAssistant
-    ):
+    async def test_statistics_period_rounded_to_hour(self, hass: HomeAssistant):
         """Test that statistics timestamps are rounded to the top of the hour."""
         from custom_components.carelink import TandemCoordinator
         from datetime import timezone as dt_tz
@@ -645,18 +610,18 @@ class TestImportStatistics:
             PLATFORM_TYPE: PLATFORM_TANDEM,
         }
 
-        coordinator = TandemCoordinator(
-            hass, entry, update_interval=timedelta(seconds=300)
-        )
+        coordinator = TandemCoordinator(hass, entry, update_interval=timedelta(seconds=300))
 
         # Create a CGM event at 12:07:30 UTC - should round to 12:00:00
-        events = [{
-            "event_id": 256,
-            "event_name": "CGM_DATA_GXB",
-            "seq": 1,
-            "timestamp": datetime(2026, 2, 14, 12, 7, 30, tzinfo=dt_tz.utc),
-            "glucose_mgdl": 120,
-        }]
+        events = [
+            {
+                "event_id": 256,
+                "event_name": "CGM_DATA_GXB",
+                "seq": 1,
+                "timestamp": datetime(2026, 2, 14, 12, 7, 30, tzinfo=dt_tz.utc),
+                "glucose_mgdl": 120,
+            }
+        ]
 
         mock_import = MagicMock()
         cleanup = _install_mock_recorder_modules(mock_import)
@@ -694,9 +659,7 @@ class TestImportStatistics:
             PLATFORM_TYPE: PLATFORM_TANDEM,
         }
 
-        coordinator = TandemCoordinator(
-            hass, entry, update_interval=timedelta(seconds=300)
-        )
+        coordinator = TandemCoordinator(hass, entry, update_interval=timedelta(seconds=300))
 
         events = [_make_cgm_event(seq=1, glucose_mgdl=120)]
 
@@ -740,20 +703,12 @@ class TestMixedEvents:
         """Test a realistic mix of CGM, bolus, and basal events."""
         events = [
             _make_cgm_event(seq=1, glucose_mgdl=110, minutes_ago=20),
-            _make_basal_delivery_event(
-                seq=2, commanded_rate=0.8, commanded_source=1, minutes_ago=18
-            ),
+            _make_basal_delivery_event(seq=2, commanded_rate=0.8, commanded_source=1, minutes_ago=18),
             _make_cgm_event(seq=3, glucose_mgdl=115, minutes_ago=15),
-            _make_bolus_completed_event(
-                seq=4, insulin_delivered=2.5, iob=3.0, minutes_ago=12
-            ),
-            _make_bolus_delivery_event(
-                seq=5, insulin_delivered=2.5, bolus_type=0x10, minutes_ago=12
-            ),
+            _make_bolus_completed_event(seq=4, insulin_delivered=2.5, iob=3.0, minutes_ago=12),
+            _make_bolus_delivery_event(seq=5, insulin_delivered=2.5, bolus_type=0x10, minutes_ago=12),
             _make_cgm_event(seq=6, glucose_mgdl=125, minutes_ago=10),
-            _make_basal_rate_change_event(
-                seq=7, commanded_rate=1.2, minutes_ago=8
-            ),
+            _make_basal_rate_change_event(seq=7, commanded_rate=1.2, minutes_ago=8),
             _make_cgm_event(seq=8, glucose_mgdl=130, minutes_ago=5),
             _make_cgm_event(seq=9, glucose_mgdl=135, minutes_ago=0),
         ]

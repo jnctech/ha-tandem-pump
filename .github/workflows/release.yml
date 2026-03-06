@@ -1,0 +1,33 @@
+name: Release
+
+permissions:
+  contents: write
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release:
+    name: Build and Upload Release Asset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from manifest
+        id: version
+        run: |
+          VERSION=$(python3 -c "import json; d=json.load(open('custom_components/carelink/manifest.json')); print(d['version'])")
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Create release zip
+        run: cd custom_components && zip -r ../carelink.zip carelink/
+
+      - name: Upload release asset
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: carelink.zip
+          asset_name: carelink-${{ steps.version.outputs.version }}.zip
+          tag: ${{ github.ref }}
+          overwrite: true

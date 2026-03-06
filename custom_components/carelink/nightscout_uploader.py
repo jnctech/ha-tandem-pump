@@ -99,15 +99,15 @@ class NightscoutUploader:
     def __get_dict_values(self, input, key, value):
         result = []
         for marker in input:
-            markerDict = {}
+            marker_dict = {}
             if (
                 key in marker
                 and marker["data"]
                 and marker["data"]["dataValues"]
                 and value in marker["data"]["dataValues"]
             ):
-                markerDict[marker[key]] = marker["data"]["dataValues"][value]
-                result.append(markerDict)
+                marker_dict[marker[key]] = marker["data"]["dataValues"][value]
+                result.append(marker_dict)
         return result
 
     def __traverse(self, value, key=None):
@@ -120,7 +120,7 @@ class NightscoutUploader:
     def __get_treatments(self, input, key, value):
         result = []
         for marker in input:
-            markerDict = {}
+            marker_dict = {}
             isType = False
             for k, v in self.__traverse(marker):
                 if key == k and v == value:
@@ -128,8 +128,8 @@ class NightscoutUploader:
                     break
             if isType:
                 for entry in marker.items():
-                    markerDict[entry[0]] = entry[1]
-                result.append(markerDict)
+                    marker_dict[entry[0]] = entry[1]
+                result.append(marker_dict)
         return result
 
     def __getDataStringFromIso(self, time, tz):
@@ -206,25 +206,25 @@ class NightscoutUploader:
 
             if "additionalInfo" in msg and "sg" in msg["additionalInfo"] and int(msg["additionalInfo"]["sg"]) < 400:
                 result.append(
-                    dict(
-                        timestamp=date,
-                        enteredBy=NS_USER_AGENT,
-                        created_at=date_string,
-                        eventType="Note",
-                        glucoseType="sensor",
-                        glucose=float(msg["additionalInfo"]["sg"]),
-                        notes=self.__getNote(message_id),
-                    )
+                    {
+                        "timestamp": date,
+                        "enteredBy": NS_USER_AGENT,
+                        "created_at": date_string,
+                        "eventType": "Note",
+                        "glucoseType": "sensor",
+                        "glucose": float(msg["additionalInfo"]["sg"]),
+                        "notes": self.__getNote(message_id),
+                    }
                 )
             else:
                 result.append(
-                    dict(
-                        timestamp=date,
-                        enteredBy=NS_USER_AGENT,
-                        created_at=date_string,
-                        eventType="Note",
-                        notes=self.__getNote(message_id),
-                    )
+                    {
+                        "timestamp": date,
+                        "enteredBy": NS_USER_AGENT,
+                        "created_at": date_string,
+                        "eventType": "Note",
+                        "notes": self.__getNote(message_id),
+                    }
                 )
         return result
 
@@ -258,13 +258,13 @@ class NightscoutUploader:
         for basal in raw:
             _, date_string = self.__getDataStringFromIso(basal["timestamp"], tz)
             result.append(
-                dict(
-                    enteredBy=NS_USER_AGENT,
-                    eventType="Temp Basal",
-                    duration=5,
-                    absolute=basal["data"]["dataValues"]["bolusAmount"],
-                    created_at=date_string,
-                )
+                {
+                    "enteredBy": NS_USER_AGENT,
+                    "eventType": "Temp Basal",
+                    "duration": 5,
+                    "absolute": basal["data"]["dataValues"]["bolusAmount"],
+                    "created_at": date_string,
+                }
             )
         return result
 
@@ -273,14 +273,14 @@ class NightscoutUploader:
         for corr in raw:
             date, date_string = self.__getDataStringFromIso(corr["timestamp"], tz)
             result.append(
-                dict(
-                    device=NS_USER_AGENT,
-                    timestamp=date,
-                    enteredBy=NS_USER_AGENT,
-                    created_at=date_string,
-                    eventType="Correction Bolus",
-                    insulin=corr["data"]["dataValues"]["deliveredFastAmount"],
-                )
+                {
+                    "device": NS_USER_AGENT,
+                    "timestamp": date,
+                    "enteredBy": NS_USER_AGENT,
+                    "created_at": date_string,
+                    "eventType": "Correction Bolus",
+                    "insulin": corr["data"]["dataValues"]["deliveredFastAmount"],
+                }
             )
         return result
 
@@ -289,15 +289,15 @@ class NightscoutUploader:
         for time, info in meals.items():
             date, date_string = self.__getDataStringFromIso(time, tz)
             result.append(
-                dict(
-                    timestamp=date,
-                    enteredBy=NS_USER_AGENT,
-                    created_at=date_string,
-                    eventType="Meal",
-                    glucoseType="sensor",
-                    carbs=info["carb"],
-                    insulin=info["insulin"],
-                )
+                {
+                    "timestamp": date,
+                    "enteredBy": NS_USER_AGENT,
+                    "created_at": date_string,
+                    "eventType": "Meal",
+                    "glucoseType": "sensor",
+                    "carbs": info["carb"],
+                    "insulin": info["insulin"],
+                }
             )
         return result
 
@@ -358,16 +358,16 @@ class NightscoutUploader:
                     trend, delta = "null", "null"
             date, date_string = self.__getDataStringFromIso(sg["timestamp"], tz)
             result.append(
-                dict(
-                    device=NS_USER_AGENT,
-                    direction=trend,
-                    delta=delta,
-                    type="sgv",
-                    sgv=float(sg["sg"]),
-                    date=date,
-                    dateString=date_string,
-                    noise=1,
-                )
+                {
+                    "device": NS_USER_AGENT,
+                    "direction": trend,
+                    "delta": delta,
+                    "type": "sgv",
+                    "sgv": float(sg["sg"]),
+                    "date": date,
+                    "dateString": date_string,
+                    "noise": 1,
+                }
             )
         return result
 

@@ -53,7 +53,7 @@ async def validate_carelink_input(hass: HomeAssistant, data: dict[str, Any]) -> 
     return {"title": "Carelink"}
 
 
-async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+async def validate_tandem_input(data: dict[str, Any]) -> dict[str, Any]:
     """Validate Tandem Source user input."""
     email = data.get("tandem_email", "").strip()
     password = data.get("tandem_password", "")
@@ -258,7 +258,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             user_input[PLATFORM_TYPE] = PLATFORM_TANDEM
             try:
-                info = await validate_tandem_input(self.hass, user_input)
+                info = await validate_tandem_input(user_input)
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
@@ -287,7 +287,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             try:
                 if platform == PLATFORM_TANDEM:
-                    await validate_tandem_input(self.hass, full_config)
+                    await validate_tandem_input(full_config)
                 else:
                     await validate_carelink_input(self.hass, full_config)
             except CannotConnect:

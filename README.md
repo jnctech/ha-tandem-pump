@@ -1,9 +1,14 @@
 # Tandem t:slim Pump for Home Assistant
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
-[![GitHub Release](https://img.shields.io/github/v/release/jnctech/ha-tandem-pump?style=for-the-badge)](https://github.com/jnctech/ha-tandem-pump/releases)
-[![Tests](https://img.shields.io/github/actions/workflow/status/jnctech/ha-tandem-pump/pytest.yml?branch=develop&label=tests&style=for-the-badge)](https://github.com/jnctech/ha-tandem-pump/actions)
-[![License](https://img.shields.io/github/license/jnctech/ha-tandem-pump?style=for-the-badge)](LICENSE)
+[![release](https://img.shields.io/github/v/release/jnctech/ha-tandem-pump)](https://github.com/jnctech/ha-tandem-pump/releases)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![project stage](https://img.shields.io/badge/project%20stage-production%20ready-brightgreen.svg)](https://github.com/jnctech/ha-tandem-pump)
+[![downloads](https://img.shields.io/github/downloads/jnctech/ha-tandem-pump/total)](https://github.com/jnctech/ha-tandem-pump/releases)
+
+[![commits since latest release](https://img.shields.io/github/commits-since/jnctech/ha-tandem-pump/latest)](https://github.com/jnctech/ha-tandem-pump/commits/develop)
+[![commit activity](https://img.shields.io/github/commit-activity/m/jnctech/ha-tandem-pump)](https://github.com/jnctech/ha-tandem-pump/commits/develop)
+[![build](https://img.shields.io/github/actions/workflow/status/jnctech/ha-tandem-pump/ci.yml?branch=develop&label=build)](https://github.com/jnctech/ha-tandem-pump/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/jnctech/ha-tandem-pump)](LICENSE)
 
 **The most comprehensive Tandem insulin pump integration for Home Assistant.** Monitor your Tandem t:slim X2 pump with **45+ sensors**, long-term statistics, glucose history graphs, insulin delivery tracking, pump settings, and full basal profile visibility — all directly in your smart home.
 

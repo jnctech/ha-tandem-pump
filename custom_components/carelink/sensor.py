@@ -27,12 +27,10 @@ from .const import (
     DOMAIN,
     SENSORS,
     TANDEM_SENSORS,
-    TANDEM_SENSORS_ALWAYS_AVAILABLE,
     PLATFORM_TYPE,
     PLATFORM_CARELINK,
     PLATFORM_TANDEM,
 )
-from .helpers import is_data_stale
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,16 +74,14 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return True if the sensor has valid, non-stale data."""
-        if not super().available:
-            return False
-        # Only apply staleness check to Tandem sensors
-        if self._platform_type != PLATFORM_TANDEM:
-            return True
-        # Timestamp/diagnostic sensors stay available even when data is stale
-        if self.sensor_description.key in TANDEM_SENSORS_ALWAYS_AVAILABLE:
-            return True
-        return not is_data_stale(self.coordinator.data)
+        """Return True if the coordinator is available.
+
+        DIAGNOSTIC MODE: staleness check bypassed so sensors always show their
+        last known value instead of becoming unavailable.  The coordinator logs
+        [Tandem] stale_check=True/False on every update so staleness is still
+        visible in the HA log without hiding data from the UI.
+        """
+        return super().available
 
     @property
     def name(self) -> str:

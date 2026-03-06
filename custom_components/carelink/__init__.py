@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 import math
 import os
 import re
 import shutil
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.util.dt import DEFAULT_TIME_ZONE
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -156,6 +157,8 @@ from .const import (
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER]
 
 _LOGGER = logging.getLogger(__name__)
+
+SERVICE_IMPORT_HISTORY = "import_history"
 
 
 # Fields containing personally identifiable information that should be redacted from logs
@@ -303,6 +306,78 @@ async def _async_setup_carelink_entry(hass: HomeAssistant, entry: ConfigEntry, c
     return True
 
 
+async def _handle_import_history(hass: HomeAssistant, entry_id: str, call: ServiceCall) -> None:
+    """Handle the carelink.import_history service call.
+
+    Fetches pump events for the requested date range in 7-day chunks and imports
+    them as long-term statistics (CGM glucose, active insulin, basal rate).
+    """
+    coordinator = hass.data[DOMAIN][entry_id][COORDINATOR]
+
+    start_str: str = call.data["start_date"]
+    end_str: str = call.data.get("end_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    _LOGGER.info("[Tandem] import_history: importing events %s → %s", start_str, end_str)
+
+    try:
+        await coordinator.client.login()
+    except Exception as err:
+        _LOGGER.error("[Tandem] import_history: authentication failed: %s", err)
+        return
+
+    # Retrieve tconnectDeviceId from pump metadata
+    try:
+        metadata_list = await coordinator.client.get_pump_event_metadata()
+        metadata_entry = None
+        if isinstance(metadata_list, list) and metadata_list:
+            metadata_entry = metadata_list[0]
+        elif isinstance(metadata_list, dict):
+            metadata_entry = metadata_list
+        device_id = metadata_entry.get("tconnectDeviceId") if metadata_entry else None
+    except Exception as err:
+        _LOGGER.error("[Tandem] import_history: metadata fetch failed: %s", err)
+        return
+
+    if not device_id:
+        _LOGGER.error("[Tandem] import_history: no tconnectDeviceId found in pump metadata")
+        return
+
+    # Fetch events in 7-day chunks to avoid API timeouts on large date ranges
+    chunk_start = date.fromisoformat(start_str)
+    chunk_end_limit = date.fromisoformat(end_str)
+    all_events: list[dict] = []
+
+    while chunk_start <= chunk_end_limit:
+        chunk_end = min(chunk_start + timedelta(days=6), chunk_end_limit)
+        try:
+            events = await coordinator.client.get_pump_events(
+                device_id,
+                chunk_start.isoformat(),
+                chunk_end.isoformat(),
+            )
+            if events:
+                all_events.extend(events)
+        except Exception as err:
+            _LOGGER.warning(
+                "[Tandem] import_history: chunk %s → %s failed: %s",
+                chunk_start.isoformat(),
+                chunk_end.isoformat(),
+                err,
+            )
+        chunk_start = chunk_end + timedelta(days=1)
+
+    _LOGGER.info("[Tandem] import_history: fetched %d events total", len(all_events))
+
+    if all_events:
+        await coordinator._import_statistics(all_events)
+    else:
+        _LOGGER.warning(
+            "[Tandem] import_history: no events returned for %s → %s",
+            start_str,
+            end_str,
+        )
+
+
 async def _async_setup_tandem_entry(hass: HomeAssistant, entry: ConfigEntry, config: dict) -> bool:
     """Set up a Tandem t:slim Source config entry."""
     _LOGGER.info("Setting up Tandem entry: %s", entry.entry_id)
@@ -330,6 +405,14 @@ async def _async_setup_tandem_entry(hass: HomeAssistant, entry: ConfigEntry, con
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    # ── Register import_history service action (Tandem platform only) ────
+    if not hass.services.has_service(DOMAIN, SERVICE_IMPORT_HISTORY):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_IMPORT_HISTORY,
+            functools.partial(_handle_import_history, hass, entry.entry_id),
+        )
+
     _LOGGER.info("Tandem entry setup completed")
     return True
 
@@ -338,6 +421,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
 
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        if hass.services.has_service(DOMAIN, SERVICE_IMPORT_HISTORY):
+            hass.services.async_remove(DOMAIN, SERVICE_IMPORT_HISTORY)
         entry_data = hass.data[DOMAIN].pop(entry.entry_id)
         # Close HTTP clients to prevent memory leaks
         if CLIENT in entry_data:
@@ -794,7 +879,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             metadata_entry = None
 
         if max_date_str and self._last_max_date and max_date_str == self._last_max_date and self.data:
-            _LOGGER.info(
+            _LOGGER.debug(
                 "[Tandem] Poll: no new pump data (maxDate=%s, serving %d cached keys)",
                 max_date_str,
                 len(self.data),

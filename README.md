@@ -22,10 +22,11 @@ If you use a **Tandem t:slim X2** insulin pump with Home Assistant, this is the 
 
 - **45 sensors** covering glucose, insulin delivery, pump status, CGM stats, and pump settings
 - **Long-term statistics** — glucose, IOB, and basal rate imported into HA's statistics engine for native Statistics Graph cards
-- **Stale data detection** — sensors go `unavailable` when your pump hasn't synced, preventing misleading flat lines
+- **Last-known value** — sensors always show the most recent reading, even if the pump hasn't synced recently
 - **Smart polling** — skips expensive API calls when no new data exists, reducing token usage
 - **Computed summaries** — TIR, average glucose, GMI, daily insulin totals all computed locally from your pump events
 - **Full pump settings** — see your active profile, basal schedule, Control-IQ config, alert thresholds
+- **Manual backfill** — `carelink.import_history` action lets you fill gaps if the mobile app was not syncing
 
 ---
 
@@ -94,10 +95,12 @@ If you use a **Tandem t:slim X2** insulin pump with Home Assistant, this is the 
 | CGM usage | Percentage of time CGM was active |
 
 ### Long-Term Statistics
-Three metrics are imported into HA's statistics engine every poll cycle:
+Three metrics are imported into HA's statistics engine on every poll cycle that contains new data:
 - **CGM glucose** — for native Statistics Graph cards
 - **Insulin on board (IOB)** — track IOB trends over days/weeks
 - **Basal rate** — monitor basal delivery patterns
+
+Use the [`carelink.import_history` action](#actions) to backfill statistics for any days where the app was not syncing.
 
 ---
 
@@ -131,8 +134,102 @@ Copy `custom_components/carelink/` to your HA `config/custom_components/` direct
 
 ### Prerequisites
 - A **Tandem t:slim X2** pump syncing to [Tandem Source](https://source.tandemdiabetes.com)
-- The **Tandem t:slim mobile app** connected to your pump (this is how data reaches Tandem Source)
+- The **Tandem t:slim mobile app** installed, paired to your pump, and running with background activity permitted (see below)
 - Home Assistant **2023.1.0** or later
+
+---
+
+## Mobile App & Sync Reliability
+
+**This integration depends entirely on the Tandem t:slim mobile app** to upload pump data to Tandem Source. The integration reads from Tandem Source — it cannot talk to your pump directly. If the app is restricted by battery management, your HA sensors will continue showing the last known values but will not update until the app syncs again.
+
+### How often does data sync?
+
+Based on real-world observation, when the app is unrestricted:
+
+- The app uploads pump data to Tandem Source approximately **every 60 minutes**
+- HA polls every 5 minutes and detects new data within a few minutes of each upload
+- A typical sync cycle produces ~600–1,000 CGM readings and ~1,000 basal statistics entries
+
+> The app must be **connected to your pump via Bluetooth** for uploads to occur. Keep the phone nearby with Bluetooth on.
+
+### Android — Recommended Settings
+
+Modern Android aggressively restricts background apps to save battery. The Tandem app **must** be set to unrestricted battery usage:
+
+**1. Set battery mode to Unrestricted**
+- Go to **Settings → Apps → Tandem t:slim → Battery**
+- Set to **Unrestricted** (the default is "Optimised" which will pause background sync)
+
+**2. Check manufacturer-specific restrictions**
+
+Many Android manufacturers add their own battery management on top of Android's defaults:
+
+| Manufacturer | Where to look |
+|-------------|---------------|
+| Samsung (One UI) | Settings → Battery → Background usage limits → ensure Tandem is not listed as "sleeping" or "deep sleeping" |
+| Xiaomi / MIUI | Settings → Battery → App battery saver → set Tandem to "No restrictions" |
+| OnePlus / OxygenOS | Settings → Battery → Battery optimisation → Tandem → Don't optimise |
+| Huawei / EMUI | Phone Manager → Power saving → Protected apps → enable Tandem |
+| Google Pixel | Settings → Apps → Tandem t:slim → Battery → Unrestricted |
+
+**3. Disable battery optimisation (all Android)**
+- Go to **Settings → Battery → Battery optimisation** (or search "Battery optimisation")
+- Find Tandem t:slim and set to **Don't optimise**
+
+> **Tip:** If data gaps still appear after applying these settings, check if **Adaptive Battery** or **Device Health Services** is re-restricting the app. On some devices you may need to disable adaptive battery entirely.
+
+### iOS — Recommended Settings
+
+**1. Enable Background App Refresh**
+- Go to **Settings → General → Background App Refresh**
+- Ensure it is **On** globally, and that **Tandem t:slim** is enabled in the list
+
+**2. Avoid Low Power Mode during critical periods**
+- **Settings → Battery → Low Power Mode** — when enabled, iOS pauses background refresh for all apps
+- Disable Low Power Mode when you need continuous syncing (e.g. overnight monitoring)
+
+**3. Do not force-quit the app**
+- Force-quitting an app from the app switcher prevents iOS from ever waking it in the background
+- Instead, just lock the screen and let iOS manage it
+
+> **Note:** iOS is generally more reliable for background sync than Android once Background App Refresh is enabled.
+
+### If data gaps appear
+
+Use the [`carelink.import_history` action](#actions) to backfill any days where the app was not syncing. The action is idempotent — running it for a range that partially has data will fill the gaps without affecting what is already there.
+
+---
+
+## Actions
+
+### `carelink.import_history`
+
+Manually imports pump events for a specified date range as long-term statistics (CGM glucose, active insulin, and basal rate). This is the primary recovery tool for periods when the Tandem app was not syncing in the background.
+
+**To use:** Go to **Developer Tools → Actions** in Home Assistant, search for `carelink.import_history`, set your date range, and click **Perform action**.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `start_date` | ✅ Yes | First date to import (date picker or YYYY-MM-DD) |
+| `end_date` | No | Last date to import (date picker or YYYY-MM-DD). Defaults to today if not set |
+
+**How it works:**
+- The date range is fetched in 7-day chunks to avoid API timeouts on large requests
+- Each chunk calls the Tandem Source pump events API and imports any CGM, IOB, and basal rate statistics found
+- If a chunk fails (e.g. network timeout), it is logged and skipped — remaining chunks continue
+- Running the same range multiple times is **safe and idempotent** — existing statistics are updated with the same values, missing hours are filled in
+
+**Recommended usage:**
+
+| Scenario | Suggested range |
+|----------|----------------|
+| App was backgrounded for a day | yesterday → today |
+| App not syncing for a week | 7 days ago → today |
+| Initial backfill after first install | integration start date → today (run in monthly chunks for best reliability) |
+| First install — fill all available history | Use `minDateWithEvents` from pump metadata as start date; run 1 month at a time |
+
+> **Maximum single run:** Up to **1 month** is recommended per action call. Larger ranges will work but take longer. There is no HA session timeout — the action runs in the background.
 
 ---
 
@@ -153,11 +250,11 @@ This integration connects to the **Tandem Source Reports API** — the same API 
 **Data flow:** Pump → Tandem t:slim mobile app → Tandem Source cloud → This integration → Home Assistant
 
 The integration polls every 5 minutes (configurable) and:
-1. Checks lightweight metadata to see if new data exists (skip if unchanged)
+1. Checks lightweight metadata to see if new data exists (skips the full fetch if the pump hasn't uploaded since last poll)
 2. Fetches binary pump events (15 event types) when new data is available
-3. Decodes events, computes summaries, extracts settings
+3. Decodes events, computes daily summaries, extracts pump settings
 4. Imports long-term statistics for HA's native graph cards
-5. Marks sensors as `unavailable` if data is older than 30 minutes
+5. Sensors always show the most recent value received — use the `Last pump upload` sensor to see when data was last refreshed
 
 ---
 

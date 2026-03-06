@@ -1,8 +1,5 @@
 name: CI
 
-permissions:
-  contents: read
-
 on:
   push:
     branches: [master, develop, "release/*"]
@@ -13,6 +10,8 @@ jobs:
   lint:
     name: Python Code Format Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -33,6 +32,8 @@ jobs:
   test:
     name: Python Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -54,6 +55,8 @@ jobs:
   security:
     name: Security check - Bandit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -71,6 +74,8 @@ jobs:
   hassfest:
     name: Check hassfest
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: home-assistant/actions/hassfest@master

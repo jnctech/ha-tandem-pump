@@ -1,8 +1,5 @@
 name: SonarCloud
 
-permissions:
-  contents: read
-
 on:
   push:
     branches: [develop, master]
@@ -13,6 +10,8 @@ jobs:
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:

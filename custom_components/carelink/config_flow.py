@@ -48,7 +48,7 @@ async def validate_carelink_input(hass: HomeAssistant, data: dict[str, Any]) -> 
         except Exception:
             _LOGGER.warning("Failed to close Carelink client during validation")
 
-    await _validate_nightscout(hass, data)
+    await _validate_nightscout(data)
 
     return {"title": "Carelink"}
 
@@ -64,8 +64,7 @@ async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> di
 
     client = TandemSourceClient(email, password, region)
     try:
-        if not await client.login():
-            raise InvalidAuth
+        await client.login()
     except TandemAuthError as e:
         _LOGGER.warning("Tandem login failed: %s", e)
         raise InvalidAuth from e
@@ -75,12 +74,12 @@ async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> di
         except Exception:
             _LOGGER.warning("Failed to close Tandem client during validation")
 
-    await _validate_nightscout(hass, data)
+    await _validate_nightscout(data)
 
     return {"title": f"Tandem t:slim ({region})"}
 
 
-async def _validate_nightscout(hass: HomeAssistant, data: dict[str, Any]) -> None:
+async def _validate_nightscout(data: dict[str, Any]) -> None:
     """Validate Nightscout configuration if provided."""
     nightscout_url = data.get("nightscout_url")
     nightscout_api = data.get("nightscout_api")

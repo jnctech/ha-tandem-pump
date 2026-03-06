@@ -61,8 +61,8 @@ class TestIsDataStale:
         now = datetime(2024, 1, 15, 14, 0, 0, tzinfo=timezone.utc)
         mock_dt_util.utcnow.return_value = now
 
-        # 45 minutes ago — beyond 30-minute threshold
-        old_time = now - timedelta(minutes=45)
+        # 7 hours ago — beyond 6-hour threshold
+        old_time = now - timedelta(hours=7)
         data = {TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP: old_time}
         assert is_data_stale(data) is True
 
@@ -72,7 +72,7 @@ class TestIsDataStale:
         now = datetime(2024, 1, 15, 14, 0, 0, tzinfo=timezone.utc)
         mock_dt_util.utcnow.return_value = now
 
-        # 10 minutes ago — within 30-minute threshold
+        # 10 minutes ago — within 6-hour threshold
         recent_time = now - timedelta(minutes=10)
         data = {TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP: recent_time}
         assert is_data_stale(data) is False

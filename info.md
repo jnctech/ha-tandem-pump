@@ -14,7 +14,21 @@ The most comprehensive Tandem insulin pump integration for Home Assistant. Monit
 
 **Long-Term Statistics** — CGM glucose, IOB, and basal rate imported into HA's statistics engine. Use native Statistics Graph cards for daily/weekly/monthly trends.
 
-**Smart Polling** — Checks for new data before fetching, skips expensive API calls when nothing has changed. Stale data detection marks sensors `unavailable` after 30 minutes to prevent misleading flat lines.
+**Smart Polling** — Checks for new data before fetching, skips expensive API calls when nothing has changed. Sensors always show the **last known value** — no confusing "unavailable" gaps just because the phone was out of range briefly.
+
+**Manual Backfill** — The `carelink.import_history` action (Developer Tools → Actions) lets you recover statistics for any period when the Tandem app wasn't syncing — even weeks or months of missed data.
+
+## How Sync Works
+
+This integration reads from the **Tandem Source cloud** — it cannot talk to your pump directly. The Tandem t:slim mobile app must be running and connected to your pump via Bluetooth for uploads to occur.
+
+When unrestricted, the app uploads pump data to Tandem Source approximately **every 60 minutes**. HA then picks up the new data within minutes of each upload.
+
+> **Android users:** Set the Tandem app to **Unrestricted** battery usage (Settings → Apps → Tandem t:slim → Battery). The default "Optimised" setting pauses background sync.
+>
+> **iOS users:** Enable **Background App Refresh** for the Tandem app (Settings → General → Background App Refresh) and avoid Low Power Mode during monitoring periods.
+
+If the app wasn't syncing for a period, use `carelink.import_history` to backfill the missing statistics.
 
 ## Requirements
 

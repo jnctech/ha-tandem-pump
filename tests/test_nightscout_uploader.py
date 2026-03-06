@@ -29,8 +29,8 @@ class TestNightscoutUploaderInit:
             nightscout_secret="testsecret",
         )
         # SHA1 hash of "testsecret" should be stored
-        assert uploader._NightscoutUploader__hashedSecret is not None
-        assert len(uploader._NightscoutUploader__hashedSecret) == 40  # SHA1 hex length
+        assert uploader._NightscoutUploader__hashed_secret is not None
+        assert len(uploader._NightscoutUploader__hashed_secret) == 40  # SHA1 hex length
 
 
 class TestNightscoutUploaderClient:
@@ -485,3 +485,475 @@ class TestNightscoutUploadSection:
             # Should not raise
             result = await mock_nightscout_uploader._NightscoutUploader__upload_section("section", getter, "treatments")
         assert result is False
+
+
+class TestNightscoutHelpers:
+    """Pure-function tests for private helper methods (no async, no HTTP)."""
+
+    # __get_carbs
+
+    def test_get_carbs_matching(self, mock_nightscout_uploader):
+        """Returns matched carb/insulin pairs when key is in meal."""
+        input_insulin = [{"2024-01-15T12:00:00": 3.5}]
+        input_meal = [{"2024-01-15T12:00:00": 45}]
+        result = mock_nightscout_uploader._NightscoutUploader__get_carbs(input_insulin, input_meal)
+        assert "2024-01-15T12:00:00" in result
+        assert result["2024-01-15T12:00:00"]["insulin"] == 3.5
+        assert result["2024-01-15T12:00:00"]["carb"] == 45
+
+    def test_get_carbs_no_match(self, mock_nightscout_uploader):
+        """Returns empty dict when no keys match between insulin and meal."""
+        input_insulin = [{"ts_a": 3.5}]
+        input_meal = [{"ts_b": 45}]
+        result = mock_nightscout_uploader._NightscoutUploader__get_carbs(input_insulin, input_meal)
+        assert result == {}
+
+    def test_get_carbs_empty_inputs(self, mock_nightscout_uploader):
+        """Returns empty dict for empty inputs."""
+        result = mock_nightscout_uploader._NightscoutUploader__get_carbs([], [])
+        assert result == {}
+
+    # __get_dict_values
+
+    def test_get_dict_values_matching(self, mock_nightscout_uploader):
+        """Returns list with matched key/value pair when all fields present."""
+        input_data = [
+            {
+                "timestamp": "2024-01-15T12:00:00",
+                "data": {"dataValues": {"deliveredFastAmount": 1.2}},
+            }
+        ]
+        result = mock_nightscout_uploader._NightscoutUploader__get_dict_values(
+            input_data, "timestamp", "deliveredFastAmount"
+        )
+        assert len(result) == 1
+        assert result[0]["2024-01-15T12:00:00"] == 1.2
+
+    def test_get_dict_values_missing_key(self, mock_nightscout_uploader):
+        """Returns empty list when key field is not in marker."""
+        input_data = [{"data": {"dataValues": {"amount": 10}}}]
+        result = mock_nightscout_uploader._NightscoutUploader__get_dict_values(input_data, "timestamp", "amount")
+        assert result == []
+
+    def test_get_dict_values_empty(self, mock_nightscout_uploader):
+        """Returns empty list for empty input."""
+        result = mock_nightscout_uploader._NightscoutUploader__get_dict_values([], "timestamp", "amount")
+        assert result == []
+
+    # __traverse
+
+    def test_traverse_dict_input(self, mock_nightscout_uploader):
+        """Yields leaf key-value pairs from a nested dict."""
+        data = {"a": {"b": 1}}
+        result = list(mock_nightscout_uploader._NightscoutUploader__traverse(data))
+        assert ("b", 1) in result
+
+    def test_traverse_non_dict_input(self, mock_nightscout_uploader):
+        """Yields (key, value) for a non-dict leaf."""
+        result = list(mock_nightscout_uploader._NightscoutUploader__traverse(42, "mykey"))
+        assert result == [("mykey", 42)]
+
+    # __get_treatments
+
+    def test_get_treatments_matching(self, mock_nightscout_uploader):
+        """Returns matching markers when key/value pair found via traverse."""
+        input_data = [{"type": "MEAL", "carbs": 40}]
+        result = mock_nightscout_uploader._NightscoutUploader__get_treatments(input_data, "type", "MEAL")
+        assert len(result) == 1
+        assert result[0]["carbs"] == 40
+
+    def test_get_treatments_no_match(self, mock_nightscout_uploader):
+        """Returns empty list when key/value not found."""
+        input_data = [{"type": "INSULIN"}]
+        result = mock_nightscout_uploader._NightscoutUploader__get_treatments(input_data, "type", "MEAL")
+        assert result == []
+
+    def test_get_treatments_empty(self, mock_nightscout_uploader):
+        """Returns empty list for empty input."""
+        result = mock_nightscout_uploader._NightscoutUploader__get_treatments([], "type", "MEAL")
+        assert result == []
+
+    # __getNote
+
+    def test_get_note_strips_bc_sid_prefix(self, mock_nightscout_uploader):
+        """Strips BC_SID_ prefix from note."""
+        result = mock_nightscout_uploader._NightscoutUploader__getNote("BC_SID_SENSOR_FAULT")
+        assert result == "SENSOR_FAULT"
+
+    def test_get_note_strips_bc_message_prefix(self, mock_nightscout_uploader):
+        """Strips BC_MESSAGE_ prefix from note."""
+        result = mock_nightscout_uploader._NightscoutUploader__getNote("BC_MESSAGE_LOW_GLUCOSE")
+        assert result == "LOW_GLUCOSE"
+
+    def test_get_note_no_prefix(self, mock_nightscout_uploader):
+        """Returns message unchanged when no known prefix present."""
+        result = mock_nightscout_uploader._NightscoutUploader__getNote("PLAIN_MESSAGE")
+        assert result == "PLAIN_MESSAGE"
+
+    # __ns_trend (supplementary boundary cases not already covered)
+
+    def test_ns_trend_flat_delta_zero(self, mock_nightscout_uploader):
+        """delta == 0 returns Flat."""
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend({"sg": 100}, {"sg": 100})
+        assert trend == "Flat"
+        assert delta == 0
+
+    def test_ns_trend_forty_five_up_delta_1(self, mock_nightscout_uploader):
+        """delta == 1 returns FortyFiveUp."""
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend({"sg": 101}, {"sg": 100})
+        assert trend == "FortyFiveUp"
+
+    def test_ns_trend_single_up_delta_6(self, mock_nightscout_uploader):
+        """delta == 6 returns SingleUp."""
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend({"sg": 106}, {"sg": 100})
+        assert trend == "SingleUp"
+
+    def test_ns_trend_double_up_delta_16(self, mock_nightscout_uploader):
+        """delta == 16 returns DoubleUp."""
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend({"sg": 116}, {"sg": 100})
+        assert trend == "DoubleUp"
+
+    def test_ns_trend_triple_up_delta_31(self, mock_nightscout_uploader):
+        """delta == 31 returns TripleUp."""
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend({"sg": 131}, {"sg": 100})
+        assert trend == "TripleUp"
+
+    def test_ns_trend_forty_five_down_delta_neg1(self, mock_nightscout_uploader):
+        """delta == -1 returns FortyFiveDown."""
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend({"sg": 99}, {"sg": 100})
+        assert trend == "FortyFiveDown"
+
+    def test_ns_trend_single_down_delta_neg6(self, mock_nightscout_uploader):
+        """delta == -6 returns SingleDown."""
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend({"sg": 94}, {"sg": 100})
+        assert trend == "SingleDown"
+
+    def test_ns_trend_double_down_delta_neg16(self, mock_nightscout_uploader):
+        """delta == -16 returns DoubleDown."""
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend({"sg": 84}, {"sg": 100})
+        assert trend == "DoubleDown"
+
+    def test_ns_trend_triple_down_delta_neg31(self, mock_nightscout_uploader):
+        """delta == -31 returns TripleDown."""
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend({"sg": 69}, {"sg": 100})
+        assert trend == "TripleDown"
+
+    def test_ns_trend_zero_sg_present_returns_null(self, mock_nightscout_uploader):
+        """Zero sg in present reading returns null trend and delta."""
+        trend, delta = mock_nightscout_uploader._NightscoutUploader__ns_trend({"sg": 0}, {"sg": 100})
+        assert trend == "null"
+        assert delta == "null"
+
+
+class TestNightscoutEntryBuilders:
+    """Tests for methods that build Nightscout entry dicts."""
+
+    # __getBasalEntries
+
+    def test_get_basal_entries_single(self, mock_nightscout_uploader):
+        """Single basal entry produces eventType=Temp Basal with correct fields."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        raw = [
+            {
+                "timestamp": "2024-01-15T12:00:00.000-00:00",
+                "data": {"dataValues": {"bolusAmount": 0.85}},
+            }
+        ]
+        result = mock_nightscout_uploader._NightscoutUploader__getBasalEntries(raw, tz)
+        assert len(result) == 1
+        assert result[0]["eventType"] == "Temp Basal"
+        assert result[0]["absolute"] == 0.85
+        assert result[0]["duration"] == 5
+
+    # __getAutoBolusEntries
+
+    def test_get_auto_bolus_entries_single(self, mock_nightscout_uploader):
+        """Single autocorrection entry produces eventType=Correction Bolus."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        raw = [
+            {
+                "timestamp": "2024-01-15T12:00:00.000-00:00",
+                "data": {"dataValues": {"deliveredFastAmount": 1.2}},
+            }
+        ]
+        result = mock_nightscout_uploader._NightscoutUploader__getAutoBolusEntries(raw, tz)
+        assert len(result) == 1
+        assert result[0]["eventType"] == "Correction Bolus"
+        assert result[0]["insulin"] == 1.2
+
+    # __getMealEntries
+
+    def test_get_meal_entries_single(self, mock_nightscout_uploader):
+        """Single meal entry produces eventType=Meal with carbs and insulin."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        meals = {"2024-01-15T12:00:00.000-00:00": {"carb": 45, "insulin": 3.5}}
+        result = mock_nightscout_uploader._NightscoutUploader__getMealEntries(meals, tz)
+        assert len(result) == 1
+        assert result[0]["eventType"] == "Meal"
+        assert result[0]["carbs"] == 45
+        assert result[0]["insulin"] == 3.5
+
+    # __getSGSEntries
+
+    def test_get_sgs_entries_single_has_null_trend(self, mock_nightscout_uploader):
+        """Single SGS entry has direction=null (no prior reading)."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        sgs = [{"timestamp": "2024-01-15T12:00:00.000-00:00", "sg": 120}]
+        result = mock_nightscout_uploader._NightscoutUploader__getSGSEntries(sgs, tz)
+        assert result[0]["direction"] == "null"
+        assert result[0]["delta"] == "null"
+
+    def test_get_sgs_entries_second_has_computed_trend(self, mock_nightscout_uploader):
+        """Second SGS entry has a real trend computed from delta (+20 → DoubleUp)."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        sgs = [
+            {"timestamp": "2024-01-15T12:05:00.000-00:00", "sg": 120},
+            {"timestamp": "2024-01-15T12:00:00.000-00:00", "sg": 100},
+        ]
+        result = mock_nightscout_uploader._NightscoutUploader__getSGSEntries(sgs, tz)
+        # index 0 always null; index 1: sgs[1]-sgs[0] = 100-120 = -20 → DoubleDown
+        assert result[0]["direction"] == "null"
+        assert result[1]["direction"] == "DoubleDown"
+
+    # __getMsgEntries
+
+    def test_get_msg_entries_with_additional_info_sg(self, mock_nightscout_uploader):
+        """Entry with additionalInfo.sg < 400 includes glucose field."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        raw = [
+            {
+                "dateTime": "2024-01-15T12:00:00.000-00:00",
+                "faultId": None,
+                "additionalInfo": {"sg": 120},
+            }
+        ]
+        result = mock_nightscout_uploader._NightscoutUploader__getMsgEntries(raw, tz)
+        assert len(result) == 1
+        assert "glucose" in result[0]
+        assert result[0]["glucose"] == 120.0
+
+    def test_get_msg_entries_without_additional_info(self, mock_nightscout_uploader):
+        """Entry without additionalInfo does not include glucose field."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        raw = [
+            {
+                "dateTime": "2024-01-15T12:00:00.000-00:00",
+                "faultId": None,
+            }
+        ]
+        result = mock_nightscout_uploader._NightscoutUploader__getMsgEntries(raw, tz)
+        assert len(result) == 1
+        assert "glucose" not in result[0]
+
+    def test_get_msg_entries_string_fault_id(self, mock_nightscout_uploader):
+        """String faultId (Simplera sensor) is converted and used as note."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        raw = [
+            {
+                "dateTime": "2024-01-15T12:00:00.000-00:00",
+                "faultId": "SENSOR_FAULT",
+            }
+        ]
+        result = mock_nightscout_uploader._NightscoutUploader__getMsgEntries(raw, tz)
+        assert len(result) == 1
+        assert "SENSOR_FAULT" in result[0]["notes"]
+
+    # __getDeviceStatus
+
+    def test_get_device_status_extracts_fields(self, mock_nightscout_uploader, mock_recent_data):
+        """__getDeviceStatus extracts model, battery, reservoir, and status."""
+        # Add fields that __getDeviceStatus requires but conftest doesn't have
+        rawdata = dict(mock_recent_data)
+        rawdata["conduitBatteryStatus"] = "CHARGING"
+        rawdata["systemStatusMessage"] = "ALL_OK"
+        rawdata["pumpSuspended"] = False
+
+        result = mock_nightscout_uploader._NightscoutUploader__getDeviceStatus(rawdata)
+        assert len(result) == 1
+        entry = result[0]
+        assert entry["device"] == "MMT-1780"
+        assert entry["pump"]["battery"]["status"] == "CHARGING"
+        assert entry["pump"]["battery"]["voltage"] == 100
+        assert entry["pump"]["reservoir"] == 2.5
+        assert entry["pump"]["status"]["status"] == "ALL_OK"
+        assert entry["pump"]["status"]["suspended"] is False
+
+
+class TestNightscoutReachServer:
+    """Async tests for __test_server_connection (private) via reachServer()."""
+
+    async def test_reach_server_200_returns_true(self, mock_nightscout_uploader):
+        """HTTP 200 causes reachServer() to return True."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        with patch.object(mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock, return_value=mock_response):
+            result = await mock_nightscout_uploader.reachServer()
+        assert result is True
+
+    async def test_reach_server_401_returns_false(self, mock_nightscout_uploader):
+        """HTTP 401 causes reachServer() to return False."""
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        with patch.object(mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock, return_value=mock_response):
+            result = await mock_nightscout_uploader.reachServer()
+        assert result is False
+
+    async def test_reach_server_timeout_returns_false(self, mock_nightscout_uploader):
+        """TimeoutException causes reachServer() to return False."""
+        import httpx
+
+        with patch.object(
+            mock_nightscout_uploader,
+            "fetch_async",
+            new_callable=AsyncMock,
+            side_effect=httpx.TimeoutException("timed out"),
+        ):
+            result = await mock_nightscout_uploader.reachServer()
+        assert result is False
+
+    async def test_reach_server_connect_error_returns_false(self, mock_nightscout_uploader):
+        """ConnectError causes reachServer() to return False."""
+        import httpx
+
+        with patch.object(
+            mock_nightscout_uploader,
+            "fetch_async",
+            new_callable=AsyncMock,
+            side_effect=httpx.ConnectError("refused"),
+        ):
+            result = await mock_nightscout_uploader.reachServer()
+        assert result is False
+
+    async def test_reach_server_request_error_returns_false(self, mock_nightscout_uploader):
+        """Generic RequestError causes reachServer() to return False."""
+        import httpx
+
+        with patch.object(
+            mock_nightscout_uploader,
+            "fetch_async",
+            new_callable=AsyncMock,
+            side_effect=httpx.RequestError("network error"),
+        ):
+            result = await mock_nightscout_uploader.reachServer()
+        assert result is False
+
+    async def test_reach_server_already_reachable_skips_http(self, mock_nightscout_uploader):
+        """When __is_reachable is already True, no HTTP call is made."""
+        # Mark as already reachable
+        mock_nightscout_uploader._NightscoutUploader__is_reachable = True
+        with patch.object(mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock) as mock_fetch:
+            result = await mock_nightscout_uploader.reachServer()
+        mock_fetch.assert_not_called()
+        assert result is True
+
+
+class TestNightscoutSetData:
+    """Async tests for __set_data."""
+
+    async def test_set_data_empty_data_returns_false(self, mock_nightscout_uploader):
+        """Empty data list skips HTTP call and returns False."""
+        with patch.object(mock_nightscout_uploader, "post_async", new_callable=AsyncMock) as mock_post:
+            result = await mock_nightscout_uploader._NightscoutUploader__set_data(
+                "https://ns.example.com", [], "entries"
+            )
+        mock_post.assert_not_called()
+        assert result is False
+
+    async def test_set_data_200_returns_true(self, mock_nightscout_uploader):
+        """HTTP 200 response causes __set_data to return True."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        with patch.object(
+            mock_nightscout_uploader, "post_async", new_callable=AsyncMock, return_value=mock_response
+        ):
+            result = await mock_nightscout_uploader._NightscoutUploader__set_data(
+                "https://ns.example.com", [{"sgv": 120}], "entries"
+            )
+        assert result is True
+
+    async def test_set_data_non_200_returns_false(self, mock_nightscout_uploader):
+        """Non-200 response causes __set_data to return False."""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        with patch.object(
+            mock_nightscout_uploader, "post_async", new_callable=AsyncMock, return_value=mock_response
+        ):
+            result = await mock_nightscout_uploader._NightscoutUploader__set_data(
+                "https://ns.example.com", [{"sgv": 120}], "entries"
+            )
+        assert result is False
+
+    async def test_set_data_timeout_returns_false(self, mock_nightscout_uploader):
+        """TimeoutException causes __set_data to return False."""
+        import httpx
+
+        with patch.object(
+            mock_nightscout_uploader,
+            "post_async",
+            new_callable=AsyncMock,
+            side_effect=httpx.TimeoutException("timed out"),
+        ):
+            result = await mock_nightscout_uploader._NightscoutUploader__set_data(
+                "https://ns.example.com", [{"sgv": 120}], "entries"
+            )
+        assert result is False
+
+    async def test_set_data_request_error_returns_false(self, mock_nightscout_uploader):
+        """RequestError causes __set_data to return False."""
+        import httpx
+
+        with patch.object(
+            mock_nightscout_uploader,
+            "post_async",
+            new_callable=AsyncMock,
+            side_effect=httpx.RequestError("network error"),
+        ):
+            result = await mock_nightscout_uploader._NightscoutUploader__set_data(
+                "https://ns.example.com", [{"sgv": 120}], "entries"
+            )
+        assert result is False
+
+
+class TestNightscoutSendRecentData:
+    """Tests for the public send_recent_data() method."""
+
+    async def test_send_recent_data_minimal(self, mock_nightscout_uploader):
+        """send_recent_data with minimal data completes without raising."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        recent_data = {
+            "sgs": [],
+            "markers": None,
+            "notificationHistory": None,
+            "medicalDeviceInformation": {"modelNumber": "MMT-1780"},
+            "conduitBatteryStatus": "NORMAL",
+            "conduitBatteryLevel": 95,
+            "activeInsulin": {"amount": 1.5},
+            "systemStatusMessage": "ALL_OK",
+            "pumpSuspended": False,
+        }
+        with patch.object(
+            mock_nightscout_uploader,
+            "_NightscoutUploader__upload_section",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            # Should complete without raising
+            await mock_nightscout_uploader.send_recent_data(recent_data, tz)

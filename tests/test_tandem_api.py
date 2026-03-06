@@ -1,4 +1,5 @@
 """Tests for the Tandem Source API client."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -302,18 +303,31 @@ class TestGetRecentData:
         client.account_id = "acct-456"
         client.access_token = "valid_token"
 
-        with patch.object(
-            client, "get_pump_event_metadata", new_callable=AsyncMock,
-            return_value=[{"serialNumber": "SN123", "modelNumber": "t:slim X2"}],
-        ), patch.object(
-            client, "get_pumper_info", new_callable=AsyncMock,
-            return_value={"firstName": "Test", "lastName": "User"},
-        ), patch.object(
-            client, "get_therapy_timeline", new_callable=AsyncMock,
-            return_value={"cgm": [], "bolus": [], "basal": []},
-        ), patch.object(
-            client, "get_dashboard_summary", new_callable=AsyncMock,
-            return_value={"averageReading": 120},
+        with (
+            patch.object(
+                client,
+                "get_pump_event_metadata",
+                new_callable=AsyncMock,
+                return_value=[{"serialNumber": "SN123", "modelNumber": "t:slim X2"}],
+            ),
+            patch.object(
+                client,
+                "get_pumper_info",
+                new_callable=AsyncMock,
+                return_value={"firstName": "Test", "lastName": "User"},
+            ),
+            patch.object(
+                client,
+                "get_therapy_timeline",
+                new_callable=AsyncMock,
+                return_value={"cgm": [], "bolus": [], "basal": []},
+            ),
+            patch.object(
+                client,
+                "get_dashboard_summary",
+                new_callable=AsyncMock,
+                return_value={"averageReading": 120},
+            ),
         ):
             data = await client.get_recent_data()
 
@@ -329,18 +343,31 @@ class TestGetRecentData:
         client.account_id = "acct-456"
         client.access_token = "valid_token"
 
-        with patch.object(
-            client, "get_pump_event_metadata", new_callable=AsyncMock,
-            side_effect=Exception("API error"),
-        ), patch.object(
-            client, "get_pumper_info", new_callable=AsyncMock,
-            return_value={"firstName": "Test"},
-        ), patch.object(
-            client, "get_therapy_timeline", new_callable=AsyncMock,
-            return_value=None,
-        ), patch.object(
-            client, "get_dashboard_summary", new_callable=AsyncMock,
-            return_value=None,
+        with (
+            patch.object(
+                client,
+                "get_pump_event_metadata",
+                new_callable=AsyncMock,
+                side_effect=Exception("API error"),
+            ),
+            patch.object(
+                client,
+                "get_pumper_info",
+                new_callable=AsyncMock,
+                return_value={"firstName": "Test"},
+            ),
+            patch.object(
+                client,
+                "get_therapy_timeline",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch.object(
+                client,
+                "get_dashboard_summary",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             data = await client.get_recent_data()
 
@@ -355,18 +382,31 @@ class TestGetRecentData:
         client.account_id = "acct-456"
         client.access_token = "valid_token"
 
-        with patch.object(
-            client, "get_pump_event_metadata", new_callable=AsyncMock,
-            side_effect=Exception("No pumper_id"),
-        ), patch.object(
-            client, "get_pumper_info", new_callable=AsyncMock,
-            side_effect=Exception("No pumper_id"),
-        ), patch.object(
-            client, "get_therapy_timeline", new_callable=AsyncMock,
-            return_value=None,
-        ), patch.object(
-            client, "get_dashboard_summary", new_callable=AsyncMock,
-            return_value=None,
+        with (
+            patch.object(
+                client,
+                "get_pump_event_metadata",
+                new_callable=AsyncMock,
+                side_effect=Exception("No pumper_id"),
+            ),
+            patch.object(
+                client,
+                "get_pumper_info",
+                new_callable=AsyncMock,
+                side_effect=Exception("No pumper_id"),
+            ),
+            patch.object(
+                client,
+                "get_therapy_timeline",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch.object(
+                client,
+                "get_dashboard_summary",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             data = await client.get_recent_data()
 
@@ -420,10 +460,9 @@ class TestExtractJwtClaims:
         """JWT with valid base64 but no pumperId raises TandemAuthError."""
         import base64
         import json
+
         client = self._make_client()
-        payload = base64.urlsafe_b64encode(
-            json.dumps({"accountId": "acc-1"}).encode()
-        ).decode().rstrip("=")
+        payload = base64.urlsafe_b64encode(json.dumps({"accountId": "acc-1"}).encode()).decode().rstrip("=")
         client.id_token = f"header.{payload}.signature"
         with pytest.raises(TandemAuthError, match="No pumperId"):
             client._extract_jwt_claims()
@@ -432,10 +471,13 @@ class TestExtractJwtClaims:
         """Valid JWT payload with pumperId populates client.pumper_id."""
         import base64
         import json
+
         client = self._make_client()
-        payload = base64.urlsafe_b64encode(
-            json.dumps({"pumperId": "pump-abc", "accountId": "acc-1"}).encode()
-        ).decode().rstrip("=")
+        payload = (
+            base64.urlsafe_b64encode(json.dumps({"pumperId": "pump-abc", "accountId": "acc-1"}).encode())
+            .decode()
+            .rstrip("=")
+        )
         client.id_token = f"header.{payload}.signature"
         client._extract_jwt_claims()
         assert client.pumper_id == "pump-abc"

@@ -1,4 +1,5 @@
 """Support for Carelink / Tandem binary sensors."""
+
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -38,10 +39,7 @@ async def async_setup_entry(
 
     sensor_definitions = TANDEM_BINARY_SENSORS if platform_type == PLATFORM_TANDEM else BINARY_SENSORS
 
-    entities = [
-        CarelinkConnectivityEntity(coordinator, desc)
-        for desc in sensor_definitions
-    ]
+    entities = [CarelinkConnectivityEntity(coordinator, desc) for desc in sensor_definitions]
 
     async_add_entities(entities)
 
@@ -78,9 +76,7 @@ class CarelinkConnectivityEntity(CoordinatorEntity, BinarySensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
-        manufacturer = self.coordinator.data.get(
-            DEVICE_PUMP_MANUFACTURER, "Medtronic"
-        )
+        manufacturer = self.coordinator.data.get(DEVICE_PUMP_MANUFACTURER, "Medtronic")
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.data.get(DEVICE_PUMP_SERIAL, "unknown"))},
             name=self.coordinator.data.get(DEVICE_PUMP_NAME, "Pump"),

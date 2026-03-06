@@ -1,19 +1,19 @@
 """
- Carelink Client library
- Description:
-   This library implements a client for the Medtronic Carelink API.
-   It is a port of the original Java client by Bence Szász:
-   https://github.com/benceszasz/CareLinkJavaClient
- Authors:
-   Ondrej Wisniewski (ondrej.wisniewski *at* gmail.com)
-   Johan Kuijt (github *at* w3f.nl)
- Changelog:
-   09/05/2021 - Initial public release (Ondrej)
-   06/06/2021 - Add check for expired token (Ondrej)
-   19/09/2022 - Check for general BLE device family to support 770G (Ondrej)
-   28/11/2022 - Async version of the library and console test option (Johan)
-   29/11/2022 - Pylint problem modifications (Johan)
- Copyright 2021-2022, Ondrej Wisniewski
+Carelink Client library
+Description:
+  This library implements a client for the Medtronic Carelink API.
+  It is a port of the original Java client by Bence Szász:
+  https://github.com/benceszasz/CareLinkJavaClient
+Authors:
+  Ondrej Wisniewski (ondrej.wisniewski *at* gmail.com)
+  Johan Kuijt (github *at* w3f.nl)
+Changelog:
+  09/05/2021 - Initial public release (Ondrej)
+  06/06/2021 - Add check for expired token (Ondrej)
+  19/09/2022 - Check for general BLE device family to support 770G (Ondrej)
+  28/11/2022 - Async version of the library and console test option (Johan)
+  29/11/2022 - Pylint problem modifications (Johan)
+Copyright 2021-2022, Ondrej Wisniewski
 """
 
 import argparse
@@ -34,7 +34,7 @@ AUTH_FILE_PREFIX = "carelink_logindata"
 LEGACY_AUTH_FILE = "custom_components/carelink/logindata.json"
 SHARED_AUTH_FILE = f"{AUTH_FILE_PREFIX}.json"
 CARELINK_CONFIG_URL = "https://clcloud.minimed.eu/connect/carepartner/v13/discover/android/3.6"
-AUTH_ERROR_CODES = [401,403]
+AUTH_ERROR_CODES = [401, 403]
 
 DEBUG = False
 
@@ -48,6 +48,7 @@ def printdbg(msg):
     if DEBUG:
         print(msg)
 
+
 class CarelinkClient:
     """Carelink Client library"""
 
@@ -60,7 +61,7 @@ class CarelinkClient:
         mag_identifier,
         carelink_patient_id,
         config_path=None,
-        entry_id=None
+        entry_id=None,
     ):
 
         # Auth info
@@ -103,11 +104,11 @@ class CarelinkClient:
         self._async_client = None
 
         self.__common_headers = {
-                # Common browser headers
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 10; Nexus 5X Build/QQ3A.200805.001)",
-                }
+            # Common browser headers
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 10; Nexus 5X Build/QQ3A.200805.001)",
+        }
 
     @property
     def async_client(self):
@@ -147,9 +148,7 @@ class CarelinkClient:
 
     async def __get_data(self, path, query_params, request_body):
         printdbg("__get_data()")
-        url = path if path is not None else (
-            self.__session_config["baseUrlCumulus"] + "/display/message"
-        )
+        url = path if path is not None else (self.__session_config["baseUrlCumulus"] + "/display/message")
         jsondata = None
 
         # Get auth token
@@ -162,14 +161,10 @@ class CarelinkClient:
                 if request_body is None:
                     headers["Accept"] = "application/json, text/plain, */*"
                     headers["Content-Type"] = "application/json; charset=utf-8"
-                    response = await self.fetch_async(
-                        url, headers=headers, params=query_params
-                    )
+                    response = await self.fetch_async(url, headers=headers, params=query_params)
                     self.__last_response_code = response.status_code
                     if response.status_code != 200:
-                        raise ValueError(
-                            f"__get_data() session response is not OK: {response.status_code}"
-                        )
+                        raise ValueError(f"__get_data() session response is not OK: {response.status_code}")
                 else:
                     headers["Accept"] = (
                         "text/html,application/xhtml+xml,application/xml;q=0.9,"
@@ -180,9 +175,7 @@ class CarelinkClient:
                     response = await self.post_async(url, headers=headers, data=request_body)
                     self.__last_response_code = response.status_code
                     if response.status_code != 200:
-                        raise ValueError(
-                            f"__get_data() session response is not OK: {response.status_code}"
-                        )
+                        raise ValueError(f"__get_data() session response is not OK: {response.status_code}")
             except httpx.TimeoutException as error:
                 printdbg(f"__get_data() failed: request timeout - {error}")
             except httpx.RequestError as error:
@@ -202,15 +195,12 @@ class CarelinkClient:
     async def __get_patients(self):
         printdbg("__get_patients()")
         url = self.__session_config["baseUrlCareLink"] + "/links/patients"
-        return await self.__get_data(
-            url, None, None
-        )
+        return await self.__get_data(url, None, None)
 
     async def __get_my_user(self):
         printdbg("__get_my_user()")
         url = self.__session_config["baseUrlCareLink"] + "/users/me"
-        resp = await self.__get_data(
-            url, None, None)
+        resp = await self.__get_data(url, None, None)
         return resp
 
     async def __get_config_settings(self):
@@ -219,9 +209,7 @@ class CarelinkClient:
             resp = await self.fetch_async(CARELINK_CONFIG_URL, self.__common_headers)
             self.__last_response_code = resp.status_code
             if resp.status_code != 200:
-                raise ValueError(
-                    f"__get_config_settings() CARELINK_CONFIG_URL response is not OK: {resp.status_code}"
-                )
+                raise ValueError(f"__get_config_settings() CARELINK_CONFIG_URL response is not OK: {resp.status_code}")
             data = resp.json()
             region = None
             config = None
@@ -249,9 +237,7 @@ class CarelinkClient:
             resp = await self.fetch_async(config[sso_configuration_key], self.__common_headers)
             self.__last_response_code = resp.status_code
             if resp.status_code != 200:
-                raise ValueError(
-                    f"__get_config_settings() SSOConfiguration response is not OK: {resp.status_code}"
-                )
+                raise ValueError(f"__get_config_settings() SSOConfiguration response is not OK: {resp.status_code}")
             sso_config = resp.json()
 
             # Handle Auth0 vs standard MAG token URL construction
@@ -266,15 +252,11 @@ class CarelinkClient:
                     sso_base_url = f"https://{hostname}:{port}/{prefix}"
                 else:
                     # Fallback: try to extract from authorization endpoint
-                    auth_endpoint = sso_config.get("system_endpoints", {}).get(
-                        "authorization_endpoint_path", ""
-                    )
+                    auth_endpoint = sso_config.get("system_endpoints", {}).get("authorization_endpoint_path", "")
                     if auth_endpoint.startswith("http"):
                         sso_base_url = auth_endpoint.rsplit("/", 1)[0]
                     else:
-                        raise ValueError(
-                            f"Cannot determine Auth0 base URL from SSO config: {list(sso_config.keys())}"
-                        )
+                        raise ValueError(f"Cannot determine Auth0 base URL from SSO config: {list(sso_config.keys())}")
                 printdbg(f"Auth0 detected, base URL: {sso_base_url}")
             else:
                 # Standard MAG configuration
@@ -283,21 +265,17 @@ class CarelinkClient:
                 prefix = sso_config["server"]["prefix"]
                 sso_base_url = f"https://{hostname}:{port}/{prefix}"
 
-            if sso_base_url.endswith('/'):
+            if sso_base_url.endswith("/"):
                 sso_base_url = sso_base_url[:-1]
             token_url = sso_base_url + sso_config["system_endpoints"]["token_endpoint_path"]
             config["token_url"] = token_url
         except Exception as e:
-            _LOGGER.error(
-                "Carelink: Failed to retrieve config settings: %s", e, exc_info=True
-            )
+            _LOGGER.error("Carelink: Failed to retrieve config settings: %s", e, exc_info=True)
             raise
         return config
 
     # Periodic data from CareLink Cloud
-    async def __get_connect_display_message(
-        self, username, role, patient_id=None
-    ):
+    async def __get_connect_display_message(self, username, role, patient_id=None):
         printdbg("__get_connect_display_message()")
 
         # Build user json for request
@@ -319,11 +297,11 @@ class CarelinkClient:
             return None
         try:
             # Decode json web token payload
-            payload_b64 = token.split('.')[1]
+            payload_b64 = token.split(".")[1]
             payload_b64_bytes = payload_b64.encode()
             missing_padding = (4 - len(payload_b64_bytes) % 4) % 4
             if missing_padding:
-                payload_b64_bytes += b'=' * missing_padding
+                payload_b64_bytes += b"=" * missing_padding
             payload_bytes = base64.b64decode(payload_b64_bytes)
             payload = payload_bytes.decode()
             payload_json = json.loads(payload)
@@ -336,7 +314,7 @@ class CarelinkClient:
             return None
         # Save expiration time
         token_dt = datetime.fromtimestamp(token_validto, tz=timezone.utc)
-        self.__auth_token_validto = token_dt.strftime('%a %b %d %H:%M:%S UTC %Y')
+        self.__auth_token_validto = token_dt.strftime("%a %b %d %H:%M:%S UTC %Y")
         return payload_json
 
     async def __execute_init_procedure(self):
@@ -357,7 +335,7 @@ class CarelinkClient:
                 self.__session_username = self.__access_token_payload["token_details"]["preferred_username"]
                 self.__session_user = await self.__get_my_user()
 
-                if self.__session_user["role"] in ["CARE_PARTNER","CARE_PARTNER_OUS"]:
+                if self.__session_user["role"] in ["CARE_PARTNER", "CARE_PARTNER_OUS"]:
                     if not self.__carelink_patient_id:
                         session_patients = await self.__get_patients()
                         patient = self.__select_patient(session_patients)
@@ -369,7 +347,9 @@ class CarelinkClient:
             except Exception as error:
                 _LOGGER.error(
                     "Carelink: Initialization failed (HTTP %s): %s",
-                    self.__last_response_code, error, exc_info=True,
+                    self.__last_response_code,
+                    error,
+                    exc_info=True,
                 )
                 if self.__last_response_code in AUTH_ERROR_CODES:
                     try:
@@ -389,10 +369,10 @@ class CarelinkClient:
         printdbg(f"Token refresh URL: {token_url}")
 
         user_data = {
-                "refresh_token": token_data["refresh_token"],
-                "client_id":     token_data["client_id"],
-                "grant_type":    "refresh_token"
-                }
+            "refresh_token": token_data["refresh_token"],
+            "client_id": token_data["client_id"],
+            "grant_type": "refresh_token",
+        }
         if "client_secret" in token_data:
             user_data["client_secret"] = token_data["client_secret"]
         try:
@@ -433,7 +413,7 @@ class CarelinkClient:
             printdbg("No valid token")
             return False
 
-        token_time = datetime.strptime(auth_token_validto, '%a %b %d %H:%M:%S UTC %Y')
+        token_time = datetime.strptime(auth_token_validto, "%a %b %d %H:%M:%S UTC %Y")
         token_time = token_time.replace(tzinfo=timezone.utc)
         time_remaining = token_time - datetime.now(tz=timezone.utc)
         if time_remaining < timedelta(seconds=AUTH_EXPIRE_DEADLINE_MINUTES * 60):
@@ -452,12 +432,7 @@ class CarelinkClient:
             if self.__session_user is None:
                 _LOGGER.error("Session user is None. Cannot fetch recent data.")
                 return None
-            role = (
-                "carepartner"
-                if self.__session_user["role"]
-                in ["CARE_PARTNER", "CARE_PARTNER_OUS"]
-                else "patient"
-            )
+            role = "carepartner" if self.__session_user["role"] in ["CARE_PARTNER", "CARE_PARTNER_OUS"] else "patient"
             return await self.__get_connect_display_message(
                 self.__session_username,
                 role,
@@ -471,7 +446,7 @@ class CarelinkClient:
             directory = os.path.dirname(filename)
             if directory:
                 await asyncio.to_thread(os.makedirs, directory, exist_ok=True)
-            async with aiofiles.open(filename, 'w') as f:
+            async with aiofiles.open(filename, "w") as f:
                 await f.write(json.dumps(obj, indent=4))
             printdbg("Token file written successfully")
             return True
@@ -573,10 +548,11 @@ class CarelinkClient:
         else:
             if self.__carelink_access_token and self.__carelink_refresh_token and self.__client_id:
                 printdbg("Found static configuration. Create Authentificaiton file.")
-                token_data = {"access_token": self.__carelink_access_token,
-                             "refresh_token": self.__carelink_refresh_token,
-                             "client_id": self.__client_id,
-                             }
+                token_data = {
+                    "access_token": self.__carelink_access_token,
+                    "refresh_token": self.__carelink_refresh_token,
+                    "client_id": self.__client_id,
+                }
                 if self.__client_secret:
                     token_data["client_secret"] = self.__client_secret
                 if self.__mag_identifier:
@@ -611,11 +587,9 @@ class CarelinkClient:
             result = asyncio.run(self.get_recent_data())
             print(f"data: {result}")
 
-if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(
-        description="Retrieve recent data from last 24h from Medtronic Carelink."
-    )
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Retrieve recent data from last 24h from Medtronic Carelink.")
     parser.add_argument("-i", "--patientId", dest="carelink_patient", help="Carelink Patient ID")
     parser.add_argument("-t", "--token", dest="token", help="Carelink Token")
     parser.add_argument("-r", "--rtoken", dest="refresh_token", help="Refresh Token")
@@ -625,12 +599,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     TESTAPI = CarelinkClient(
-        carelink_token = args.token,
-        carelink_patient_id = args.carelink_patient,
-        carelink_refresh_token = args.refresh_token,
-        client_id = args.client_id,
-        client_secret = args.client_secret,
-        mag_identifier = args.mag_identifier
+        carelink_token=args.token,
+        carelink_patient_id=args.carelink_patient,
+        carelink_refresh_token=args.refresh_token,
+        client_id=args.client_id,
+        client_secret=args.client_secret,
+        mag_identifier=args.mag_identifier,
     )
 
     TESTAPI.run_in_console()

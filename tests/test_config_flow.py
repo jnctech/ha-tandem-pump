@@ -1,4 +1,5 @@
 """Tests for the Carelink config flow."""
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,9 +18,7 @@ class TestValidateInput:
         """Test successful validation."""
         mock_hass = MagicMock()
 
-        with patch(
-            "custom_components.carelink.config_flow.CarelinkClient"
-        ) as mock_client_class:
+        with patch("custom_components.carelink.config_flow.CarelinkClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.login = AsyncMock(return_value=True)
             mock_client.close = AsyncMock()
@@ -44,9 +43,7 @@ class TestValidateInput:
         """Test validation with invalid credentials."""
         mock_hass = MagicMock()
 
-        with patch(
-            "custom_components.carelink.config_flow.CarelinkClient"
-        ) as mock_client_class:
+        with patch("custom_components.carelink.config_flow.CarelinkClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.login = AsyncMock(return_value=False)
             mock_client.close = AsyncMock()
@@ -64,11 +61,10 @@ class TestValidateInput:
         """Test validation with valid Nightscout configuration."""
         mock_hass = MagicMock()
 
-        with patch(
-            "custom_components.carelink.config_flow.CarelinkClient"
-        ) as mock_client_class, patch(
-            "custom_components.carelink.config_flow.NightscoutUploader"
-        ) as mock_uploader_class:
+        with (
+            patch("custom_components.carelink.config_flow.CarelinkClient") as mock_client_class,
+            patch("custom_components.carelink.config_flow.NightscoutUploader") as mock_uploader_class,
+        ):
             mock_client = MagicMock()
             mock_client.login = AsyncMock(return_value=True)
             mock_client.close = AsyncMock()
@@ -95,11 +91,10 @@ class TestValidateInput:
         """Test validation when Nightscout server is unreachable."""
         mock_hass = MagicMock()
 
-        with patch(
-            "custom_components.carelink.config_flow.CarelinkClient"
-        ) as mock_client_class, patch(
-            "custom_components.carelink.config_flow.NightscoutUploader"
-        ) as mock_uploader_class:
+        with (
+            patch("custom_components.carelink.config_flow.CarelinkClient") as mock_client_class,
+            patch("custom_components.carelink.config_flow.NightscoutUploader") as mock_uploader_class,
+        ):
             mock_client = MagicMock()
             mock_client.login = AsyncMock(return_value=True)
             mock_client.close = AsyncMock()
@@ -124,9 +119,7 @@ class TestValidateInput:
         """Test validation fails when only URL is provided."""
         mock_hass = MagicMock()
 
-        with patch(
-            "custom_components.carelink.config_flow.CarelinkClient"
-        ) as mock_client_class:
+        with patch("custom_components.carelink.config_flow.CarelinkClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.login = AsyncMock(return_value=True)
             mock_client.close = AsyncMock()
@@ -146,9 +139,7 @@ class TestValidateInput:
         """Test validation fails when only API key is provided."""
         mock_hass = MagicMock()
 
-        with patch(
-            "custom_components.carelink.config_flow.CarelinkClient"
-        ) as mock_client_class:
+        with patch("custom_components.carelink.config_flow.CarelinkClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.login = AsyncMock(return_value=True)
             mock_client.close = AsyncMock()
@@ -168,9 +159,7 @@ class TestValidateInput:
         """Test validation fails with invalid URL scheme."""
         mock_hass = MagicMock()
 
-        with patch(
-            "custom_components.carelink.config_flow.CarelinkClient"
-        ) as mock_client_class:
+        with patch("custom_components.carelink.config_flow.CarelinkClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.login = AsyncMock(return_value=True)
             mock_client.close = AsyncMock()
@@ -190,9 +179,7 @@ class TestValidateInput:
         """Test validation fails with URL without host."""
         mock_hass = MagicMock()
 
-        with patch(
-            "custom_components.carelink.config_flow.CarelinkClient"
-        ) as mock_client_class:
+        with patch("custom_components.carelink.config_flow.CarelinkClient") as mock_client_class:
             mock_client = MagicMock()
             mock_client.login = AsyncMock(return_value=True)
             mock_client.close = AsyncMock()
@@ -212,11 +199,10 @@ class TestValidateInput:
         """Test that URL whitespace is stripped."""
         mock_hass = MagicMock()
 
-        with patch(
-            "custom_components.carelink.config_flow.CarelinkClient"
-        ) as mock_client_class, patch(
-            "custom_components.carelink.config_flow.NightscoutUploader"
-        ) as mock_uploader_class:
+        with (
+            patch("custom_components.carelink.config_flow.CarelinkClient") as mock_client_class,
+            patch("custom_components.carelink.config_flow.NightscoutUploader") as mock_uploader_class,
+        ):
             mock_client = MagicMock()
             mock_client.login = AsyncMock(return_value=True)
             mock_client.close = AsyncMock()

@@ -240,7 +240,7 @@ class TestValidateTandemInput:
                 "tandem_region": "EU",
             }
 
-            result = await validate_tandem_input(mock_hass, data)
+            result = await validate_tandem_input(data)
 
         assert result == {"title": "Tandem t:slim (EU)"}
         mock_client.login.assert_called_once()
@@ -269,7 +269,7 @@ class TestValidateTandemInput:
             }
 
             with pytest.raises(InvalidAuth):
-                await validate_tandem_input(mock_hass, data)
+                await validate_tandem_input(data)
 
     async def test_validate_tandem_input_auth_error(self):
         """Test validation when TandemAuthError is raised."""
@@ -294,4 +294,4 @@ class TestValidateTandemInput:
             }
 
             with pytest.raises(InvalidAuth):
-                await validate_tandem_input(mock_hass, data)
+                await validate_tandem_input(data)

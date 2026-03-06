@@ -879,9 +879,7 @@ class TestNightscoutSetData:
         """HTTP 200 response causes __set_data to return True."""
         mock_response = MagicMock()
         mock_response.status_code = 200
-        with patch.object(
-            mock_nightscout_uploader, "post_async", new_callable=AsyncMock, return_value=mock_response
-        ):
+        with patch.object(mock_nightscout_uploader, "post_async", new_callable=AsyncMock, return_value=mock_response):
             result = await mock_nightscout_uploader._NightscoutUploader__set_data(
                 "https://ns.example.com", [{"sgv": 120}], "entries"
             )
@@ -891,9 +889,7 @@ class TestNightscoutSetData:
         """Non-200 response causes __set_data to return False."""
         mock_response = MagicMock()
         mock_response.status_code = 500
-        with patch.object(
-            mock_nightscout_uploader, "post_async", new_callable=AsyncMock, return_value=mock_response
-        ):
+        with patch.object(mock_nightscout_uploader, "post_async", new_callable=AsyncMock, return_value=mock_response):
             result = await mock_nightscout_uploader._NightscoutUploader__set_data(
                 "https://ns.example.com", [{"sgv": 120}], "entries"
             )

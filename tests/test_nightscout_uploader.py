@@ -29,8 +29,8 @@ class TestNightscoutUploaderInit:
             nightscout_secret="testsecret",
         )
         # SHA1 hash of "testsecret" should be stored
-        assert uploader._NightscoutUploader__hashedSecret is not None
-        assert len(uploader._NightscoutUploader__hashedSecret) == 40  # SHA1 hex length
+        assert uploader._NightscoutUploader__hashed_secret is not None
+        assert len(uploader._NightscoutUploader__hashed_secret) == 40  # SHA1 hex length
 
 
 class TestNightscoutUploaderClient:

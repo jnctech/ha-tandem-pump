@@ -5,9 +5,9 @@ permissions:
 
 on:
   push:
-    branches: [master, develop, "release/*"]
+    branches: [master]
   pull_request:
-    branches: [master, develop]
+    branches: [master]
 
 jobs:
   sonarcloud:

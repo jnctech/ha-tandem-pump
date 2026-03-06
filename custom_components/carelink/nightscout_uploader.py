@@ -35,7 +35,7 @@ class NightscoutUploader:
         # Nightscout info
         self.__nightscout_url = nightscout_url.lower().rstrip("/")
         # SHA-1 is required by the Nightscout API specification for the API-SECRET header.
-        self.__hashedSecret = hashlib.sha1(  # nosec B324
+        self.__hashed_secret = hashlib.sha1(  # nosec B324
             nightscout_secret.encode("utf-8"), usedforsecurity=False
         ).hexdigest()
         self.__is_reachable = False
@@ -43,7 +43,7 @@ class NightscoutUploader:
         self._async_client = None
         self.__common_headers = {
             # Common browser headers
-            "API-SECRET": self.__hashedSecret,
+            "API-SECRET": self.__hashed_secret,
             "Content-Type": "application/json",
             "User-Agent": NS_USER_AGENT,
             "Accept": "application/json",
@@ -121,12 +121,12 @@ class NightscoutUploader:
         result = []
         for marker in input:
             marker_dict = {}
-            isType = False
+            is_type = False
             for k, v in self.__traverse(marker):
                 if key == k and v == value:
-                    isType = True
+                    is_type = True
                     break
-            if isType:
+            if is_type:
                 for entry in marker.items():
                     marker_dict[entry[0]] = entry[1]
                 result.append(marker_dict)

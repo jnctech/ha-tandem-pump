@@ -131,10 +131,10 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
             DEVICE_PUMP_MANUFACTURER, "Medtronic"
         )
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.data[DEVICE_PUMP_SERIAL])},
-            name=self.coordinator.data[DEVICE_PUMP_NAME],
+            identifiers={(DOMAIN, self.coordinator.data.get(DEVICE_PUMP_SERIAL, "unknown"))},
+            name=self.coordinator.data.get(DEVICE_PUMP_NAME, "Pump"),
             manufacturer=manufacturer,
-            model=self.coordinator.data[DEVICE_PUMP_MODEL],
+            model=self.coordinator.data.get(DEVICE_PUMP_MODEL),
         )
 
     @property

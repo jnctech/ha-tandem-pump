@@ -69,8 +69,11 @@ class CartridgeFillVolumeNumber(RestoreEntity, NumberEntity):
         if last_state and last_state.state not in (None, "unknown", "unavailable"):
             try:
                 self._attr_native_value = float(last_state.state)
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as err:
+                _LOGGER.warning(
+                    "Carelink: Could not restore cartridge fill volume from state %r: %s",
+                    last_state.state, err,
+                )
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the cartridge fill volume."""

@@ -131,6 +131,28 @@ class TestConvertDateToIsodate:
         assert result.minute == 30
         assert result.second == 45
 
+    def test_convert_non_utc_positive_offset(self):
+        """Non-UTC positive offset is normalised to UTC before stripping tzinfo (H7)."""
+        # 12:00:00+05:30 → 06:30:00 UTC
+        result = convert_date_to_isodate("2024-01-15T12:00:00+05:30")
+        assert result.tzinfo is None
+        assert result.hour == 6
+        assert result.minute == 30
+
+    def test_convert_non_utc_negative_offset(self):
+        """Non-UTC negative offset is normalised to UTC before stripping tzinfo (H7)."""
+        # 10:00:00-05:00 → 15:00:00 UTC
+        result = convert_date_to_isodate("2024-01-15T10:00:00-05:00")
+        assert result.tzinfo is None
+        assert result.hour == 15
+        assert result.minute == 0
+
+    def test_convert_utc_zero_offset(self):
+        """Explicit +00:00 offset produces the same UTC result as .000Z format."""
+        result_z = convert_date_to_isodate("2024-03-01T08:00:00.000Z")
+        result_plus = convert_date_to_isodate("2024-03-01T08:00:00+00:00")
+        assert result_z == result_plus
+
 
 class TestGetSg:
     """Tests for the get_sg function."""

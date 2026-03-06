@@ -555,7 +555,9 @@ TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT = "tandem_low_insulin_alert"
 # Tandem Reports API is historical — pump uploads periodically, not in real-time.
 # When data is older than this threshold, sensors are marked unavailable so HA
 # stops recording stale values (which would create misleading flat lines in graphs).
-TANDEM_DATA_STALE_MINUTES = 30
+# 6 hours: covers real-world gaps (exercise, phone away, brief BT drops)
+# while still catching genuine sync failures within a reasonable window.
+TANDEM_DATA_STALE_MINUTES = 360
 TANDEM_DATA_STALE_TIMEDELTA = timedelta(minutes=TANDEM_DATA_STALE_MINUTES)
 
 # Sensors that remain available even when pump data is stale.

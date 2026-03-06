@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -226,8 +226,6 @@ class TestValidateTandemInput:
         """Test successful Tandem credential validation."""
         from custom_components.carelink.config_flow import validate_tandem_input
 
-        mock_hass = MagicMock()
-
         with patch("custom_components.carelink.config_flow.TandemSourceClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.login = AsyncMock(return_value=True)
@@ -240,24 +238,23 @@ class TestValidateTandemInput:
                 "tandem_region": "EU",
             }
 
-            result = await validate_tandem_input(mock_hass, data)
+            result = await validate_tandem_input(data)
 
         assert result == {"title": "Tandem t:slim (EU)"}
         mock_client.login.assert_called_once()
         mock_client.close.assert_called_once()
 
     async def test_validate_tandem_input_login_fails(self):
-        """Test validation when Tandem login returns False."""
+        """Test validation when Tandem login raises TandemAuthError."""
         from custom_components.carelink.config_flow import (
             validate_tandem_input,
             InvalidAuth,
         )
-
-        mock_hass = MagicMock()
+        from custom_components.carelink.tandem_api import TandemAuthError
 
         with patch("custom_components.carelink.config_flow.TandemSourceClient") as mock_client_class:
             mock_client = AsyncMock()
-            mock_client.login = AsyncMock(return_value=False)
+            mock_client.login = AsyncMock(side_effect=TandemAuthError("Login failed"))
             mock_client.close = AsyncMock()
             mock_client_class.return_value = mock_client
 
@@ -268,7 +265,7 @@ class TestValidateTandemInput:
             }
 
             with pytest.raises(InvalidAuth):
-                await validate_tandem_input(mock_hass, data)
+                await validate_tandem_input(data)
 
     async def test_validate_tandem_input_auth_error(self):
         """Test validation when TandemAuthError is raised."""
@@ -277,8 +274,6 @@ class TestValidateTandemInput:
             InvalidAuth,
         )
         from custom_components.carelink.tandem_api import TandemAuthError
-
-        mock_hass = MagicMock()
 
         with patch("custom_components.carelink.config_flow.TandemSourceClient") as mock_client_class:
             mock_client = AsyncMock()
@@ -293,4 +288,4 @@ class TestValidateTandemInput:
             }
 
             with pytest.raises(InvalidAuth):
-                await validate_tandem_input(mock_hass, data)
+                await validate_tandem_input(data)

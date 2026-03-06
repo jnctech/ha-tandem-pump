@@ -48,12 +48,12 @@ async def validate_carelink_input(hass: HomeAssistant, data: dict[str, Any]) -> 
         except Exception:
             _LOGGER.warning("Failed to close Carelink client during validation")
 
-    await _validate_nightscout(hass, data)
+    await _validate_nightscout(data)
 
     return {"title": "Carelink"}
 
 
-async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+async def validate_tandem_input(data: dict[str, Any]) -> dict[str, Any]:
     """Validate Tandem Source user input."""
     email = data.get("tandem_email", "").strip()
     password = data.get("tandem_password", "")
@@ -64,8 +64,7 @@ async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> di
 
     client = TandemSourceClient(email, password, region)
     try:
-        if not await client.login():
-            raise InvalidAuth
+        await client.login()
     except TandemAuthError as e:
         _LOGGER.warning("Tandem login failed: %s", e)
         raise InvalidAuth from e
@@ -75,12 +74,12 @@ async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> di
         except Exception:
             _LOGGER.warning("Failed to close Tandem client during validation")
 
-    await _validate_nightscout(hass, data)
+    await _validate_nightscout(data)
 
     return {"title": f"Tandem t:slim ({region})"}
 
 
-async def _validate_nightscout(hass: HomeAssistant, data: dict[str, Any]) -> None:
+async def _validate_nightscout(data: dict[str, Any]) -> None:
     """Validate Nightscout configuration if provided."""
     nightscout_url = data.get("nightscout_url")
     nightscout_api = data.get("nightscout_api")
@@ -259,7 +258,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             user_input[PLATFORM_TYPE] = PLATFORM_TANDEM
             try:
-                info = await validate_tandem_input(self.hass, user_input)
+                info = await validate_tandem_input(user_input)
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
@@ -288,7 +287,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             try:
                 if platform == PLATFORM_TANDEM:
-                    await validate_tandem_input(self.hass, full_config)
+                    await validate_tandem_input(full_config)
                 else:
                     await validate_carelink_input(self.hass, full_config)
             except CannotConnect:

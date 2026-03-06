@@ -119,27 +119,27 @@ class TestCarelinkClient:
 class TestTokenProcessing:
     """Tests for token processing methods."""
 
-    async def test_get_access_token_payload_valid(self, mock_carelink_client, mock_token_data):
+    def test_get_access_token_payload_valid(self, mock_carelink_client, mock_token_data):
         """Test extracting payload from valid JWT token."""
-        result = await mock_carelink_client._get_access_token_payload(mock_token_data)
+        result = mock_carelink_client._get_access_token_payload(mock_token_data)
 
         assert result is not None
         assert "token_details" in result
         assert result["token_details"]["country"] == "NL"
 
-    async def test_get_access_token_payload_missing_token(self, mock_carelink_client):
+    def test_get_access_token_payload_missing_token(self, mock_carelink_client):
         """Test handling missing access token."""
-        result = await mock_carelink_client._get_access_token_payload({})
+        result = mock_carelink_client._get_access_token_payload({})
         assert result is None
 
-    async def test_get_access_token_payload_invalid_token(self, mock_carelink_client):
+    def test_get_access_token_payload_invalid_token(self, mock_carelink_client):
         """Test handling invalid/malformed token."""
-        result = await mock_carelink_client._get_access_token_payload({"access_token": "invalid_token_without_dots"})
+        result = mock_carelink_client._get_access_token_payload({"access_token": "invalid_token_without_dots"})
         assert result is None
 
-    async def test_get_access_token_payload_none_input(self, mock_carelink_client):
+    def test_get_access_token_payload_none_input(self, mock_carelink_client):
         """Test handling None input."""
-        result = await mock_carelink_client._get_access_token_payload(None)
+        result = mock_carelink_client._get_access_token_payload(None)
         assert result is None
 
 

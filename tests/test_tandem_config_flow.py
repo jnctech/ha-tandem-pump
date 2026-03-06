@@ -247,17 +247,18 @@ class TestValidateTandemInput:
         mock_client.close.assert_called_once()
 
     async def test_validate_tandem_input_login_fails(self):
-        """Test validation when Tandem login returns False."""
+        """Test validation when Tandem login raises TandemAuthError."""
         from custom_components.carelink.config_flow import (
             validate_tandem_input,
             InvalidAuth,
         )
+        from custom_components.carelink.tandem_api import TandemAuthError
 
         mock_hass = MagicMock()
 
         with patch("custom_components.carelink.config_flow.TandemSourceClient") as mock_client_class:
             mock_client = AsyncMock()
-            mock_client.login = AsyncMock(return_value=False)
+            mock_client.login = AsyncMock(side_effect=TandemAuthError("Login failed"))
             mock_client.close = AsyncMock()
             mock_client_class.return_value = mock_client
 

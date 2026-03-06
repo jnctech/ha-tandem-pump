@@ -180,7 +180,7 @@ class CarelinkClient:
                 printdbg(f"__get_data() failed: request timeout - {error}")
             except httpx.RequestError as error:
                 printdbg(f"__get_data() failed: network error - {error}")
-            except (ValueError, KeyError, json.JSONDecodeError) as error:
+            except (ValueError, KeyError) as error:
                 printdbg(f"__get_data() failed: response error - {error}")
             else:
                 jsondata = json.loads(response.text)
@@ -288,7 +288,7 @@ class CarelinkClient:
         recent_data = await self.__get_data(None, None, request_body)
         return recent_data
 
-    async def _get_access_token_payload(self, token_data):
+    def _get_access_token_payload(self, token_data):
         printdbg("_get_access_token_payload()")
         try:
             token = token_data["access_token"]
@@ -309,7 +309,7 @@ class CarelinkClient:
             # Get expiration time stamp
             token_validto = payload_json["exp"]
             token_validto -= 600
-        except (KeyError, IndexError, ValueError, json.JSONDecodeError) as error:
+        except (KeyError, IndexError, ValueError) as error:
             printdbg(f"Malformed access token: {error}")
             return None
         # Save expiration time
@@ -324,7 +324,7 @@ class CarelinkClient:
 
             if self.__token_data is None:
                 return
-            self.__access_token_payload = await self._get_access_token_payload(self.__token_data)
+            self.__access_token_payload = self._get_access_token_payload(self.__token_data)
             if self.__access_token_payload is None:
                 return
             try:
@@ -354,7 +354,7 @@ class CarelinkClient:
                 if self.__last_response_code in AUTH_ERROR_CODES:
                     try:
                         if await self.__refresh_token(self.__session_config, self.__token_data):
-                            if await self._get_access_token_payload(self.__token_data):
+                            if self._get_access_token_payload(self.__token_data):
                                 printdbg(f"New token is valid until {self.__auth_token_validto}")
                                 await self._write_token_file(self.__token_data, self.__auth_file_path)
                     except Exception as e:
@@ -400,14 +400,14 @@ class CarelinkClient:
         except httpx.RequestError as error:
             printdbg(f"Token refresh failed: network error - {error}")
             success = False
-        except (ValueError, KeyError, json.JSONDecodeError) as error:
+        except (ValueError, KeyError) as error:
             printdbg(f"Token refresh failed: {error}")
             success = False
         return success
 
     async def __handle_authorization_token(self):
         printdbg("__handle_authorization_token()")
-        if await self._get_access_token_payload(self.__token_data):
+        if self._get_access_token_payload(self.__token_data):
             auth_token_validto = self.__auth_token_validto
         else:
             printdbg("No valid token")
@@ -419,7 +419,7 @@ class CarelinkClient:
         if time_remaining < timedelta(seconds=AUTH_EXPIRE_DEADLINE_MINUTES * 60):
             printdbg(f"Current token is valid until {self.__auth_token_validto}")
             if await self.__refresh_token(self.__session_config, self.__token_data):
-                if await self._get_access_token_payload(self.__token_data):
+                if self._get_access_token_payload(self.__token_data):
                     printdbg(f"New token is valid until {self.__auth_token_validto}")
                     await self._write_token_file(self.__token_data, self.__auth_file_path)
         return True

@@ -181,8 +181,12 @@ def sanitize_for_logging(data, depth=0):
 
 def convert_date_to_isodate(date):
     date_iso = re.sub(r"\.\d{3}Z$", "+00:00", date)
-
-    return datetime.fromisoformat(date_iso).replace(tzinfo=None)
+    dt = datetime.fromisoformat(date_iso)
+    # Normalize any UTC offset to UTC before stripping tzinfo so the resulting
+    # naive datetime always represents UTC, regardless of what offset the API sent.
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def _migrate_legacy_logindata(config_path: str, entry_id: str) -> None:
@@ -390,8 +394,11 @@ class CarelinkCoordinator(DataUpdateCoordinator):
         data = {}
         client_timezone = DEFAULT_TIME_ZONE
 
-        await self.client.login()
-        recent_data = await self.client.get_recent_data()
+        try:
+            await self.client.login()
+            recent_data = await self.client.get_recent_data()
+        except Exception as err:
+            raise UpdateFailed(f"Carelink data fetch failed: {err}") from err
 
         if recent_data is None:
             recent_data = {}
@@ -428,6 +435,7 @@ class CarelinkCoordinator(DataUpdateCoordinator):
         recent_data.setdefault("lastAlarm", {})
         recent_data.setdefault("markers", [])
         recent_data.setdefault("sgs", [])
+        recent_data.setdefault("notificationHistory", {})
 
         # Last Update fetch
 
@@ -785,7 +793,10 @@ class CarelinkCoordinator(DataUpdateCoordinator):
                     state=float(sg_val),
                 ))
             except Exception as e:
-                _LOGGER.debug("Error creating statistic from SG: %s", e)
+                _LOGGER.warning(
+                    "Carelink: Failed to create statistic from SG entry (timestamp=%s): %s",
+                    sg.get("timestamp"), e,
+                )
 
         entity_prefix = f"sensor.{DOMAIN}"
 
@@ -867,6 +878,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         except TandemAuthError as err:
             raise UpdateFailed(f"Tandem authentication failed: {err}") from err
         except Exception as err:
+            _LOGGER.debug("Unexpected error during Tandem login: %s", err, exc_info=True)
             raise UpdateFailed(f"Tandem login error: {err}") from err
 
         # ── Lightweight metadata check: skip heavy API call if no new data ──

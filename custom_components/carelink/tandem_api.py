@@ -112,7 +112,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
         # Tandem timestamps are LOCAL pump time (seconds since 2008-01-01
         # midnight local).  Create a naive datetime so the coordinator can
         # attach the correct pump timezone via .replace(tzinfo=tz).
-        ts = datetime.utcfromtimestamp(TANDEM_EPOCH + ts_raw)
+        ts = datetime.fromtimestamp(TANDEM_EPOCH + ts_raw, tz=timezone.utc).replace(tzinfo=None)
         event_id_counts[event_id] = event_id_counts.get(event_id, 0) + 1
 
         evt = {
@@ -517,7 +517,7 @@ class TandemSourceClient:
 
         try:
             claims = json.loads(base64.urlsafe_b64decode(payload))
-        except Exception as e:
+        except (ValueError, UnicodeDecodeError) as e:
             raise TandemAuthError(f"Cannot decode JWT payload: {e}") from e
 
         self.pumper_id = claims.get("pumperId")
@@ -871,7 +871,7 @@ class TandemSourceClient:
                             device_id, fb_start, fb_end
                         )
                 except Exception as e:
-                    _LOGGER.debug(
+                    _LOGGER.warning(
                         "Tandem: Historical event fallback failed: %s", e
                     )
         else:

@@ -241,3 +241,53 @@ class TestProcessTokenFile:
             result = await mock_carelink_client._process_token_file(str(token_file))
 
         assert result is None
+
+
+class TestHeaderMutation:
+    """Verify __common_headers is not mutated between requests (H8)."""
+
+    def test_common_headers_initial_keys(self, mock_carelink_client):
+        """__common_headers should not contain request-specific keys at init."""
+        headers = mock_carelink_client._CarelinkClient__common_headers
+        assert "Authorization" not in headers
+        assert "mag-identifier" not in headers
+        assert "Accept" in headers
+        assert "Content-Type" in headers
+
+    async def test_common_headers_not_mutated_by_get_data(self, mock_carelink_client):
+        """__get_data must not write Authorization into __common_headers (H8)."""
+        common = mock_carelink_client._CarelinkClient__common_headers
+        initial_keys = set(common.keys())
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+
+        mock_carelink_client._CarelinkClient__token_data = {
+            "access_token": "tok",
+            "mag-identifier": "mag123",
+        }
+        mock_carelink_client._CarelinkClient__session_config = {
+            "baseUrlCumulus": "https://example.com"
+        }
+
+        with patch.object(
+            mock_carelink_client,
+            "_CarelinkClient__handle_authorization_token",
+            new_callable=AsyncMock,
+            return_value=True,
+        ), patch.object(
+            mock_carelink_client,
+            "fetch_async",
+            new_callable=AsyncMock,
+            return_value=mock_response,
+        ):
+            try:
+                await mock_carelink_client._CarelinkClient__get_data()
+            except Exception:
+                pass  # not testing full flow, just header safety
+
+        assert set(common.keys()) == initial_keys, (
+            "__common_headers was mutated — Authorization leaked into shared dict"
+        )
+        assert "Authorization" not in common

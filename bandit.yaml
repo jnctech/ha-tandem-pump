@@ -1,0 +1,8 @@
+skips:
+  - B101  # assert_used — excluded via exclude_dirs anyway
+  - B311  # random — not used for cryptographic purposes here
+
+exclude_dirs:
+  - tests
+  - .git
+  - __pycache__

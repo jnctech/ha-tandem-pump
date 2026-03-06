@@ -155,7 +155,7 @@ class CarelinkClient:
         # Get auth token
         if await self.__handle_authorization_token():
             try:
-                headers = self.__common_headers
+                headers = dict(self.__common_headers)  # copy to avoid mutating shared dict
                 if "mag-identifier" in self.__token_data:
                     headers["mag-identifier"] = self.__token_data["mag-identifier"]
                 headers["Authorization"] = "Bearer " + self.__token_data["access_token"]
@@ -288,7 +288,10 @@ class CarelinkClient:
             token_url = sso_base_url + sso_config["system_endpoints"]["token_endpoint_path"]
             config["token_url"] = token_url
         except Exception as e:
-            printdbg(e)
+            _LOGGER.error(
+                "Carelink: Failed to retrieve config settings: %s", e, exc_info=True
+            )
+            raise
         return config
 
     # Periodic data from CareLink Cloud
@@ -364,7 +367,10 @@ class CarelinkClient:
                         else:
                             printdbg("No patient found.")
             except Exception as error:
-                printdbg(f"__execute_init_procedure() failed: exception {error}")
+                _LOGGER.error(
+                    "Carelink: Initialization failed (HTTP %s): %s",
+                    self.__last_response_code, error, exc_info=True,
+                )
                 if self.__last_response_code in AUTH_ERROR_CODES:
                     try:
                         if await self.__refresh_token(self.__session_config, self.__token_data):
@@ -372,7 +378,7 @@ class CarelinkClient:
                                 printdbg(f"New token is valid until {self.__auth_token_validto}")
                                 await self._write_token_file(self.__token_data, self.__auth_file_path)
                     except Exception as e:
-                        printdbg(e)
+                        _LOGGER.error("Carelink: Token refresh during init also failed: %s", e)
                     return
             self.__initialized = True
 
@@ -403,7 +409,10 @@ class CarelinkClient:
                 self.__token_data["refresh_token"] = response_data["refresh_token"]
                 success = True
             else:
-                printdbg(f"Token refresh response body: {response.text}")
+                _LOGGER.debug(
+                    "Carelink: Token refresh failed with HTTP %s (response body redacted)",
+                    self.__last_response_code,
+                )
                 raise ValueError(f"Failed to refresh token ({self.__last_response_code})")
         except httpx.TimeoutException as error:
             printdbg(f"Token refresh failed: request timeout - {error}")

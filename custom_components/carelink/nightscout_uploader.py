@@ -1,9 +1,11 @@
 import argparse
 import asyncio
+import certifi
 from datetime import datetime
 import hashlib
 import json
 import logging
+import ssl
 
 import httpx
 
@@ -35,7 +37,8 @@ class NightscoutUploader:
 
         # Nightscout info
         self.__nightscout_url = nightscout_url.lower().rstrip('/')
-        self.__hashedSecret = hashlib.sha1(nightscout_secret.encode('utf-8')).hexdigest()
+        # SHA-1 is required by the Nightscout API specification for the API-SECRET header.
+        self.__hashedSecret = hashlib.sha1(nightscout_secret.encode('utf-8')).hexdigest()  # noqa: S324
         self.__is_reachable=False
 
         self._async_client = None
@@ -49,10 +52,10 @@ class NightscoutUploader:
 
     @property
     def async_client(self):
-        """Return the httpx client."""
+        """Return the httpx client, using a certifi-backed SSL context."""
         if not self._async_client:
-            self._async_client = httpx.AsyncClient()
-
+            ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+            self._async_client = httpx.AsyncClient(verify=ssl_ctx, timeout=30.0)
         return self._async_client
 
     async def close(self):
@@ -133,93 +136,22 @@ class NightscoutUploader:
         date_string = dt.isoformat()
         return date, date_string
 
-    async def __setDeviceStatus(self, rawdata):
-        printdbg("__setDeviceStatus()")
-        try:
-            data = self.__getDeviceStatus(rawdata)
-        except Exception as error:
-            printdbg(f"__setDeviceStatus() exception: {error}")
-            data = []
-        return await self.__set_data(
-            self.__nightscout_url, data, "devicestatus"
-        )
 
-    async def __setSGS(self, rawdata, tz):
-        printdbg("__setSGS()")
-        try:
-            data = self.__getSGS(rawdata, tz)
-        except Exception as error:
-            printdbg(f"__setSGS() exception: {error}")
-            data = []
-        return await self.__set_data(
-            self.__nightscout_url, data, "entries"
-        )
+    async def __upload_section(self, section_name: str, getter, data_type: str, *args) -> bool:
+        """Prepare data via getter and upload to Nightscout.
 
-    async def __setBasal(self, rawdata, tz):
-        printdbg("__setBasal()")
+        Logs failures at WARNING level (visible in default HA logging) rather
+        than swallowing them silently at DEBUG level.
+        """
         try:
-            data = self.__getBasal(rawdata, tz)
+            data = getter(*args)
         except Exception as error:
-            printdbg(f"__setBasal() exception: {error}")
+            _LOGGER.warning(
+                "Nightscout: Failed to prepare %s for upload: %s",
+                section_name, error, exc_info=True,
+            )
             data = []
-        return await self.__set_data(
-            self.__nightscout_url, data, "treatments"
-        )
-
-    async def __setBolus(self, rawdata, tz):
-        printdbg("__setBolus()")
-        try:
-            data = self.__getBolus(rawdata, tz)
-        except Exception as error:
-            printdbg(f"__setBolus() exception: {error}")
-            data = []
-        return await self.__set_data(
-            self.__nightscout_url, data, "treatments"
-        )
-
-    async def __setAutoBolus(self, rawdata, tz):
-        printdbg("__setAutoBolus()")
-        try:
-            data = self.__getAutoBolus(rawdata, tz)
-        except Exception as error:
-            printdbg(f"__setAutoBolus() exception: {error}")
-            data = []
-        return await self.__set_data(
-            self.__nightscout_url, data, "treatments"
-        )
-
-    async def __setAlarms(self, rawdata, tz):
-        printdbg("__setAlarms()")
-        try:
-            data = self.__getAlarms(rawdata, tz)
-        except Exception as error:
-            printdbg(f"__setAlarms() exception: {error}")
-            data = []
-        return await self.__set_data(
-            self.__nightscout_url, data, "treatments"
-        )
-
-    async def __setMsgs(self, rawdata, tz):
-        printdbg("__setMsgs()")
-        try:
-            data = self.__getMsgs(rawdata, tz)
-        except Exception as error:
-            printdbg(f"__setMsgs() exception: {error}")
-            data = []
-        return await self.__set_data(
-            self.__nightscout_url, data, "treatments"
-        )
-
-    async def __setAlerts(self, rawdata, tz):
-        printdbg("__setAlerts()")
-        try:
-            data = self.__getAlerts(rawdata, tz)
-        except Exception as error:
-            printdbg(f"__setAlerts() exception: {error}")
-            data = []
-        return await self.__set_data(
-            self.__nightscout_url, data, "treatments"
-        )
+        return await self.__set_data(self.__nightscout_url, data, data_type)
 
     async def __set_data(self, host, data, data_type):
         printdbg("__set_data()")
@@ -393,13 +325,21 @@ class NightscoutUploader:
 
     def __getSGSEntries(self, sgs, tz):
         result = list()
-        trend, delta="null", "null"
+        trend, delta = "null", "null"
         for count, sg in enumerate(sgs):
-            try:
-                trend, delta = self.__ns_trend(sgs[count], sgs[count-1])
-            except Exception:
-                pass
-            date, date_string=self.__getDataStringFromIso(sg["timestamp"], tz)
+            if count == 0:
+                # No previous reading available for the first entry.
+                trend, delta = "null", "null"
+            else:
+                try:
+                    trend, delta = self.__ns_trend(sgs[count], sgs[count - 1])
+                except Exception as error:
+                    _LOGGER.warning(
+                        "Nightscout: Failed to compute trend for SGS entry %d: %s",
+                        count, error,
+                    )
+                    trend, delta = "null", "null"
+            date, date_string = self.__getDataStringFromIso(sg["timestamp"], tz)
             result.append(dict(
                 device=NS_USER_AGENT,
                 direction=trend,
@@ -412,43 +352,38 @@ class NightscoutUploader:
         return result
 
     async def __slice_recent_data_for_transmission(self, recent_data, tz):
-        # Sending device status
-        response = await self.__setDeviceStatus(recent_data)
-        if response:
+        # Device status
+        if await self.__upload_section("device status", self.__getDeviceStatus, "devicestatus", recent_data):
             printdbg("sending device status was ok")
-        # Sending all SGS
+
+        # SGS entries
         sgs = recent_data.get("sgs")
         if sgs is not None:
-            response = await self.__setSGS(sgs, tz)
-            if response:
+            if await self.__upload_section("SGS entries", self.__getSGS, "entries", sgs, tz):
                 printdbg("sending SGS entries was ok")
         else:
             printdbg("No SGS data available, skipping upload")
-        # Sending Basal, Bolus, Auto Bolus (markers block)
+
+        # Basal, Bolus, Auto-Bolus (markers block)
         markers = recent_data.get("markers")
         if markers is not None:
-            response = await self.__setBasal(markers, tz)
-            if response:
+            if await self.__upload_section("basal", self.__getBasal, "treatments", markers, tz):
                 printdbg("sending basal was ok")
-            response = await self.__setBolus(markers, tz)
-            if response:
+            if await self.__upload_section("meal bolus", self.__getBolus, "treatments", markers, tz):
                 printdbg("sending meal bolus was ok")
-            response = await self.__setAutoBolus(markers, tz)
-            if response:
+            if await self.__upload_section("auto bolus", self.__getAutoBolus, "treatments", markers, tz):
                 printdbg("sending auto bolus was ok")
         else:
             printdbg("No markers data available, skipping basal/bolus upload")
-        # Sending Notifications (notificationHistory block)
+
+        # Notifications (notificationHistory block)
         notification_history = recent_data.get("notificationHistory")
         if notification_history is not None:
-            response = await self.__setAlarms(notification_history, tz)
-            if response:
+            if await self.__upload_section("alarms", self.__getAlarms, "treatments", notification_history, tz):
                 printdbg("sending alarm notifications was ok")
-            response = await self.__setMsgs(notification_history, tz)
-            if response:
+            if await self.__upload_section("messages", self.__getMsgs, "treatments", notification_history, tz):
                 printdbg("sending message notifications was ok")
-            response = await self.__setAlerts(notification_history, tz)
-            if response:
+            if await self.__upload_section("alerts", self.__getAlerts, "treatments", notification_history, tz):
                 printdbg("sending alert notifications was ok")
         else:
             printdbg("No notification history available, skipping notifications upload")
@@ -462,11 +397,20 @@ class NightscoutUploader:
 
     async def __test_server_connection(self):
         url = f"{self.__nightscout_url}/api/v1/devicestatus.json"
-        response = await self.fetch_async(
-                        url, headers=self.__common_headers, params={}
-                    )
-        if response.status_code == 200:
-            self.__is_reachable = True
+        try:
+            response = await self.fetch_async(url, headers=self.__common_headers, params={})
+            if response.status_code == 200:
+                self.__is_reachable = True
+            elif response.status_code == 401:
+                _LOGGER.warning("Nightscout: Server reachable but API secret was rejected (HTTP 401)")
+            else:
+                _LOGGER.warning("Nightscout: Server returned unexpected HTTP %s", response.status_code)
+        except httpx.TimeoutException:
+            _LOGGER.warning("Nightscout: Connection timed out to %s", self.__nightscout_url)
+        except httpx.ConnectError as error:
+            _LOGGER.warning("Nightscout: Cannot reach server at %s: %s", self.__nightscout_url, error)
+        except httpx.RequestError as error:
+            _LOGGER.warning("Nightscout: Network error connecting to %s: %s", self.__nightscout_url, error)
 
     # verify connection
     async def reachServer(self):

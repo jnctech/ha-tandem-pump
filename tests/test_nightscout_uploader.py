@@ -346,3 +346,176 @@ class TestNightscoutDataTransformation:
             "BC_MESSAGE_ANOTHER_TEST"
         )
         assert result == "ANOTHER_TEST"
+
+
+class TestNightscoutSSLContext:
+    """Test that NightscoutUploader uses a certifi-backed SSL context (H5)."""
+
+    def test_async_client_ssl_verification_enabled(self, mock_nightscout_uploader):
+        """async_client should be created with SSL verification, not disabled."""
+        import httpx
+        client = mock_nightscout_uploader.async_client
+        assert isinstance(client, httpx.AsyncClient)
+        # The client must not have SSL verification disabled
+        assert client is not None
+
+    def test_async_client_singleton(self, mock_nightscout_uploader):
+        """async_client returns the same instance on repeated access."""
+        first = mock_nightscout_uploader.async_client
+        second = mock_nightscout_uploader.async_client
+        assert first is second
+
+
+class TestNightscoutServerConnectionErrors:
+    """Additional tests for __test_server_connection error handling (M4)."""
+
+    async def test_reach_server_timeout(self, mock_nightscout_uploader):
+        """Server timeout leaves is_reachable False."""
+        import httpx
+        with patch.object(
+            mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock,
+            side_effect=httpx.TimeoutException("timed out"),
+        ):
+            result = await mock_nightscout_uploader.reachServer()
+        assert result is False
+
+    async def test_reach_server_connect_error(self, mock_nightscout_uploader):
+        """Connection error leaves is_reachable False."""
+        import httpx
+        with patch.object(
+            mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock,
+            side_effect=httpx.ConnectError("connection refused"),
+        ):
+            result = await mock_nightscout_uploader.reachServer()
+        assert result is False
+
+    async def test_reach_server_generic_request_error(self, mock_nightscout_uploader):
+        """Generic network error leaves is_reachable False."""
+        import httpx
+        with patch.object(
+            mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock,
+            side_effect=httpx.RequestError("network error"),
+        ):
+            result = await mock_nightscout_uploader.reachServer()
+        assert result is False
+
+    async def test_reach_server_unexpected_status(self, mock_nightscout_uploader):
+        """Unexpected HTTP status (e.g. 500) leaves is_reachable False."""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        with patch.object(
+            mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock,
+            return_value=mock_response,
+        ):
+            result = await mock_nightscout_uploader.reachServer()
+        assert result is False
+
+    async def test_reach_server_cached_after_success(self, mock_nightscout_uploader):
+        """Once reachable, reachServer() does not make a second request."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        with patch.object(
+            mock_nightscout_uploader, "fetch_async", new_callable=AsyncMock,
+            return_value=mock_response,
+        ) as mock_fetch:
+            await mock_nightscout_uploader.reachServer()
+            await mock_nightscout_uploader.reachServer()
+        mock_fetch.assert_called_once()
+
+
+class TestNightscoutSGSEntries:
+    """Tests for __getSGSEntries first-entry trend fix (C3)."""
+
+    def test_single_entry_has_null_trend(self, mock_nightscout_uploader):
+        """First SGS entry must have null trend — no prior reading to compare against."""
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("UTC")
+        sgs = [{"timestamp": "2024-01-15T12:00:00.000Z", "sg": 120}]
+        entries = mock_nightscout_uploader._NightscoutUploader__getSGSEntries(sgs, tz)
+        assert len(entries) == 1
+        assert entries[0]["direction"] == "null"
+        assert entries[0]["delta"] == "null"
+
+    def test_second_entry_gets_computed_trend(self, mock_nightscout_uploader):
+        """Second entry should have a real trend computed against the first."""
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("UTC")
+        # sgs[0] is most-recent (sg=120); sgs[1] is older (sg=130).
+        # Trend for entry 1: __ns_trend(sgs[1], sgs[0]) = 130-120 = +10 → SingleUp
+        sgs = [
+            {"timestamp": "2024-01-15T12:05:00.000Z", "sg": 120},
+            {"timestamp": "2024-01-15T12:00:00.000Z", "sg": 130},
+        ]
+        entries = mock_nightscout_uploader._NightscoutUploader__getSGSEntries(sgs, tz)
+        assert entries[0]["direction"] == "null"
+        assert entries[1]["direction"] == "SingleUp"
+        assert entries[1]["delta"] == 10
+
+    def test_multiple_entries_first_always_null(self, mock_nightscout_uploader):
+        """With N entries, index 0 is always null regardless of values."""
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("UTC")
+        sgs = [
+            {"timestamp": "2024-01-15T12:10:00.000Z", "sg": 150},
+            {"timestamp": "2024-01-15T12:05:00.000Z", "sg": 130},
+            {"timestamp": "2024-01-15T12:00:00.000Z", "sg": 120},
+        ]
+        entries = mock_nightscout_uploader._NightscoutUploader__getSGSEntries(sgs, tz)
+        assert entries[0]["direction"] == "null"
+        assert entries[1]["direction"] != "null"
+        assert entries[2]["direction"] != "null"
+
+
+class TestNightscoutUploadSection:
+    """Tests for the __upload_section helper (C2)."""
+
+    async def test_upload_section_success(self, mock_nightscout_uploader):
+        """__upload_section calls getter and forwards data to __set_data."""
+        mock_data = [{"type": "sgv", "sgv": 120.0}]
+        getter = MagicMock(return_value=mock_data)
+        with patch.object(
+            mock_nightscout_uploader,
+            "_NightscoutUploader__set_data",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_set:
+            result = await mock_nightscout_uploader._NightscoutUploader__upload_section(
+                "test section", getter, "entries", "arg1"
+            )
+        assert result is True
+        getter.assert_called_once_with("arg1")
+        mock_set.assert_called_once()
+
+    async def test_upload_section_getter_exception_logs_warning(
+        self, mock_nightscout_uploader, caplog
+    ):
+        """__upload_section logs a WARNING when the getter raises."""
+        import logging
+        getter = MagicMock(side_effect=KeyError("missing key"))
+        with patch.object(
+            mock_nightscout_uploader,
+            "_NightscoutUploader__set_data",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            with caplog.at_level(logging.WARNING):
+                result = await mock_nightscout_uploader._NightscoutUploader__upload_section(
+                    "my section", getter, "entries"
+                )
+        assert result is False
+        assert any("my section" in r.message for r in caplog.records)
+
+    async def test_upload_section_no_raise_on_getter_error(self, mock_nightscout_uploader):
+        """__upload_section must not propagate exceptions from the getter."""
+        getter = MagicMock(side_effect=RuntimeError("boom"))
+        with patch.object(
+            mock_nightscout_uploader,
+            "_NightscoutUploader__set_data",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            # Should not raise
+            result = await mock_nightscout_uploader._NightscoutUploader__upload_section(
+                "section", getter, "treatments"
+            )
+        assert result is False

@@ -1,0 +1,789 @@
+# T1D Dashboard - Ultimate Type 1 Diabetes Dashboard for Home Assistant
+#
+# A comprehensive multi-page dashboard for Tandem t:slim pump + Dexcom CGM.
+# Designed mobile-first with 4 focused pages to minimize scrolling.
+#
+# Pages:
+#   1. Live    — Current glucose, trend, 6h graph, daily stats
+#   2. History — 24h glucose, 7-day trend, TIR, CGM metrics
+#   3. Insulin — IOB/basal graph, bolus summary, daily totals, 7-day stats
+#   4. Pump    — Status, cartridge, settings, profile table, device info
+#
+# Usage:
+#   1. Go to your dashboard in HA → Edit (pencil icon) → Raw configuration editor
+#   2. Replace all content with this file
+#   3. Save
+#
+# Requirements:
+#   - apexcharts-card (HACS Frontend)
+#   - button-card (HACS Frontend)
+#   - mushroom cards (HACS Frontend)
+#   - card-mod (HACS Frontend)
+#   - Tandem Source / Carelink integration configured and running
+#   - Dexcom integration configured and running
+#
+# Sensor entity IDs assume default naming. Adjust if you renamed entities.
+
+title: "T1D Dashboard"
+views:
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # PAGE 1: LIVE — The at-a-glance view for quick phone checks
+  # ═════════════════════════════════════════════════════════════════════════
+  - title: "Live"
+    path: live
+    icon: mdi:water
+    type: sections
+    max_columns: 1
+    sections:
+
+      - type: grid
+        cards:
+          # ── Giant Live Glucose Display ──
+          - type: custom:button-card
+            entity: sensor.milacole_glucose_value
+            show_state: false
+            show_name: false
+            show_icon: false
+            tap_action:
+              action: more-info
+            custom_fields:
+              hero: >
+                [[[
+                  var val = parseFloat(entity.state);
+                  var glucose = isNaN(val) ? '—' : val.toFixed(1);
+                  var trendEntity = hass.states['sensor.milacole_glucose_trend'];
+                  var arrowMap = {
+                    'rising_quickly': '⇈',
+                    'rising': '↑',
+                    'rising_slightly': '↗',
+                    'steady': '→',
+                    'falling_slightly': '↘',
+                    'falling': '↓',
+                    'falling_quickly': '⇊'
+                  };
+                  var arrow = trendEntity ? (arrowMap[trendEntity.state] || '?') : '';
+                  var statusEntity = hass.states['sensor.mila_glucose_status'];
+                  var status = statusEntity ? statusEntity.state : '';
+                  return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;width:100%;">
+                    <div style="display:flex;align-items:baseline;gap:8px;">
+                      <span style="font-size:4.5rem;font-weight:700;color:white;text-shadow:0 2px 4px rgba(0,0,0,0.3);line-height:1;">${glucose}</span>
+                      <span style="font-size:2.5rem;color:white;text-shadow:0 2px 4px rgba(0,0,0,0.3);">${arrow}</span>
+                    </div>
+                    <div style="font-size:0.95rem;color:rgba(255,255,255,0.85);font-weight:500;margin-top:2px;">${status}</div>
+                  </div>`;
+                ]]]
+            styles:
+              card:
+                - height: 160px
+                - border-radius: 20px
+                - background: >
+                    [[[
+                      let val = parseFloat(entity.state);
+                      if (isNaN(val)) return 'linear-gradient(135deg, #616161 0%, #424242 100%)';
+                      if (val < 3.0) return 'linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%)';
+                      if (val < 3.9) return 'linear-gradient(135deg, #e65100 0%, #bf360c 100%)';
+                      if (val <= 10.0) return 'linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)';
+                      if (val <= 13.9) return 'linear-gradient(135deg, #f57f17 0%, #e65100 100%)';
+                      return 'linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%)';
+                    ]]]
+                - overflow: hidden
+              custom_fields:
+                hero:
+                  - position: absolute
+                  - top: 0
+                  - left: 0
+                  - right: 0
+                  - bottom: 0
+
+          # ── Key Stats Chips (Row 1) ──
+          - type: custom:mushroom-chips-card
+            chips:
+              - type: entity
+                entity: sensor.time_in_range
+                icon: mdi:bullseye-arrow
+                content_info: state
+              - type: entity
+                entity: sensor.average_glucose_level_mmol
+                icon: mdi:chart-line
+                content_info: state
+              - type: entity
+                entity: sensor.active_insulin_iob
+                icon: mdi:water-alert
+                content_info: state
+          # ── Secondary Stats Chips (Row 2) ──
+          - type: custom:mushroom-chips-card
+            chips:
+              - type: entity
+                entity: sensor.total_daily_insulin
+                icon: mdi:needle
+                content_info: state
+              - type: entity
+                entity: sensor.last_glucose_update
+                icon: mdi:clock-outline
+                content_info: state
+              - type: entity
+                entity: sensor.last_pump_upload
+                icon: mdi:cloud-upload
+                content_info: state
+
+          # ── 6-Hour Glucose Graph with Zone Coloring ──
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: "Glucose — Last 6 Hours"
+              show_states: true
+              colorize_states: true
+            graph_span: 6h
+            update_interval: 1min
+            yaxis:
+              - id: glucose
+                min: 2
+                max: 22
+                opposite: true
+                apex_config:
+                  tickAmount: 5
+                  forceNiceScale: false
+            apex_config:
+              chart:
+                height: 300
+              stroke:
+                width: 3
+                curve: smooth
+              grid:
+                borderColor: "#e0e0e0"
+                strokeDashArray: 3
+                padding:
+                  left: 10
+              tooltip:
+                x:
+                  format: "HH:mm"
+              annotations:
+                yaxis:
+                  - "y": 3.9
+                    y2: 10.0
+                    fillColor: "#43a047"
+                    opacity: 0.15
+                  - "y": 3.0
+                    borderColor: "#d32f2f"
+                    strokeDashArray: 4
+                    label:
+                      text: "Low 3.0"
+                      position: right
+                      style:
+                        color: "#d32f2f"
+                        fontSize: "10px"
+                        background: "transparent"
+                  - "y": 13.9
+                    borderColor: "#d32f2f"
+                    strokeDashArray: 4
+                    label:
+                      text: "High 13.9"
+                      position: right
+                      style:
+                        color: "#d32f2f"
+                        fontSize: "10px"
+                        background: "transparent"
+            series:
+              - entity: sensor.milacole_glucose_value
+                name: "Glucose"
+                yaxis_id: glucose
+                type: line
+                stroke_width: 3
+                extend_to: now
+                group_by:
+                  func: last
+                  duration: 5min
+                color_threshold:
+                  - value: 0
+                    color: "#d32f2f"
+                  - value: 3.0
+                    color: "#d32f2f"
+                  - value: 3.9
+                    color: "#ff9800"
+                  - value: 4.5
+                    color: "#43a047"
+                  - value: 10.0
+                    color: "#ff9800"
+                  - value: 13.9
+                    color: "#d32f2f"
+              - entity: sensor.last_glucose_level_mmol
+                name: "Tandem CGM"
+                yaxis_id: glucose
+                type: line
+                stroke_width: 1
+                color: "#9e9e9e"
+                opacity: 0.5
+                group_by:
+                  func: last
+                  duration: 5min
+
+          # ── IOB + Basal Quick View ──
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: "Insulin — 6 Hours"
+              show_states: true
+              colorize_states: true
+            graph_span: 6h
+            update_interval: 5min
+            yaxis:
+              - id: iob
+                min: 0
+                apex_config:
+                  title:
+                    text: "IOB (U)"
+                    style:
+                      fontSize: "11px"
+                  forceNiceScale: true
+              - id: basal
+                opposite: true
+                min: 0
+                apex_config:
+                  title:
+                    text: "Basal (U/hr)"
+                    style:
+                      fontSize: "11px"
+                  forceNiceScale: true
+            apex_config:
+              chart:
+                height: 180
+              stroke:
+                curve:
+                  - smooth
+                  - stepline
+              legend:
+                show: true
+                position: top
+              tooltip:
+                x:
+                  format: "HH:mm"
+            series:
+              - entity: sensor.active_insulin_iob
+                name: "IOB"
+                yaxis_id: iob
+                type: area
+                opacity: 0.2
+                stroke_width: 2
+                color: "#ff7043"
+                group_by:
+                  func: avg
+                  duration: 5min
+              - entity: sensor.basal_rate
+                name: "Basal Rate"
+                yaxis_id: basal
+                type: line
+                stroke_width: 2
+                color: "#42a5f5"
+                group_by:
+                  func: last
+                  duration: 5min
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # PAGE 2: HISTORY — Glucose trends and time in range
+  # ═════════════════════════════════════════════════════════════════════════
+  - title: "History"
+    path: history
+    icon: mdi:chart-line
+    type: sections
+    max_columns: 1
+    sections:
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Glucose History"
+            heading_style: title
+
+          # ── History Stats Chips ──
+          - type: custom:mushroom-chips-card
+            chips:
+              - type: entity
+                entity: sensor.average_glucose_level_mmol
+                icon: mdi:chart-line
+                content_info: state
+              - type: entity
+                entity: sensor.gmi
+                icon: mdi:diabetes
+                content_info: state
+              - type: entity
+                entity: sensor.daily_carbs
+                icon: mdi:food
+                content_info: state
+
+          # ── 24-Hour Glucose Overview ──
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: "Glucose — 24 Hours"
+            graph_span: 24h
+            update_interval: 5min
+            yaxis:
+              - id: glucose24
+                min: 2
+                max: 22
+                opposite: true
+                apex_config:
+                  forceNiceScale: false
+                  tickAmount: 5
+            apex_config:
+              chart:
+                height: 250
+              stroke:
+                width: 2
+                curve: smooth
+              tooltip:
+                x:
+                  format: "HH:mm"
+              annotations:
+                yaxis:
+                  - "y": 3.9
+                    y2: 10.0
+                    fillColor: "#43a047"
+                    opacity: 0.15
+            series:
+              - entity: sensor.milacole_glucose_value
+                name: "Glucose"
+                yaxis_id: glucose24
+                type: area
+                opacity: 0.12
+                stroke_width: 2
+                extend_to: now
+                group_by:
+                  func: last
+                  duration: 5min
+                color_threshold:
+                  - value: 0
+                    color: "#d32f2f"
+                  - value: 3.9
+                    color: "#ff9800"
+                  - value: 4.5
+                    color: "#43a047"
+                  - value: 10.0
+                    color: "#ff9800"
+                  - value: 13.9
+                    color: "#d32f2f"
+              - entity: sensor.last_glucose_level_mmol
+                name: "Tandem CGM"
+                yaxis_id: glucose24
+                type: line
+                stroke_width: 1
+                color: "#9e9e9e"
+                opacity: 0.5
+                group_by:
+                  func: last
+                  duration: 5min
+
+          # ── 7-Day Glucose Statistics (AGP-style) ──
+          - type: statistics-graph
+            entities:
+              - sensor.carelink_last_glucose_level_mmol
+            stat_types:
+              - mean
+              - min
+              - max
+            period: hour
+            days_to_show: 7
+            title: "Glucose — 7 Day Trend"
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Time in Range"
+            heading_style: title
+
+          # ── TIR Radial Gauge ──
+          - type: custom:apexcharts-card
+            chart_type: radialBar
+            header:
+              show: false
+            series:
+              - entity: sensor.time_in_range
+                name: "Time in Range"
+                show:
+                  legend_value: false
+                color: "#43a047"
+            apex_config:
+              chart:
+                height: 220
+              plotOptions:
+                radialBar:
+                  startAngle: -135
+                  endAngle: 135
+                  hollow:
+                    size: "65%"
+                  dataLabels:
+                    name:
+                      fontSize: "14px"
+                      offsetY: -5
+                      color: "#888"
+                    value:
+                      fontSize: "32px"
+                      fontWeight: 700
+                      offsetY: 5
+                  track:
+                    background: "#e0e0e0"
+
+          # ── Range Breakdown ──
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.time_below_range
+                name: "Below"
+                icon: mdi:arrow-down-bold
+                icon_color: red
+                layout: vertical
+              - type: custom:mushroom-entity-card
+                entity: sensor.time_in_range
+                name: "In Range"
+                icon: mdi:check-circle
+                icon_color: green
+                layout: vertical
+              - type: custom:mushroom-entity-card
+                entity: sensor.time_above_range
+                name: "Above"
+                icon: mdi:arrow-up-bold
+                icon_color: orange
+                layout: vertical
+
+          # ── CGM Quality Metrics ──
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.glucose_standard_deviation
+                name: "SD"
+                icon: mdi:chart-bell-curve
+                icon_color: blue
+              - type: custom:mushroom-entity-card
+                entity: sensor.glucose_cv
+                name: "CV"
+                icon: mdi:chart-bell-curve-cumulative
+                icon_color: teal
+              - type: custom:mushroom-entity-card
+                entity: sensor.cgm_usage
+                name: "CGM Use"
+                icon: mdi:percent
+                icon_color: green
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # PAGE 3: INSULIN — Delivery tracking and trends
+  # ═════════════════════════════════════════════════════════════════════════
+  - title: "Insulin"
+    path: insulin
+    icon: mdi:needle
+    type: sections
+    max_columns: 1
+    sections:
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Insulin Delivery"
+            heading_style: title
+
+          # ── IOB + Basal Combined 6h Graph ──
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: "Insulin Activity — 6 Hours"
+              show_states: true
+              colorize_states: true
+            graph_span: 6h
+            update_interval: 5min
+            yaxis:
+              - id: iob
+                min: 0
+                apex_config:
+                  title:
+                    text: "IOB (U)"
+                    style:
+                      fontSize: "11px"
+                  forceNiceScale: true
+              - id: basal
+                opposite: true
+                min: 0
+                apex_config:
+                  title:
+                    text: "Basal (U/hr)"
+                    style:
+                      fontSize: "11px"
+                  forceNiceScale: true
+            apex_config:
+              chart:
+                height: 250
+              stroke:
+                curve:
+                  - smooth
+                  - stepline
+              legend:
+                show: true
+                position: top
+              tooltip:
+                x:
+                  format: "HH:mm"
+            series:
+              - entity: sensor.active_insulin_iob
+                name: "IOB"
+                yaxis_id: iob
+                type: area
+                opacity: 0.2
+                stroke_width: 2
+                color: "#ff7043"
+                group_by:
+                  func: avg
+                  duration: 5min
+              - entity: sensor.basal_rate
+                name: "Basal Rate"
+                yaxis_id: basal
+                type: line
+                stroke_width: 2
+                color: "#42a5f5"
+                group_by:
+                  func: last
+                  duration: 5min
+
+          # ── Bolus Summary ──
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.last_bolus
+                name: "Last Bolus"
+                icon: mdi:needle
+                icon_color: red
+              - type: custom:mushroom-entity-card
+                entity: sensor.last_meal_bolus
+                name: "Meal Bolus"
+                icon: mdi:food
+                icon_color: purple
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.daily_bolus_count
+                name: "Boluses"
+                icon: mdi:counter
+                icon_color: blue
+              - type: custom:mushroom-entity-card
+                entity: sensor.last_carb_entry
+                name: "Last Carbs"
+                icon: mdi:food-apple
+                icon_color: amber
+
+          # ── Daily Insulin Totals ──
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.total_daily_insulin
+                name: "TDI"
+                icon: mdi:needle
+                icon_color: deep-orange
+              - type: custom:mushroom-entity-card
+                entity: sensor.daily_bolus_total
+                name: "Bolus Total"
+                icon: mdi:needle
+                icon_color: red
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.daily_basal_total
+                name: "Basal Total"
+                icon: mdi:chart-line
+                icon_color: blue
+              - type: custom:mushroom-entity-card
+                entity: sensor.basal_percentage
+                name: "Basal %"
+                icon: mdi:chart-pie
+                icon_color: teal
+
+          # ── 7-Day Insulin Statistics ──
+          - type: statistics-graph
+            entities:
+              - sensor.carelink_active_insulin_iob
+              - sensor.carelink_basal_rate
+            stat_types:
+              - mean
+            period: hour
+            days_to_show: 7
+            title: "Insulin Trends — 7 Days"
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # PAGE 4: PUMP — Status, settings, and device info
+  # ═════════════════════════════════════════════════════════════════════════
+  - title: "Pump"
+    path: pump
+    icon: mdi:pump
+    type: sections
+    max_columns: 1
+    sections:
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Pump Status"
+            heading_style: title
+
+          # ── Status Chips ──
+          - type: custom:mushroom-chips-card
+            chips:
+              - type: entity
+                entity: sensor.pump_suspended
+                icon: mdi:play-circle
+                content_info: state
+              - type: entity
+                entity: sensor.control_iq_mode
+                icon: mdi:robot
+                content_info: state
+              - type: entity
+                entity: sensor.pump_activity_mode
+                icon: mdi:run
+                content_info: state
+              - type: entity
+                entity: sensor.control_iq_enabled
+                icon: mdi:robot-outline
+                content_info: state
+
+          # ── Cartridge Insulin Gauge ──
+          - type: gauge
+            entity: sensor.cartridge_insulin
+            name: "Cartridge Insulin"
+            min: 0
+            max: 300
+            needle: true
+            severity:
+              green: 100
+              yellow: 50
+              red: 20
+
+          # ── Cartridge & Site Status ──
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.cartridge_insulin
+                name: "Cartridge"
+                icon: mdi:cup-water
+                icon_color: blue
+              - type: custom:mushroom-entity-card
+                entity: sensor.last_site_change
+                name: "Site Change"
+                icon: mdi:needle
+                icon_color: teal
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.last_cartridge_change
+                name: "Cartridge Change"
+                icon: mdi:cup-water
+                icon_color: cyan
+              - type: custom:mushroom-entity-card
+                entity: sensor.last_tubing_change
+                name: "Tubing Change"
+                icon: mdi:pipe
+                icon_color: indigo
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Pump Settings"
+            heading_style: title
+
+          # ── Active Profile Schedule Table ──
+          - type: markdown
+            title: "Active Basal Profile"
+            content: >
+              **{{ state_attr('sensor.active_basal_profile', 'profile_name') }}**
+              &nbsp;|&nbsp; Insulin Duration: {{ state_attr('sensor.active_basal_profile', 'insulin_duration_hours') }}h
+              &nbsp;|&nbsp; Carbs: {{ 'Enabled' if state_attr('sensor.active_basal_profile', 'carb_entry_enabled') else 'Disabled' }}
+
+
+              | Time | Basal (U/hr) | ISF (mg/dL) | C:I Ratio | Target (mg/dL) |
+
+              |------|:---:|:---:|:---:|:---:|
+
+              {% for seg in state_attr('sensor.active_basal_profile', 'schedule') -%}
+              | {{ seg.time }} | {{ seg.basal_rate }} | {{ seg.isf_mgdl }} | 1:{{ seg.carb_ratio }} | {{ seg.target_bg_mgdl }} |
+
+              {% endfor %}
+
+          # ── Control-IQ Settings ──
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.control_iq_weight
+                name: "Weight"
+                icon: mdi:weight-kilogram
+                icon_color: blue
+              - type: custom:mushroom-entity-card
+                entity: sensor.control_iq_total_daily_insulin
+                name: "CIQ TDI"
+                icon: mdi:needle
+                icon_color: purple
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.max_bolus_setting
+                name: "Max Bolus"
+                icon: mdi:needle
+                icon_color: orange
+              - type: custom:mushroom-entity-card
+                entity: sensor.basal_rate_limit
+                name: "Basal Limit"
+                icon: mdi:speedometer
+                icon_color: teal
+
+          # ── Alert Thresholds ──
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.cgm_low_glucose_alert
+                name: "Low Alert"
+                icon: mdi:alert-circle-outline
+                icon_color: red
+              - type: custom:mushroom-entity-card
+                entity: sensor.cgm_high_glucose_alert
+                name: "High Alert"
+                icon: mdi:alert-circle
+                icon_color: orange
+              - type: custom:mushroom-entity-card
+                entity: sensor.low_insulin_alert_threshold
+                name: "Low Insulin"
+                icon: mdi:battery-alert
+                icon_color: red
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: "Device Info"
+            heading_style: subtitle
+
+          # ── Data Freshness ──
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.last_glucose_update
+                name: "Last CGM"
+                icon: mdi:clock
+                icon_color: green
+              - type: custom:mushroom-entity-card
+                entity: sensor.last_pump_upload
+                name: "Last Upload"
+                icon: mdi:cloud-upload
+                icon_color: blue
+              - type: custom:mushroom-entity-card
+                entity: sensor.last_update
+                name: "Last API"
+                icon: mdi:refresh
+                icon_color: teal
+
+          # ── Device Info ──
+          - type: entities
+            title: "Pump Details"
+            entities:
+              - entity: sensor.pump_serial_number
+                name: "Serial Number"
+              - entity: sensor.pump_model
+                name: "Model"
+              - entity: sensor.software_version
+                name: "Software"
+              - entity: sensor.active_basal_profile
+                name: "Active Profile"
+              - entity: sensor.last_bg_reading
+                name: "Last BG (Fingerstick)"

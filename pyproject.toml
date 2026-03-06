@@ -1,0 +1,7 @@
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+# E501 (line too long) disabled — codebase predates line-length enforcement;
+# will be addressed in a dedicated cleanup pass.
+ignore = ["E501"]

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+## [1.2.3] - 2026-03-06
+
+### Added
+- **`carelink.import_history` service action** — recover missed pump statistics from
+  Developer Tools → Actions; specify a date range to backfill CGM glucose, IOB, and
+  basal rate long-term statistics; fetches in 7-day chunks; idempotent and safe to re-run
+
+### Changed
+- **Sensors always show last-known value** — removed 30-minute staleness timeout;
+  sensors no longer go "unavailable" when the app hasn't synced recently; use the
+  `Last pump upload` timestamp to see when data was last refreshed
+- **Integration display name** updated to "Tandem t:slim Pump" in Settings → Devices & Services
+  (was showing the internal domain name "carelink")
+- **Poll log moved to DEBUG** — routine "no new data" message was firing 288×/day at INFO
+  level; now only appears when debug logging is explicitly enabled
+
 ## [1.2.2] - 2026-03-02
 
 ### Fixed
@@ -199,6 +215,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Guardian Connect CGM
 - Nightscout upload capability
 
+[1.2.3]: https://github.com/jnctech/ha-tandem-pump/compare/v1.2.2...v1.2.3
+[1.2.2]: https://github.com/jnctech/ha-tandem-pump/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/jnctech/ha-tandem-pump/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/jnctech/ha-tandem-pump/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/jnctech/ha-tandem-pump/compare/v1.0.0...v1.1.0

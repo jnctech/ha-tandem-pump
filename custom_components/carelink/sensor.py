@@ -1,4 +1,5 @@
 """Support for Carelink / Tandem sensors."""
+
 from __future__ import annotations
 
 import logging
@@ -26,12 +27,10 @@ from .const import (
     DOMAIN,
     SENSORS,
     TANDEM_SENSORS,
-    TANDEM_SENSORS_ALWAYS_AVAILABLE,
     PLATFORM_TYPE,
     PLATFORM_CARELINK,
     PLATFORM_TANDEM,
 )
-from .helpers import is_data_stale
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,10 +48,7 @@ async def async_setup_entry(
     sensor_definitions = TANDEM_SENSORS if platform_type == PLATFORM_TANDEM else SENSORS
 
     entities = [
-        CarelinkSensorEntity(
-            coordinator, desc, f"{DOMAIN} {desc.name}", platform_type
-        )
-        for desc in sensor_definitions
+        CarelinkSensorEntity(coordinator, desc, f"{DOMAIN} {desc.name}", platform_type) for desc in sensor_definitions
     ]
 
     async_add_entities(entities)
@@ -78,16 +74,14 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return True if the sensor has valid, non-stale data."""
-        if not super().available:
-            return False
-        # Only apply staleness check to Tandem sensors
-        if self._platform_type != PLATFORM_TANDEM:
-            return True
-        # Timestamp/diagnostic sensors stay available even when data is stale
-        if self.sensor_description.key in TANDEM_SENSORS_ALWAYS_AVAILABLE:
-            return True
-        return not is_data_stale(self.coordinator.data)
+        """Return True if the coordinator is available.
+
+        DIAGNOSTIC MODE: staleness check bypassed so sensors always show their
+        last known value instead of becoming unavailable.  The coordinator logs
+        [Tandem] stale_check=True/False on every update so staleness is still
+        visible in the HA log without hiding data from the UI.
+        """
+        return super().available
 
     @property
     def name(self) -> str:
@@ -104,7 +98,7 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
             _LOGGER.debug(
                 "Sensor %s has None value (key: %s not in coordinator.data)",
                 self.sensor_description.name,
-                self.sensor_description.key
+                self.sensor_description.key,
             )
         return value
 
@@ -127,14 +121,12 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
-        manufacturer = self.coordinator.data.get(
-            DEVICE_PUMP_MANUFACTURER, "Medtronic"
-        )
+        manufacturer = self.coordinator.data.get(DEVICE_PUMP_MANUFACTURER, "Medtronic")
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.data[DEVICE_PUMP_SERIAL])},
-            name=self.coordinator.data[DEVICE_PUMP_NAME],
+            identifiers={(DOMAIN, self.coordinator.data.get(DEVICE_PUMP_SERIAL, "unknown"))},
+            name=self.coordinator.data.get(DEVICE_PUMP_NAME, "Pump"),
             manufacturer=manufacturer,
-            model=self.coordinator.data[DEVICE_PUMP_MODEL],
+            model=self.coordinator.data.get(DEVICE_PUMP_MODEL),
         )
 
     @property
@@ -143,6 +135,4 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self):
-        return self.coordinator.data.get(
-            f"{self.sensor_description.key}_attributes", {}
-        )
+        return self.coordinator.data.get(f"{self.sensor_description.key}_attributes", {})

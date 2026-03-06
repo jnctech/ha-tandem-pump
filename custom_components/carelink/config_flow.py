@@ -1,4 +1,5 @@
 """Config flow for carelink integration."""
+
 from __future__ import annotations
 
 import logging
@@ -35,7 +36,7 @@ async def validate_carelink_input(hass: HomeAssistant, data: dict[str, Any]) -> 
         data.get("cl_client_secret"),
         data.get("cl_mag_identifier"),
         data.get("patientId"),
-        config_path=hass.config.path()
+        config_path=hass.config.path(),
     )
 
     try:
@@ -47,12 +48,12 @@ async def validate_carelink_input(hass: HomeAssistant, data: dict[str, Any]) -> 
         except Exception:
             _LOGGER.warning("Failed to close Carelink client during validation")
 
-    await _validate_nightscout(hass, data)
+    await _validate_nightscout(data)
 
     return {"title": "Carelink"}
 
 
-async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+async def validate_tandem_input(data: dict[str, Any]) -> dict[str, Any]:
     """Validate Tandem Source user input."""
     email = data.get("tandem_email", "").strip()
     password = data.get("tandem_password", "")
@@ -63,8 +64,7 @@ async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> di
 
     client = TandemSourceClient(email, password, region)
     try:
-        if not await client.login():
-            raise InvalidAuth
+        await client.login()
     except TandemAuthError as e:
         _LOGGER.warning("Tandem login failed: %s", e)
         raise InvalidAuth from e
@@ -74,12 +74,12 @@ async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> di
         except Exception:
             _LOGGER.warning("Failed to close Tandem client during validation")
 
-    await _validate_nightscout(hass, data)
+    await _validate_nightscout(data)
 
     return {"title": f"Tandem t:slim ({region})"}
 
 
-async def _validate_nightscout(hass: HomeAssistant, data: dict[str, Any]) -> None:
+async def _validate_nightscout(data: dict[str, Any]) -> None:
     """Validate Nightscout configuration if provided."""
     nightscout_url = data.get("nightscout_url")
     nightscout_api = data.get("nightscout_api")
@@ -119,9 +119,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     # ── Step 1: Choose platform ──────────────────────────────────────────
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Handle platform selection step."""
         if user_input is not None:
             self._platform_type = user_input.get(PLATFORM_TYPE, PLATFORM_CARELINK)
@@ -131,14 +129,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({
-                vol.Required(
-                    PLATFORM_TYPE, default=PLATFORM_CARELINK
-                ): vol.In({
-                    PLATFORM_CARELINK: "Medtronic CareLink",
-                    PLATFORM_TANDEM: "Tandem t:slim (Source)",
-                }),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(PLATFORM_TYPE, default=PLATFORM_CARELINK): vol.In(
+                        {
+                            PLATFORM_CARELINK: "Medtronic CareLink",
+                            PLATFORM_TANDEM: "Tandem t:slim (Source)",
+                        }
+                    ),
+                }
+            ),
         )
 
     # ── Step 2a: Carelink configuration ──────────────────────────────────
@@ -151,26 +151,42 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = {}
 
         if include_auth:
-            schema.update({
-                vol.Optional("cl_token", description={"suggested_value": defaults.get("cl_token", "")}): str,
-                vol.Optional("cl_refresh_token", description={"suggested_value": defaults.get("cl_refresh_token", "")}): str,
-                vol.Optional("cl_client_id", description={"suggested_value": defaults.get("cl_client_id", "")}): str,
-                vol.Optional("cl_client_secret", description={"suggested_value": defaults.get("cl_client_secret", "")}): str,
-                vol.Optional("cl_mag_identifier", description={"suggested_value": defaults.get("cl_mag_identifier", "")}): str,
-                vol.Optional("patientId", description={"suggested_value": defaults.get("patientId", "")}): str,
-            })
+            schema.update(
+                {
+                    vol.Optional("cl_token", description={"suggested_value": defaults.get("cl_token", "")}): str,
+                    vol.Optional(
+                        "cl_refresh_token", description={"suggested_value": defaults.get("cl_refresh_token", "")}
+                    ): str,
+                    vol.Optional(
+                        "cl_client_id", description={"suggested_value": defaults.get("cl_client_id", "")}
+                    ): str,
+                    vol.Optional(
+                        "cl_client_secret", description={"suggested_value": defaults.get("cl_client_secret", "")}
+                    ): str,
+                    vol.Optional(
+                        "cl_mag_identifier", description={"suggested_value": defaults.get("cl_mag_identifier", "")}
+                    ): str,
+                    vol.Optional("patientId", description={"suggested_value": defaults.get("patientId", "")}): str,
+                }
+            )
 
-        schema.update({
-            vol.Optional("nightscout_url", description={"suggested_value": defaults.get("nightscout_url", "")}): str,
-            vol.Optional("nightscout_api", description={"suggested_value": defaults.get("nightscout_api", "")}): str,
-            vol.Required(SCAN_INTERVAL, description={"suggested_value": defaults.get(SCAN_INTERVAL, 60)}): vol.All(vol.Coerce(int), vol.Range(min=30, max=300))
-        })
+        schema.update(
+            {
+                vol.Optional(
+                    "nightscout_url", description={"suggested_value": defaults.get("nightscout_url", "")}
+                ): str,
+                vol.Optional(
+                    "nightscout_api", description={"suggested_value": defaults.get("nightscout_api", "")}
+                ): str,
+                vol.Required(SCAN_INTERVAL, description={"suggested_value": defaults.get(SCAN_INTERVAL, 60)}): vol.All(
+                    vol.Coerce(int), vol.Range(min=30, max=300)
+                ),
+            }
+        )
 
         return vol.Schema(schema)
 
-    async def async_step_carelink(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    async def async_step_carelink(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Handle Carelink configuration step."""
         errors = {}
 
@@ -189,9 +205,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=info["title"], data=user_input)
 
         return self.async_show_form(
-            step_id="carelink",
-            data_schema=self._get_carelink_schema(user_input, include_auth=True),
-            errors=errors
+            step_id="carelink", data_schema=self._get_carelink_schema(user_input, include_auth=True), errors=errors
         )
 
     # ── Step 2b: Tandem configuration ────────────────────────────────────
@@ -204,33 +218,47 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = {}
 
         if include_auth:
-            schema.update({
-                vol.Required("tandem_email", description={"suggested_value": defaults.get("tandem_email", "")}): str,
-                vol.Required("tandem_password", description={"suggested_value": defaults.get("tandem_password", "")}): str,
-                vol.Required("tandem_region", default=defaults.get("tandem_region", "EU")): vol.In({
-                    "EU": "Europe",
-                    "US": "United States",
-                }),
-            })
+            schema.update(
+                {
+                    vol.Required(
+                        "tandem_email", description={"suggested_value": defaults.get("tandem_email", "")}
+                    ): str,
+                    vol.Required(
+                        "tandem_password", description={"suggested_value": defaults.get("tandem_password", "")}
+                    ): str,
+                    vol.Required("tandem_region", default=defaults.get("tandem_region", "EU")): vol.In(
+                        {
+                            "EU": "Europe",
+                            "US": "United States",
+                        }
+                    ),
+                }
+            )
 
-        schema.update({
-            vol.Optional("nightscout_url", description={"suggested_value": defaults.get("nightscout_url", "")}): str,
-            vol.Optional("nightscout_api", description={"suggested_value": defaults.get("nightscout_api", "")}): str,
-            vol.Required(SCAN_INTERVAL, description={"suggested_value": defaults.get(SCAN_INTERVAL, 300)}): vol.All(vol.Coerce(int), vol.Range(min=60, max=900))
-        })
+        schema.update(
+            {
+                vol.Optional(
+                    "nightscout_url", description={"suggested_value": defaults.get("nightscout_url", "")}
+                ): str,
+                vol.Optional(
+                    "nightscout_api", description={"suggested_value": defaults.get("nightscout_api", "")}
+                ): str,
+                vol.Required(SCAN_INTERVAL, description={"suggested_value": defaults.get(SCAN_INTERVAL, 300)}): vol.All(
+                    vol.Coerce(int), vol.Range(min=60, max=900)
+                ),
+            }
+        )
 
         return vol.Schema(schema)
 
-    async def async_step_tandem(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    async def async_step_tandem(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Handle Tandem Source configuration step."""
         errors = {}
 
         if user_input is not None:
             user_input[PLATFORM_TYPE] = PLATFORM_TANDEM
             try:
-                info = await validate_tandem_input(self.hass, user_input)
+                info = await validate_tandem_input(user_input)
             except CannotConnect:
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
@@ -242,16 +270,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=info["title"], data=user_input)
 
         return self.async_show_form(
-            step_id="tandem",
-            data_schema=self._get_tandem_schema(user_input, include_auth=True),
-            errors=errors
+            step_id="tandem", data_schema=self._get_tandem_schema(user_input, include_auth=True), errors=errors
         )
 
     # ── Reconfiguration ──────────────────────────────────────────────────
 
-    async def async_step_reconfigure(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Handle reconfiguration of the integration."""
         errors = {}
 
@@ -263,7 +287,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             try:
                 if platform == PLATFORM_TANDEM:
-                    await validate_tandem_input(self.hass, full_config)
+                    await validate_tandem_input(full_config)
                 else:
                     await validate_carelink_input(self.hass, full_config)
             except CannotConnect:
@@ -274,9 +298,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                return self.async_update_reload_and_abort(
-                    entry, data=full_config
-                )
+                return self.async_update_reload_and_abort(entry, data=full_config)
 
         schema_defaults = user_input if user_input else dict(entry.data)
 

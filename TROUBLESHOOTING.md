@@ -1,22 +1,75 @@
 # Troubleshooting Guide
 
-Common issues and solutions for the Tandem Source / Carelink integration.
+Common issues and solutions for the Tandem t:slim Pump integration.
+
+---
+
+## Mobile App Settings {#mobile-app-settings}
+
+This integration reads from the **Tandem Source cloud** — it cannot communicate with your pump directly. The **Tandem t:slim mobile app** must be running in the background and connected to your pump via Bluetooth for uploads to occur.
+
+When unrestricted, the app uploads pump data approximately **every 60 minutes**. HA picks up new data within minutes of each upload.
+
+### Android — Battery Settings
+
+Modern Android aggressively restricts background apps. The Tandem app **must** be set to unrestricted battery usage:
+
+**1. Set battery mode to Unrestricted**
+- Go to **Settings → Apps → Tandem t:slim → Battery**
+- Set to **Unrestricted** (the default "Optimised" mode pauses background sync)
+
+**2. Disable battery optimisation**
+- Go to **Settings → Battery → Battery optimisation**
+- Find Tandem t:slim and set to **Don't optimise**
+
+**3. Manufacturer-specific restrictions**
+
+Many manufacturers add extra battery management on top of Android defaults:
+
+| Manufacturer | Setting to change |
+|---|---|
+| Samsung (One UI) | Settings → Battery → Background usage limits → ensure Tandem is not "sleeping" or "deep sleeping" |
+| Xiaomi / MIUI | Settings → Battery → App battery saver → set Tandem to "No restrictions" |
+| OnePlus / OxygenOS | Settings → Battery → Battery optimisation → Tandem → Don't optimise |
+| Huawei / EMUI | Phone Manager → Power saving → Protected apps → enable Tandem |
+| Google Pixel | Settings → Apps → Tandem t:slim → Battery → Unrestricted |
+
+> **Tip:** If data gaps still appear after applying these settings, check if **Adaptive Battery** is re-restricting the app. On some devices you may need to disable Adaptive Battery entirely.
+
+### iOS — Background App Refresh
+
+**1. Enable Background App Refresh**
+- Go to **Settings → General → Background App Refresh**
+- Ensure it is **On** globally, and that **Tandem t:slim** is enabled in the list
+
+**2. Avoid Low Power Mode during monitoring periods**
+- **Settings → Battery → Low Power Mode** — when enabled, iOS pauses background refresh for all apps
+- Disable Low Power Mode when continuous syncing is needed (e.g. overnight)
+
+**3. Do not force-quit the app**
+- Force-quitting from the app switcher prevents iOS from ever waking the app in the background
+- Lock the screen instead and let iOS manage it
+
+> iOS is generally more reliable for background sync than Android once Background App Refresh is enabled.
+
+### If data gaps appear
+
+Use the `carelink.import_history` action (Developer Tools → Actions) to backfill any missed statistics. The action is idempotent — running it over a range that already has partial data fills the gaps without overwriting existing values.
+
+---
 
 ## Installation Issues
 
 ### Integration Not Appearing in HACS
 
-**Symptoms**: Can't find "Carelink" in HACS integration list
+**Symptoms**: Can't find "Tandem t:slim Pump" or "Carelink" in HACS integration list
 
 **Solutions**:
 1. Ensure custom repository is added correctly:
    - URL: `https://github.com/jnctech/ha-tandem-pump`
    - Category: Integration
-
 2. Restart Home Assistant after adding repository
-
-3. Clear HACS cache:
-   - HACS → 3-dot menu → Custom repositories → Reload
+3. Clear HACS cache: HACS → 3-dot menu → Custom repositories → Reload
 
 ### Integration Won't Load After Installation
 
@@ -32,29 +85,12 @@ config/
         ├── manifest.json
         └── [other files]
 ```
-
-2. Check Home Assistant logs:
-   - Settings → System → Logs
-   - Look for errors mentioning "carelink"
-
+2. Check Home Assistant logs: Settings → System → Logs — look for errors mentioning "carelink"
 3. Restart Home Assistant fully (not just reload)
 
+---
+
 ## Configuration Issues
-
-### "Invalid handler specified" Error (v0.1.0.beta only)
-
-**Symptoms**: Config flow crashes with "Invalid handler specified"
-
-**Solution**: This was a bug in v0.1.0.beta. Upgrade to v0.1.3-beta or later.
-
-### SSL Certificate Errors
-
-**Symptoms**: Integration fails to load with SSL or certificate errors
-
-**Solution**:
-- Fixed in v0.1.3-beta
-- Ensure you're running v0.1.3-beta or later
-- Check `custom_components/carelink/manifest.json` contains `"certifi>=2023.0.0"` in requirements
 
 ### Authentication Fails
 
@@ -64,13 +100,12 @@ config/
 1. Verify credentials work at https://source.tandemdiabetes.com (US) or https://source.eu.tandemdiabetes.com (EU)
 2. Ensure correct region selected (US/EU)
 3. Check for typos in email/password
-4. MFA/2FA not supported - ensure it's disabled
+4. MFA/2FA not supported — ensure it is disabled on your Tandem Source account
 
 **Medtronic Carelink**:
 1. Verify credentials work at https://carelink.minimed.eu
 2. MFA must be disabled
 3. Must use care partner account for pumps
-4. Guardian Connect may work with patient account
 
 ### Wrong Region Selected
 
@@ -82,57 +117,45 @@ config/
    - US: source.tandemdiabetes.com
    - EU: source.eu.tandemdiabetes.com
 
+---
+
 ## Data Issues
 
-### All Sensors Show "Unknown"
+### All Sensors Show "Unknown" or "Unavailable"
 
-**Symptoms**: Integration loads, but all sensors show "Unknown" or "Unavailable"
+**Possible causes**:
 
-**Most Likely Cause** (Tandem, v0.1.3-beta and earlier):
-The ControlIQ API endpoints return 404 errors, leaving all sensors unpopulated. **Upgrade to the latest version** which uses the Source Reports pumpevents API instead.
+1. **No recent data from pump** — ensure pump has synced to Tandem Source recently (check the Source website). See [Mobile App Settings](#mobile-app-settings) above.
 
-**Other Possible Causes**:
+2. **API authentication expired** — wait for next polling cycle (default 5 minutes) or restart the integration
 
-1. **No recent data from pump**
-   - Ensure pump has synced to Source recently (check Source website)
-   - Tandem pumps sync when connected to phone with Tandem t:slim mobile app
-
-2. **API authentication expired**
-   - Wait for next polling cycle (default: 5 minutes)
-   - Or restart integration
-
-3. **Missing tconnectDeviceId** (Tandem only)
-   - If pump_metadata doesn't contain a `tconnectDeviceId`, the integration cannot fetch pump events
-   - Check logs for "No tconnectDeviceId in metadata"
-   - This usually means the pump hasn't uploaded to Tandem Source yet
+3. **Missing tconnectDeviceId** (Tandem only) — if pump metadata doesn't contain a `tconnectDeviceId`, the integration cannot fetch pump events. Usually means the pump hasn't uploaded to Tandem Source yet. Check logs for "No tconnectDeviceId in metadata".
 
 ### Sensors Not Updating / Delayed Updates
 
-**Symptoms**: Sensors show old data, updates take longer than the configured scan interval
-
-**Expected Behavior**:
-- Integration polls API every 5 minutes (default scan interval)
-- Not real-time — depends on pump sync frequency via Tandem t:slim mobile app
-- Adjust scan interval in configuration if needed (60–900 seconds)
+**Expected behaviour**:
+- Integration polls every 5 minutes (configurable)
+- Not real-time — depends on pump sync frequency via the Tandem t:slim app
+- Sensors always show the **last known value** — they do not go unavailable between syncs
 
 **If updates are slower than expected**:
-1. **Check logs for transient errors**: Enable debug logging and look for `Tandem: transient error` messages. The integration retries failed API calls automatically (up to 2 retries with 2s/4s backoff).
-2. **Check for `UpdateFailed` messages**: If the coordinator reports `UpdateFailed`, Home Assistant will use exponential backoff before retrying. This is normal recovery behaviour after network issues.
-3. **Timezone mismatch**: If your HA server is in a different timezone to your pump, ensure the integration's configured timezone matches the pump's timezone. The API date range uses this to avoid missing recent data.
-4. **Network stability**: Unstable connections can trigger retries. Check your HA server's network connectivity to `source.eu.tandemdiabetes.com` (EU) or `source.tandemdiabetes.com` (US).
+1. Check [Mobile App Settings](#mobile-app-settings) — battery restrictions are the most common cause
+2. Enable debug logging and look for transient error messages (see [Enable Debug Logging](#enable-debug-logging))
+3. Use `carelink.import_history` to backfill any statistics gaps after fixing the app settings
 
 ### Missing Sensors
 
 **Symptoms**: Some expected sensors not appearing
 
 **Tandem Pumps**:
-- If ControlIQ sensors (basal rate, IOB) are missing, this is expected
-- Source OIDC tokens may not grant access to ControlIQ API
-- Check logs for "ControlIQ therapy timeline not available"
+- All 45 sensors are populated from the Tandem Source Reports API — no ControlIQ API access required
+- If sensors are missing, check HA logs for parsing errors and ensure the pump has recent data on Tandem Source
 
 **Medtronic Pumps**:
 - Ensure pump model is supported (770G, 780G)
-- Guardian Connect CGM users may have limited sensor set
+- Guardian Connect CGM users may have a limited sensor set
+
+---
 
 ## Nightscout Integration
 
@@ -142,53 +165,34 @@ The ControlIQ API endpoints return 404 errors, leaving all sensors unpopulated. 
 
 **Solutions**:
 
-1. **Verify Nightscout is accessible**
-   - Open Nightscout URL in browser
-   - Should see dashboard
+1. **Verify Nightscout is accessible** — open Nightscout URL in browser; you should see the dashboard
 
 2. **Check API Secret**
-   - Must be at least 12 characters
-   - Case-sensitive
-   - No spaces or special characters
+   - Must be at least 12 characters, case-sensitive, no spaces or special characters
 
 3. **Verify URL format**
    - Must include protocol: `http://` or `https://`
-   - No trailing slash
-   - Example: `http://192.168.1.100:1337`
+   - No trailing slash — example: `http://192.168.1.100:1337`
 
-4. **Network connectivity**
-   - If HA is in Docker, ensure containers can communicate
-   - Use container name if on same Docker network: `http://nightscout:1337`
-   - Use host IP for external access
+4. **Network connectivity** — if HA is in Docker, use the container name: `http://nightscout:1337`
 
-5. **Check Home Assistant logs**
-   - Look for Nightscout upload errors
-   - May show authentication or network issues
+5. Check Home Assistant logs for Nightscout upload errors
+
+---
 
 ## Performance Issues
 
 ### High CPU Usage
 
-**Symptoms**: Home Assistant slow, high CPU usage when integration is active
-
 **Solutions**:
-1. Increase scan interval (default 300s):
-   - Settings → Devices & Services → Carelink → Configure
-   - Increase to 600 or 900 seconds
+1. Increase scan interval: Settings → Devices & Services → Carelink → Configure → increase to 600 or 900 seconds
+2. Remove debug logging if enabled
 
-2. Check for excessive logging:
-   - Remove debug logging if enabled
-   - Settings → System → Logs
-
-### Blocking Call Warning (Pre-v0.1.3-beta)
-
-**Symptoms**: Log shows "Detected blocking call to load_verify_locations"
-
-**Solution**: Upgrade to v0.1.3-beta or later. This was fixed in v0.1.3-beta.
+---
 
 ## Diagnostic Steps
 
-### Enable Debug Logging
+### Enable Debug Logging {#enable-debug-logging}
 
 Add to `configuration.yaml`:
 
@@ -210,59 +214,19 @@ Restart Home Assistant, then check logs for detailed information.
 
 ### Check Integration Version
 
-1. HACS → Integrations → Carelink
-2. Version shown at bottom
-3. Or check `custom_components/carelink/manifest.json`
+1. HACS → Integrations → Carelink — version shown at bottom
+2. Or check `custom_components/carelink/manifest.json`
 
-### Verify Installation Integrity
-
-```bash
-# Check all required files exist
-ls config/custom_components/carelink/
-# Should show: __init__.py, manifest.json, api.py, tandem_api.py, etc.
-
-# Check manifest version
-cat config/custom_components/carelink/manifest.json | grep version
-```
+---
 
 ## Getting Help
 
 If issues persist:
 
 1. **Check existing issues**: https://github.com/jnctech/ha-tandem-pump/issues
-2. **Create new issue**:
-   - Include HA version
-   - Include integration version
-   - Include relevant logs (remove sensitive data)
-   - Include diagnostic report
-3. **Provide details**:
-   - Platform type (Tandem/Carelink)
-   - Region (US/EU)
+2. **Create new issue** — include:
+   - HA version and integration version
+   - Platform (Tandem/Carelink) and region (US/EU)
    - Pump model
-   - When issue started
-   - What you've already tried
-
-## Known Issues
-
-### v0.2.0-rc1
-
-**Resolved**: Primary sensor population now works via Source Reports pumpevents API.
-
-**Added**: Historical data import with state replay and long-term statistics.
-
-**Remaining** (Issue #5): The following sensors still show "Unknown":
-- **Average Glucose, Time in Range, CGM Usage**: Require dashboard_summary from ControlIQ API (returns 404). Planned fix: compute from CGM event history.
-- **Last Pump Upload, Last Update**: Metadata timestamp parsing not yet implemented. Quick fix available.
-- **Last Glucose Delta**: Self-resolving - requires two update cycles to calculate.
-
-### v0.1.3-beta
-
-- ControlIQ API (`tdcservices.eu.tandemdiabetes.com`) returns 404 with Source OIDC tokens
-- All Tandem sensors stuck in "Unknown" state (fixed in unreleased - PR #4)
-- Fix switches to Source Reports pumpevents API as primary data source
-
-### v0.1.0.beta (DEPRECATED - DO NOT USE)
-
-- Critical bug: "Invalid handler specified" error
-- Integration fails to load
-- Use v0.1.3-beta instead
+   - Relevant logs (remove sensitive data)
+   - Diagnostic report download

@@ -11,7 +11,7 @@ on:
 
 jobs:
   lint:
-    name: Lint (ruff)
+    name: Python Code Format Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +31,7 @@ jobs:
         run: ruff format --check custom_components/carelink tests
 
   test:
-    name: Tests (pytest + coverage)
+    name: Python Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +52,7 @@ jobs:
           --cov-report=term-missing
 
   security:
-    name: Security (bandit)
+    name: Security check - Bandit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,7 +69,7 @@ jobs:
         run: bandit -c bandit.yaml -r custom_components/carelink
 
   hassfest:
-    name: Validate (hassfest)
+    name: Check hassfest
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1,12 +1,11 @@
 """Tests for pump settings extraction from metadata.lastUpload.settings."""
+
 from __future__ import annotations
 
 import copy
 from datetime import timedelta
 from typing import Any
 from unittest.mock import AsyncMock
-
-import pytest
 
 from homeassistant.core import HomeAssistant
 
@@ -55,9 +54,13 @@ async def _setup_coordinator(hass: HomeAssistant, mock_data: dict[str, Any]):
     mock_client = AsyncMock()
     mock_client.login = AsyncMock(return_value=True)
     mock_client.get_recent_data = AsyncMock(return_value=mock_data)
-    mock_client.get_pump_event_metadata = AsyncMock(return_value=[{
-        "maxDateWithEvents": "2024-01-15T12:00:00",
-    }])
+    mock_client.get_pump_event_metadata = AsyncMock(
+        return_value=[
+            {
+                "maxDateWithEvents": "2024-01-15T12:00:00",
+            }
+        ]
+    )
     mock_client.close = AsyncMock()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
@@ -65,9 +68,7 @@ async def _setup_coordinator(hass: HomeAssistant, mock_data: dict[str, Any]):
         PLATFORM_TYPE: PLATFORM_TANDEM,
     }
 
-    coordinator = TandemCoordinator(
-        hass, entry, update_interval=timedelta(seconds=300)
-    )
+    coordinator = TandemCoordinator(hass, entry, update_interval=timedelta(seconds=300))
 
     await coordinator.async_config_entry_first_refresh()
     return coordinator
@@ -93,9 +94,7 @@ ALL_SETTINGS_KEYS = [
 class TestLastUploadParsing:
     """Tests for the lastUpload dict parsing fix."""
 
-    async def test_last_upload_dict_parsed(
-        self, hass: HomeAssistant, mock_tandem_recent_data
-    ):
+    async def test_last_upload_dict_parsed(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test that lastUpload as a dict correctly extracts lastUploadedAt."""
         coordinator = await _setup_coordinator(hass, mock_tandem_recent_data)
 
@@ -140,17 +139,13 @@ class TestLastUploadParsing:
 class TestPumpSettingsFullData:
     """Tests for pump settings with complete settings data."""
 
-    async def test_active_profile_name(
-        self, hass: HomeAssistant, mock_tandem_recent_data
-    ):
+    async def test_active_profile_name(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test active profile name is resolved from activeIdp."""
         coordinator = await _setup_coordinator(hass, mock_tandem_recent_data)
 
         assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_PROFILE] == "TestProfile"
 
-    async def test_active_profile_attributes(
-        self, hass: HomeAssistant, mock_tandem_recent_data
-    ):
+    async def test_active_profile_attributes(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test active profile attributes include schedule and insulin duration."""
         coordinator = await _setup_coordinator(hass, mock_tandem_recent_data)
 
@@ -173,9 +168,7 @@ class TestPumpSettingsFullData:
         assert seg1["time"] == "08:00"
         assert seg1["basal_rate"] == 0.8
 
-    async def test_control_iq_settings(
-        self, hass: HomeAssistant, mock_tandem_recent_data
-    ):
+    async def test_control_iq_settings(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test Control-IQ settings extraction."""
         coordinator = await _setup_coordinator(hass, mock_tandem_recent_data)
 
@@ -183,9 +176,7 @@ class TestPumpSettingsFullData:
         assert coordinator.data[TANDEM_SENSOR_KEY_CONTROL_IQ_WEIGHT] == 74
         assert coordinator.data[TANDEM_SENSOR_KEY_CONTROL_IQ_TDI] == 60
 
-    async def test_pump_limits(
-        self, hass: HomeAssistant, mock_tandem_recent_data
-    ):
+    async def test_pump_limits(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test pump limit conversions (milliunits to units)."""
         coordinator = await _setup_coordinator(hass, mock_tandem_recent_data)
 
@@ -194,18 +185,14 @@ class TestPumpSettingsFullData:
         # basalLimit 2000 -> 2.0 U/hr
         assert coordinator.data[TANDEM_SENSOR_KEY_BASAL_LIMIT] == 2.0
 
-    async def test_cgm_alert_thresholds(
-        self, hass: HomeAssistant, mock_tandem_recent_data
-    ):
+    async def test_cgm_alert_thresholds(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test CGM alert thresholds from cgmSettings."""
         coordinator = await _setup_coordinator(hass, mock_tandem_recent_data)
 
         assert coordinator.data[TANDEM_SENSOR_KEY_CGM_HIGH_ALERT] == 200
         assert coordinator.data[TANDEM_SENSOR_KEY_CGM_LOW_ALERT] == 80
 
-    async def test_alert_thresholds(
-        self, hass: HomeAssistant, mock_tandem_recent_data
-    ):
+    async def test_alert_thresholds(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test BG and insulin alert thresholds."""
         coordinator = await _setup_coordinator(hass, mock_tandem_recent_data)
 
@@ -213,9 +200,7 @@ class TestPumpSettingsFullData:
         assert coordinator.data[TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD] == 214
         assert coordinator.data[TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT] == 20
 
-    async def test_all_settings_keys_present(
-        self, hass: HomeAssistant, mock_tandem_recent_data
-    ):
+    async def test_all_settings_keys_present(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test that all pump settings keys are present in coordinator data."""
         coordinator = await _setup_coordinator(hass, mock_tandem_recent_data)
 
@@ -263,9 +248,7 @@ class TestPumpSettingsMissing:
         for key in ALL_SETTINGS_KEYS:
             assert coordinator.data[key] is UNAVAILABLE, f"Key {key} should be UNAVAILABLE"
 
-    async def test_missing_control_iq(
-        self, hass: HomeAssistant, mock_tandem_recent_data
-    ):
+    async def test_missing_control_iq(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test missing controlIQSettings is handled gracefully."""
         data = copy.deepcopy(mock_tandem_recent_data)
         data["pump_metadata"]["lastUpload"]["settings"]["controlIQSettings"] = None
@@ -277,9 +260,7 @@ class TestPumpSettingsMissing:
         # Other settings should still work
         assert coordinator.data[TANDEM_SENSOR_KEY_MAX_BOLUS] == 14.0
 
-    async def test_missing_profiles(
-        self, hass: HomeAssistant, mock_tandem_recent_data
-    ):
+    async def test_missing_profiles(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test missing profiles section is handled gracefully."""
         data = copy.deepcopy(mock_tandem_recent_data)
         data["pump_metadata"]["lastUpload"]["settings"]["profiles"] = None
@@ -290,9 +271,7 @@ class TestPumpSettingsMissing:
         # Other settings should still work
         assert coordinator.data[TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED] == "On"
 
-    async def test_control_iq_off(
-        self, hass: HomeAssistant, mock_tandem_recent_data
-    ):
+    async def test_control_iq_off(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test Control-IQ ClosedLoop=0 reports 'Off'."""
         data = copy.deepcopy(mock_tandem_recent_data)
         data["pump_metadata"]["lastUpload"]["settings"]["controlIQSettings"]["ClosedLoop"] = 0
@@ -300,9 +279,7 @@ class TestPumpSettingsMissing:
 
         assert coordinator.data[TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED] == "Off"
 
-    async def test_active_idp_no_match(
-        self, hass: HomeAssistant, mock_tandem_recent_data
-    ):
+    async def test_active_idp_no_match(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test that an activeIdp with no matching profile returns UNAVAILABLE."""
         data = copy.deepcopy(mock_tandem_recent_data)
         data["pump_metadata"]["lastUpload"]["settings"]["profiles"]["activeIdp"] = 99

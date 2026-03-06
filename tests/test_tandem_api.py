@@ -1,4 +1,5 @@
 """Tests for the Tandem Source API client."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -260,7 +261,10 @@ class TestApiGet:
         mock_http.is_closed = False
         client._client = mock_http
 
-        with patch.object(client, "login", new_callable=AsyncMock):
+        async def _mock_login():
+            client.access_token = "new_token"
+
+        with patch.object(client, "login", new_callable=AsyncMock, side_effect=_mock_login):
             result = await client._api_get("https://api.test.com/data")
 
         assert result == {"key": "value"}
@@ -299,18 +303,31 @@ class TestGetRecentData:
         client.account_id = "acct-456"
         client.access_token = "valid_token"
 
-        with patch.object(
-            client, "get_pump_event_metadata", new_callable=AsyncMock,
-            return_value=[{"serialNumber": "SN123", "modelNumber": "t:slim X2"}],
-        ), patch.object(
-            client, "get_pumper_info", new_callable=AsyncMock,
-            return_value={"firstName": "Test", "lastName": "User"},
-        ), patch.object(
-            client, "get_therapy_timeline", new_callable=AsyncMock,
-            return_value={"cgm": [], "bolus": [], "basal": []},
-        ), patch.object(
-            client, "get_dashboard_summary", new_callable=AsyncMock,
-            return_value={"averageReading": 120},
+        with (
+            patch.object(
+                client,
+                "get_pump_event_metadata",
+                new_callable=AsyncMock,
+                return_value=[{"serialNumber": "SN123", "modelNumber": "t:slim X2"}],
+            ),
+            patch.object(
+                client,
+                "get_pumper_info",
+                new_callable=AsyncMock,
+                return_value={"firstName": "Test", "lastName": "User"},
+            ),
+            patch.object(
+                client,
+                "get_therapy_timeline",
+                new_callable=AsyncMock,
+                return_value={"cgm": [], "bolus": [], "basal": []},
+            ),
+            patch.object(
+                client,
+                "get_dashboard_summary",
+                new_callable=AsyncMock,
+                return_value={"averageReading": 120},
+            ),
         ):
             data = await client.get_recent_data()
 
@@ -326,18 +343,31 @@ class TestGetRecentData:
         client.account_id = "acct-456"
         client.access_token = "valid_token"
 
-        with patch.object(
-            client, "get_pump_event_metadata", new_callable=AsyncMock,
-            side_effect=Exception("API error"),
-        ), patch.object(
-            client, "get_pumper_info", new_callable=AsyncMock,
-            return_value={"firstName": "Test"},
-        ), patch.object(
-            client, "get_therapy_timeline", new_callable=AsyncMock,
-            return_value=None,
-        ), patch.object(
-            client, "get_dashboard_summary", new_callable=AsyncMock,
-            return_value=None,
+        with (
+            patch.object(
+                client,
+                "get_pump_event_metadata",
+                new_callable=AsyncMock,
+                side_effect=Exception("API error"),
+            ),
+            patch.object(
+                client,
+                "get_pumper_info",
+                new_callable=AsyncMock,
+                return_value={"firstName": "Test"},
+            ),
+            patch.object(
+                client,
+                "get_therapy_timeline",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch.object(
+                client,
+                "get_dashboard_summary",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             data = await client.get_recent_data()
 
@@ -352,18 +382,31 @@ class TestGetRecentData:
         client.account_id = "acct-456"
         client.access_token = "valid_token"
 
-        with patch.object(
-            client, "get_pump_event_metadata", new_callable=AsyncMock,
-            side_effect=Exception("No pumper_id"),
-        ), patch.object(
-            client, "get_pumper_info", new_callable=AsyncMock,
-            side_effect=Exception("No pumper_id"),
-        ), patch.object(
-            client, "get_therapy_timeline", new_callable=AsyncMock,
-            return_value=None,
-        ), patch.object(
-            client, "get_dashboard_summary", new_callable=AsyncMock,
-            return_value=None,
+        with (
+            patch.object(
+                client,
+                "get_pump_event_metadata",
+                new_callable=AsyncMock,
+                side_effect=Exception("No pumper_id"),
+            ),
+            patch.object(
+                client,
+                "get_pumper_info",
+                new_callable=AsyncMock,
+                side_effect=Exception("No pumper_id"),
+            ),
+            patch.object(
+                client,
+                "get_therapy_timeline",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch.object(
+                client,
+                "get_dashboard_summary",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             data = await client.get_recent_data()
 
@@ -389,3 +432,53 @@ class TestExceptions:
         """Test TandemApiError can be raised and caught."""
         with pytest.raises(TandemApiError, match="server error"):
             raise TandemApiError("server error")
+
+
+class TestExtractJwtClaims:
+    """Tests for _extract_jwt_claims (M2 — narrow exception type)."""
+
+    def _make_client(self):
+        return TandemSourceClient("user@test.com", "pass", region="EU")
+
+    def test_invalid_jwt_format_raises(self):
+        """JWT with wrong number of parts raises TandemAuthError."""
+        client = self._make_client()
+        client.id_token = "only.two"
+        with pytest.raises(TandemAuthError, match="Invalid JWT format"):
+            client._extract_jwt_claims()
+
+    def test_invalid_base64_payload_raises(self):
+        """Garbled base64 payload raises TandemAuthError, not bare Exception (M2)."""
+        client = self._make_client()
+        # Header and signature are irrelevant; payload is invalid base64
+        bad_payload = "!!!not-valid-base64!!!"
+        client.id_token = f"header.{bad_payload}.signature"
+        with pytest.raises(TandemAuthError, match="Cannot decode JWT payload"):
+            client._extract_jwt_claims()
+
+    def test_valid_jwt_no_pumper_id_raises(self):
+        """JWT with valid base64 but no pumperId raises TandemAuthError."""
+        import base64
+        import json
+
+        client = self._make_client()
+        payload = base64.urlsafe_b64encode(json.dumps({"accountId": "acc-1"}).encode()).decode().rstrip("=")
+        client.id_token = f"header.{payload}.signature"
+        with pytest.raises(TandemAuthError, match="No pumperId"):
+            client._extract_jwt_claims()
+
+    def test_valid_jwt_sets_pumper_id(self):
+        """Valid JWT payload with pumperId populates client.pumper_id."""
+        import base64
+        import json
+
+        client = self._make_client()
+        payload = (
+            base64.urlsafe_b64encode(json.dumps({"pumperId": "pump-abc", "accountId": "acc-1"}).encode())
+            .decode()
+            .rstrip("=")
+        )
+        client.id_token = f"header.{payload}.signature"
+        client._extract_jwt_claims()
+        assert client.pumper_id == "pump-abc"
+        assert client.account_id == "acc-1"

@@ -1,0 +1,9 @@
+skips:
+  - B101  # assert_used — excluded via exclude_dirs anyway
+  - B105  # hardcoded_password_string — false positive on URL dict keys named "TOKEN"
+  - B311  # random — not used for cryptographic purposes here
+
+exclude_dirs:
+  - tests
+  - .git
+  - __pycache__

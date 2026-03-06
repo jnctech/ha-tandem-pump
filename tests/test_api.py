@@ -1,11 +1,10 @@
 """Tests for the Carelink API client."""
+
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-
-from custom_components.carelink.api import CarelinkClient
 
 
 class TestCarelinkClient:
@@ -49,9 +48,7 @@ class TestCarelinkClient:
         mock_client.get = AsyncMock(return_value=mock_response)
         mock_carelink_client._async_client = mock_client
 
-        response = await mock_carelink_client.fetch_async(
-            "https://test.com", headers={"Authorization": "Bearer test"}
-        )
+        response = await mock_carelink_client.fetch_async("https://test.com", headers={"Authorization": "Bearer test"})
 
         assert response.status_code == 200
         mock_client.get.assert_called_once()
@@ -81,9 +78,7 @@ class TestCarelinkClient:
         mock_carelink_client._async_client = mock_client
 
         with pytest.raises(httpx.TimeoutException):
-            await mock_carelink_client.fetch_async(
-                "https://test.com", headers={"Authorization": "Bearer test"}
-            )
+            await mock_carelink_client.fetch_async("https://test.com", headers={"Authorization": "Bearer test"})
 
     async def test_fetch_async_request_error(self, mock_carelink_client):
         """Test fetch_async handles request error."""
@@ -92,9 +87,7 @@ class TestCarelinkClient:
         mock_carelink_client._async_client = mock_client
 
         with pytest.raises(httpx.RequestError):
-            await mock_carelink_client.fetch_async(
-                "https://test.com", headers={"Authorization": "Bearer test"}
-            )
+            await mock_carelink_client.fetch_async("https://test.com", headers={"Authorization": "Bearer test"})
 
     async def test_post_async_timeout(self, mock_carelink_client):
         """Test post_async handles timeout exception."""
@@ -141,9 +134,7 @@ class TestTokenProcessing:
 
     async def test_get_access_token_payload_invalid_token(self, mock_carelink_client):
         """Test handling invalid/malformed token."""
-        result = await mock_carelink_client._get_access_token_payload(
-            {"access_token": "invalid_token_without_dots"}
-        )
+        result = await mock_carelink_client._get_access_token_payload({"access_token": "invalid_token_without_dots"})
         assert result is None
 
     async def test_get_access_token_payload_none_input(self, mock_carelink_client):
@@ -204,9 +195,7 @@ class TestProcessTokenFile:
 
         assert result is None
 
-    async def test_process_token_file_missing_required_fields(
-        self, mock_carelink_client, tmp_path
-    ):
+    async def test_process_token_file_missing_required_fields(self, mock_carelink_client, tmp_path):
         """Test processing token file with missing required fields."""
         token_file = tmp_path / "token.json"
         incomplete_data = {"access_token": "test"}  # Missing refresh_token and client_id
@@ -241,3 +230,54 @@ class TestProcessTokenFile:
             result = await mock_carelink_client._process_token_file(str(token_file))
 
         assert result is None
+
+
+class TestHeaderMutation:
+    """Verify __common_headers is not mutated between requests (H8)."""
+
+    def test_common_headers_initial_keys(self, mock_carelink_client):
+        """__common_headers should not contain request-specific keys at init."""
+        headers = mock_carelink_client._CarelinkClient__common_headers
+        assert "Authorization" not in headers
+        assert "mag-identifier" not in headers
+        assert "Accept" in headers
+        assert "Content-Type" in headers
+
+    async def test_common_headers_not_mutated_by_get_data(self, mock_carelink_client):
+        """__get_data must not write Authorization into __common_headers (H8)."""
+        common = mock_carelink_client._CarelinkClient__common_headers
+        initial_keys = set(common.keys())
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+
+        mock_carelink_client._CarelinkClient__token_data = {
+            "access_token": "tok",
+            "mag-identifier": "mag123",
+        }
+        mock_carelink_client._CarelinkClient__session_config = {"baseUrlCumulus": "https://example.com"}
+
+        with (
+            patch.object(
+                mock_carelink_client,
+                "_CarelinkClient__handle_authorization_token",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch.object(
+                mock_carelink_client,
+                "fetch_async",
+                new_callable=AsyncMock,
+                return_value=mock_response,
+            ),
+        ):
+            try:
+                await mock_carelink_client._CarelinkClient__get_data()
+            except Exception:
+                pass  # not testing full flow, just header safety
+
+        assert set(common.keys()) == initial_keys, (
+            "__common_headers was mutated — Authorization leaked into shared dict"
+        )
+        assert "Authorization" not in common

@@ -1,4 +1,5 @@
 """Tests for the Tandem config flow."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -17,17 +18,13 @@ class TestPlatformSelectionStep:
 
     async def test_user_step_shows_platform_form(self, hass: HomeAssistant):
         """Test that user step shows platform selection form."""
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": config_entries.SOURCE_USER}
-        )
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
         assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "user"
 
     async def test_user_step_to_carelink(self, hass: HomeAssistant):
         """Test that selecting Carelink leads to carelink step."""
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": config_entries.SOURCE_USER}
-        )
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={"platform_type": "carelink"},
@@ -37,9 +34,7 @@ class TestPlatformSelectionStep:
 
     async def test_user_step_to_tandem(self, hass: HomeAssistant):
         """Test that selecting Tandem leads to tandem step."""
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": config_entries.SOURCE_USER}
-        )
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={"platform_type": "tandem"},
@@ -53,22 +48,23 @@ class TestTandemStep:
 
     async def test_tandem_step_success(self, hass: HomeAssistant):
         """Test successful Tandem login creates entry."""
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": config_entries.SOURCE_USER}
-        )
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={"platform_type": "tandem"},
         )
         assert result["step_id"] == "tandem"
 
-        with patch(
-            "custom_components.carelink.config_flow.validate_tandem_input",
-            new_callable=AsyncMock,
-            return_value={"title": "Tandem t:slim"},
-        ), patch(
-            "custom_components.carelink.async_setup_entry",
-            return_value=True,
+        with (
+            patch(
+                "custom_components.carelink.config_flow.validate_tandem_input",
+                new_callable=AsyncMock,
+                return_value={"title": "Tandem t:slim"},
+            ),
+            patch(
+                "custom_components.carelink.async_setup_entry",
+                return_value=True,
+            ),
         ):
             result = await hass.config_entries.flow.async_configure(
                 result["flow_id"],
@@ -92,9 +88,7 @@ class TestTandemStep:
         """Test Tandem login with invalid credentials shows error."""
         from custom_components.carelink.config_flow import InvalidAuth
 
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": config_entries.SOURCE_USER}
-        )
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={"platform_type": "tandem"},
@@ -122,9 +116,7 @@ class TestTandemStep:
         """Test Tandem login when server is unreachable."""
         from custom_components.carelink.config_flow import CannotConnect
 
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": config_entries.SOURCE_USER}
-        )
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={"platform_type": "tandem"},
@@ -150,21 +142,22 @@ class TestTandemStep:
 
     async def test_tandem_step_with_nightscout(self, hass: HomeAssistant):
         """Test Tandem config with Nightscout settings."""
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": config_entries.SOURCE_USER}
-        )
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={"platform_type": "tandem"},
         )
 
-        with patch(
-            "custom_components.carelink.config_flow.validate_tandem_input",
-            new_callable=AsyncMock,
-            return_value={"title": "Tandem t:slim"},
-        ), patch(
-            "custom_components.carelink.async_setup_entry",
-            return_value=True,
+        with (
+            patch(
+                "custom_components.carelink.config_flow.validate_tandem_input",
+                new_callable=AsyncMock,
+                return_value={"title": "Tandem t:slim"},
+            ),
+            patch(
+                "custom_components.carelink.async_setup_entry",
+                return_value=True,
+            ),
         ):
             result = await hass.config_entries.flow.async_configure(
                 result["flow_id"],
@@ -189,22 +182,23 @@ class TestCarelinkStep:
 
     async def test_carelink_step_success(self, hass: HomeAssistant):
         """Test successful Carelink login creates entry."""
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": config_entries.SOURCE_USER}
-        )
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
             user_input={"platform_type": "carelink"},
         )
         assert result["step_id"] == "carelink"
 
-        with patch(
-            "custom_components.carelink.config_flow.validate_carelink_input",
-            new_callable=AsyncMock,
-            return_value={"title": "Carelink"},
-        ), patch(
-            "custom_components.carelink.async_setup_entry",
-            return_value=True,
+        with (
+            patch(
+                "custom_components.carelink.config_flow.validate_carelink_input",
+                new_callable=AsyncMock,
+                return_value={"title": "Carelink"},
+            ),
+            patch(
+                "custom_components.carelink.async_setup_entry",
+                return_value=True,
+            ),
         ):
             result = await hass.config_entries.flow.async_configure(
                 result["flow_id"],
@@ -234,9 +228,7 @@ class TestValidateTandemInput:
 
         mock_hass = MagicMock()
 
-        with patch(
-            "custom_components.carelink.config_flow.TandemSourceClient"
-        ) as mock_client_class:
+        with patch("custom_components.carelink.config_flow.TandemSourceClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.login = AsyncMock(return_value=True)
             mock_client.close = AsyncMock()
@@ -263,9 +255,7 @@ class TestValidateTandemInput:
 
         mock_hass = MagicMock()
 
-        with patch(
-            "custom_components.carelink.config_flow.TandemSourceClient"
-        ) as mock_client_class:
+        with patch("custom_components.carelink.config_flow.TandemSourceClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.login = AsyncMock(return_value=False)
             mock_client.close = AsyncMock()
@@ -290,9 +280,7 @@ class TestValidateTandemInput:
 
         mock_hass = MagicMock()
 
-        with patch(
-            "custom_components.carelink.config_flow.TandemSourceClient"
-        ) as mock_client_class:
+        with patch("custom_components.carelink.config_flow.TandemSourceClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.login = AsyncMock(side_effect=TandemAuthError("bad"))
             mock_client.close = AsyncMock()

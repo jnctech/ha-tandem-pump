@@ -6,8 +6,6 @@ from datetime import timedelta
 from typing import Any
 from unittest.mock import AsyncMock
 
-import pytest
-
 from homeassistant.core import HomeAssistant
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry

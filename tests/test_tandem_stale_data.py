@@ -5,8 +5,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 
@@ -18,28 +16,13 @@ from custom_components.carelink.const import (
     PLATFORM_TYPE,
     PLATFORM_TANDEM,
     PLATFORM_CARELINK,
-    COORDINATOR,
-    UNAVAILABLE,
-    TANDEM_DATA_STALE_MINUTES,
     TANDEM_DATA_STALE_TIMEDELTA,
     TANDEM_SENSORS_ALWAYS_AVAILABLE,
     TANDEM_SENSOR_KEY_LASTSG_MMOL,
-    TANDEM_SENSOR_KEY_LASTSG_MGDL,
     TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
-    TANDEM_SENSOR_KEY_SG_DELTA,
-    TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS,
-    TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP,
     TANDEM_SENSOR_KEY_BASAL_RATE,
     TANDEM_SENSOR_KEY_ACTIVE_INSULIN,
-    TANDEM_SENSOR_KEY_LAST_UPLOAD,
-    TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP,
-    TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
-    TANDEM_SENSOR_KEY_PUMP_SERIAL_INFO,
-    TANDEM_SENSOR_KEY_PUMP_MODEL_INFO,
     DEVICE_PUMP_SERIAL,
-    DEVICE_PUMP_MODEL,
-    DEVICE_PUMP_NAME,
-    DEVICE_PUMP_MANUFACTURER,
 )
 from custom_components.carelink.helpers import is_data_stale
 from custom_components.carelink.sensor import CarelinkSensorEntity

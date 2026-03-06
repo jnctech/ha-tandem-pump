@@ -3,9 +3,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import AsyncMock
 
 from homeassistant.core import HomeAssistant
 
@@ -16,7 +14,6 @@ from custom_components.carelink.const import (
     TANDEM_CLIENT,
     PLATFORM_TYPE,
     PLATFORM_TANDEM,
-    COORDINATOR,
     UNAVAILABLE,
     DEVICE_PUMP_SERIAL,
     DEVICE_PUMP_MODEL,

@@ -4,10 +4,7 @@ from __future__ import annotations
 import struct
 import base64
 from datetime import datetime, timedelta, timezone
-from typing import Any
 from unittest.mock import AsyncMock
-
-import pytest
 
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -33,7 +30,6 @@ from custom_components.carelink.const import (
     TANDEM_SENSOR_KEY_CONTROL_IQ_MODE,
     TANDEM_SENSOR_KEY_PUMP_SUSPENDED,
     TANDEM_SENSOR_KEY_LAST_CARBS,
-    TANDEM_SENSOR_KEY_LAST_CARBS_TIMESTAMP,
     TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE,
     TANDEM_SENSOR_KEY_LAST_SITE_CHANGE,
     TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE,
@@ -48,11 +44,7 @@ from custom_components.carelink.const import (
     TANDEM_SENSOR_KEY_DAILY_BOLUS_COUNT,
 )
 
-from custom_components.carelink.tandem_api import (
-    decode_pump_events,
-    TANDEM_EPOCH,
-    EVENT_LEN,
-)
+from custom_components.carelink.tandem_api import decode_pump_events
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -209,6 +201,10 @@ async def _setup_coordinator(hass: HomeAssistant, mock_data: dict):
         TANDEM_CLIENT: mock_client,
         PLATFORM_TYPE: PLATFORM_TANDEM,
     }
+
+    # Pin to UTC so date comparisons in _compute_insulin_summary are
+    # consistent regardless of the CI runner's local timezone.
+    hass.config.time_zone = "UTC"
 
     coordinator = TandemCoordinator(
         hass, entry, update_interval=timedelta(seconds=300)

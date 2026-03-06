@@ -1,9 +1,5 @@
 """Tests for the Nightscout uploader."""
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
-from zoneinfo import ZoneInfo
-
-import pytest
 
 from custom_components.carelink.nightscout_uploader import NightscoutUploader
 

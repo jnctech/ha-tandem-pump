@@ -409,7 +409,6 @@ class TestExtractJwtClaims:
 
     def test_invalid_base64_payload_raises(self):
         """Garbled base64 payload raises TandemAuthError, not bare Exception (M2)."""
-        import base64
         client = self._make_client()
         # Header and signature are irrelevant; payload is invalid base64
         bad_payload = "!!!not-valid-base64!!!"
@@ -419,7 +418,8 @@ class TestExtractJwtClaims:
 
     def test_valid_jwt_no_pumper_id_raises(self):
         """JWT with valid base64 but no pumperId raises TandemAuthError."""
-        import base64, json
+        import base64
+        import json
         client = self._make_client()
         payload = base64.urlsafe_b64encode(
             json.dumps({"accountId": "acc-1"}).encode()
@@ -430,7 +430,8 @@ class TestExtractJwtClaims:
 
     def test_valid_jwt_sets_pumper_id(self):
         """Valid JWT payload with pumperId populates client.pumper_id."""
-        import base64, json
+        import base64
+        import json
         client = self._make_client()
         payload = base64.urlsafe_b64encode(
             json.dumps({"pumperId": "pump-abc", "accountId": "acc-1"}).encode()

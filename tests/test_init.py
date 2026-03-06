@@ -1,9 +1,5 @@
 """Tests for the Carelink integration __init__ module."""
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
-from zoneinfo import ZoneInfo
-
-import pytest
 
 from custom_components.carelink import (
     convert_date_to_isodate,
@@ -452,7 +448,7 @@ class TestMigrateLegacyLogindata:
 
     def test_migrate_legacy_file_exists(self, tmp_path):
         """Test migration when legacy file exists and new file doesn't."""
-        from custom_components.carelink import _migrate_legacy_logindata, LEGACY_AUTH_FILE
+        from custom_components.carelink import _migrate_legacy_logindata
         from custom_components.carelink.api import AUTH_FILE_PREFIX
 
         # Create the legacy directory structure
@@ -492,7 +488,7 @@ class TestMigrateLegacyLogindata:
 
     def test_migrate_new_file_already_exists(self, tmp_path):
         """Test migration skips if new file already exists."""
-        from custom_components.carelink import _migrate_legacy_logindata, LEGACY_AUTH_FILE
+        from custom_components.carelink import _migrate_legacy_logindata
         from custom_components.carelink.api import AUTH_FILE_PREFIX
 
         # Create the legacy directory structure and file

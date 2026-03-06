@@ -5,8 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from custom_components.carelink.api import CarelinkClient
-
 
 class TestCarelinkClient:
     """Tests for CarelinkClient."""

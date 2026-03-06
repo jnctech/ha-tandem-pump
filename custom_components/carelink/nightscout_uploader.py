@@ -38,7 +38,9 @@ class NightscoutUploader:
         # Nightscout info
         self.__nightscout_url = nightscout_url.lower().rstrip('/')
         # SHA-1 is required by the Nightscout API specification for the API-SECRET header.
-        self.__hashedSecret = hashlib.sha1(nightscout_secret.encode('utf-8')).hexdigest()  # noqa: S324
+        self.__hashedSecret = hashlib.sha1(  # nosec B324
+            nightscout_secret.encode('utf-8'), usedforsecurity=False
+        ).hexdigest()
         self.__is_reachable=False
 
         self._async_client = None

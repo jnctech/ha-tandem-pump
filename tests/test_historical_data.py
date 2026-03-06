@@ -5,10 +5,8 @@ import sys
 import types
 from datetime import datetime, timedelta
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from dataclasses import dataclass
-
-import pytest
 
 from homeassistant.core import HomeAssistant
 
@@ -20,24 +18,15 @@ from custom_components.carelink.const import (
     PLATFORM_TYPE,
     PLATFORM_TANDEM,
     UNAVAILABLE,
-    DEVICE_PUMP_SERIAL,
-    DEVICE_PUMP_MODEL,
-    DEVICE_PUMP_NAME,
-    DEVICE_PUMP_MANUFACTURER,
     TANDEM_SENSOR_KEY_LASTSG_MMOL,
     TANDEM_SENSOR_KEY_LASTSG_MGDL,
-    TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
-    TANDEM_SENSOR_KEY_SG_DELTA,
     TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS,
     TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP,
     TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS,
     TANDEM_SENSOR_KEY_BASAL_RATE,
     TANDEM_SENSOR_KEY_ACTIVE_INSULIN,
-    TANDEM_SENSOR_KEY_LAST_UPLOAD,
     TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS,
-    TANDEM_SENSOR_KEY_UPDATE_TIMESTAMP,
     TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS,
-    TANDEM_SENSOR_KEY_LAST_MEAL_BOLUS_ATTRS,
 )
 
 

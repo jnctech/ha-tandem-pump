@@ -1,8 +1,6 @@
 """Tests for device_info .get() fallback in sensor and binary_sensor (C4)."""
 from unittest.mock import MagicMock
 
-import pytest
-
 from custom_components.carelink.const import (
     DEVICE_PUMP_MODEL,
     DEVICE_PUMP_NAME,

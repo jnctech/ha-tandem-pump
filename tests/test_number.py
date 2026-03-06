@@ -2,8 +2,6 @@
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from custom_components.carelink.number import CartridgeFillVolumeNumber
 
 

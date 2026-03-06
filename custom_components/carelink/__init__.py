@@ -879,7 +879,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             metadata_entry = None
 
         if max_date_str and self._last_max_date and max_date_str == self._last_max_date and self.data:
-            _LOGGER.info(
+            _LOGGER.debug(
                 "[Tandem] Poll: no new pump data (maxDate=%s, serving %d cached keys)",
                 max_date_str,
                 len(self.data),

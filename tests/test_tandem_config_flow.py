@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -226,8 +226,6 @@ class TestValidateTandemInput:
         """Test successful Tandem credential validation."""
         from custom_components.carelink.config_flow import validate_tandem_input
 
-        mock_hass = MagicMock()
-
         with patch("custom_components.carelink.config_flow.TandemSourceClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.login = AsyncMock(return_value=True)
@@ -254,8 +252,6 @@ class TestValidateTandemInput:
         )
         from custom_components.carelink.tandem_api import TandemAuthError
 
-        mock_hass = MagicMock()
-
         with patch("custom_components.carelink.config_flow.TandemSourceClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.login = AsyncMock(side_effect=TandemAuthError("Login failed"))
@@ -278,8 +274,6 @@ class TestValidateTandemInput:
             InvalidAuth,
         )
         from custom_components.carelink.tandem_api import TandemAuthError
-
-        mock_hass = MagicMock()
 
         with patch("custom_components.carelink.config_flow.TandemSourceClient") as mock_client_class:
             mock_client = AsyncMock()

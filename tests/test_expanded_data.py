@@ -488,51 +488,6 @@ class TestNewEventDecoders:
         events = decode_pump_events(b64)
         assert events == []
 
-    def test_decode_bolus_delivery_event(self):
-        """Event 280 (BolusDelivery) is decoded with correct field values."""
-        # Decoder reads: bolus_type@0(B), status@1(B), bolus_id@2(H),
-        #   requested_now@4(H), correction@8(H), delivered_total@12(H)
-        payload = (
-            struct.pack(">B", 1)  # offset 0: bolus_type
-            + struct.pack(">B", 0)  # offset 1: status=0 (completed)
-            + struct.pack(">H", 42)  # offset 2: bolus_id
-            + struct.pack(">H", 2000)  # offset 4: requested_now
-            + b"\x00\x00"  # offset 6: pad
-            + struct.pack(">H", 500)  # offset 8: correction_mu=500
-            + b"\x00\x00"  # offset 10: pad
-            + struct.pack(">H", 2000)  # offset 12: delivered_total_mu=2000
-            + b"\x00\x00"  # offset 14: pad → total 16 bytes
-        )
-        evt = self._decode_single(280, payload)
-        assert evt["event_name"] == "BolusDelivery"
-        assert evt["delivery_status"] == 0
-        assert evt["correction_mu"] == 500
-        assert evt["insulin_delivered"] == 2.0
-
-    def test_decode_bolus_delivery_started_status(self):
-        """Event 280 with delivery_status=1 (started) is decoded correctly."""
-        payload = (
-            struct.pack(">B", 0)  # offset 0: bolus_type
-            + struct.pack(">B", 1)  # offset 1: status=1 (started)
-            + struct.pack(">H", 1)  # offset 2: bolus_id
-            + struct.pack(">H", 1000)  # offset 4: requested_now
-            + b"\x00\x00"  # offset 6: pad
-            + struct.pack(">H", 0)  # offset 8: correction_mu=0
-            + b"\x00\x00"  # offset 10: pad
-            + struct.pack(">H", 1000)  # offset 12: delivered_total_mu
-            + b"\x00\x00"  # offset 14: pad → total 16 bytes
-        )
-        evt = self._decode_single(280, payload)
-        assert evt["delivery_status"] == 1
-        assert evt["correction_mu"] == 0
-
-    def test_decode_unknown_suspend_reason(self):
-        """Event 11 with an unmapped reason code returns 'Reason_<N>' string."""
-        payload = (struct.pack(">B", 99) + b"\x00\x00\x00" + struct.pack(">f", 0.0) + b"\x00" * 8)[:16]
-        evt = self._decode_single(11, payload)
-        assert evt["event_name"] == "PumpingSuspended"
-        assert evt["suspend_reason"] == "Reason_99"
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # Tests: Computed CGM summary

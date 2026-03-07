@@ -359,6 +359,64 @@ class TestNewEventDecoders:
         assert evt["current_pcm"] == "Closed Loop"
         assert evt["previous_pcm"] == "Open Loop"
 
+    def test_decode_cgm_data_event(self):
+        """Event 256 (CGM_DATA_GXB) decodes glucose, rate of change and status."""
+        # int8 @ offset 0 (rate_raw), uint16 @ offset 2 (status), uint16 @ offset 4 (glucose)
+        payload = struct.pack(">b", 5) + b"\x00" + struct.pack(">H", 0) + struct.pack(">H", 120)
+        evt = self._decode_single(256, payload)
+        assert evt["event_name"] == "CGM"
+        assert evt["glucose_mgdl"] == 120
+        assert evt["rate_of_change"] == 0.5  # 5 * 0.1
+        assert evt["status"] == 0
+
+    def test_decode_cgm_data_event_rate_zero(self):
+        """Event 256 with rate_raw=0 and non-zero status decodes correctly."""
+        payload = struct.pack(">b", 0) + b"\x00" + struct.pack(">H", 1) + struct.pack(">H", 85)
+        evt = self._decode_single(256, payload)
+        assert evt["rate_of_change"] == 0.0
+        assert evt["glucose_mgdl"] == 85
+        assert evt["status"] == 1
+
+    def test_decode_bolus_delivery_event(self):
+        """Event 280 (BolusDelivery) decodes type, status, correction and delivered."""
+        payload = (
+            struct.pack(">B", 1)  # bolus_type
+            + struct.pack(">B", 0)  # delivery_status = 0 (completed)
+            + struct.pack(">H", 42)  # bolus_id
+            + struct.pack(">H", 2000)  # requested_now_mu
+            + b"\x00\x00"  # unknown
+            + struct.pack(">H", 500)  # correction_mu
+            + b"\x00\x00"  # unknown
+            + struct.pack(">H", 2000)  # delivered_total_mu
+        )
+        evt = self._decode_single(280, payload)
+        assert evt["event_name"] == "BolusDelivery"
+        assert evt["delivery_status"] == 0
+        assert evt["correction_mu"] == 500
+        assert evt["insulin_delivered"] == 2.0  # 2000 / 1000
+
+    def test_decode_bolus_delivery_no_correction(self):
+        """Event 280 with correction_mu=0 and delivery_status=1 (started)."""
+        payload = (
+            struct.pack(">B", 0)  # bolus_type
+            + struct.pack(">B", 1)  # delivery_status = 1
+            + struct.pack(">H", 1)  # bolus_id
+            + struct.pack(">H", 1000)  # requested_now_mu
+            + b"\x00\x00"  # unknown
+            + struct.pack(">H", 0)  # correction_mu = 0
+            + b"\x00\x00"  # unknown
+            + struct.pack(">H", 1000)  # delivered_total_mu
+        )
+        evt = self._decode_single(280, payload)
+        assert evt["correction_mu"] == 0
+        assert evt["delivery_status"] == 1
+
+    def test_decode_unknown_suspend_reason(self):
+        """Event 11 with an unrecognised reason code falls back to 'Reason_N'."""
+        payload = struct.pack(">B", 99) + b"\x00\x00\x00" + struct.pack(">f", 0.0)
+        evt = self._decode_single(11, payload)
+        assert evt["suspend_reason"] == "Reason_99"
+
     def test_unknown_event_skipped(self):
         """Events we don't handle are skipped."""
         payload = b"\x00" * 16

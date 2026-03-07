@@ -1,38 +1,39 @@
 # Tandem t:slim Pump for Home Assistant
 
+The only Home Assistant integration for the **Tandem t:slim X2** insulin pump.
+Get real-time CGM readings, insulin on board, Control-IQ status, and 49+ sensors —
+using your existing Tandem Source account. No extra hardware required.
+
 [![release](https://img.shields.io/github/v/release/jnctech/ha-tandem-pump)](https://github.com/jnctech/ha-tandem-pump/releases)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![build](https://img.shields.io/github/actions/workflow/status/jnctech/ha-tandem-pump/ci.yml?branch=develop&label=build)](https://github.com/jnctech/ha-tandem-pump/actions/workflows/ci.yml)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=jnctech_ha_hinen_power&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=jnctech_ha_hinen_power)
 [![License](https://img.shields.io/github/license/jnctech/ha-tandem-pump)](LICENSE)
 
-**49+ sensors from your Tandem t:slim X2 insulin pump — live glucose, IOB, Control-IQ status, basal profile, and long-term statistics — directly in Home Assistant.** No Nightscout relay required.
-
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jnctech&repository=ha-tandem-pump&category=integration)
+[![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jnctech&repository=ha-tandem-pump&category=integration)
 
 ---
 
-## Features
-
-- 🩸 **Live CGM readings** — glucose (mmol/L + mg/dL), delta, Time in Range, GMI, SD, CV
-- 💉 **Insulin delivery** — IOB, basal rate, last bolus, TDI, daily bolus/basal totals
-- ⚙️ **Control-IQ status** — open/closed loop mode, activity mode (Sleep/Exercise), pump suspended
-- 📋 **Full pump settings** — active basal profile with schedule, CIQ config, alert thresholds
-- 📈 **Long-term statistics** — CGM glucose, IOB, and basal rate in HA's statistics engine for Statistics Graph cards
-- 🕐 **Last-known value** — sensors always show the most recent reading; no "unavailable" gaps between syncs
-- ⚡ **Smart polling** — skips the full API fetch when the pump hasn't uploaded since last poll
-- 🔄 **Manual backfill** — `carelink.import_history` action recovers missed statistics for any date range
+<!-- SCREENSHOT: Add a screenshot of the T1D dashboard Live page here -->
 
 ---
 
-## Sensors (49)
+## What you can do
 
-| Category | Count | Includes |
+- Display your current glucose reading and trend arrow on any Home Assistant dashboard
+- Automate alerts: notify when cartridge insulin drops below 20 u, page family when the pump is suspended
+- Track time-in-range, GMI, and long-term insulin trends over weeks with the Statistics Graph card
+- Know your active basal profile, Control-IQ mode, and IOB — everything your pump reports, visible in your smart home
+
+## 49+ sensors across 5 categories
+
+| Category | Sensors | Highlights |
 |---|---|---|
-| Glucose Monitoring | 12 | CGM readings, delta, rate of change, CGM status, avg glucose, TIR, time below/above range, SD, CV, GMI |
-| Insulin Delivery | 10 | IOB, basal rate, last bolus/meal, TDI, daily totals, carbs, bolus count |
-| Pump Status | 9 | Control-IQ mode, activity mode, suspended state + reason, cartridge level + fill amount, site/cartridge/tubing changes |
-| Pump Settings | 11 | Active basal profile + schedule, CIQ config, max bolus/basal limits, CGM + BG alert thresholds |
-| Device & Timestamps | 7 | Last glucose update, last upload, serial, model, software version, CGM usage |
+| Glucose Monitoring | 12 | CGM mg/dL + mmol/L, rate of change, TIR, GMI, SD, CV |
+| Insulin Delivery | 10 | IOB, basal rate, last bolus, TDI, daily totals, carbs |
+| Pump Status | 9 | Control-IQ mode, activity mode, cartridge insulin, suspend reason, site/cartridge/tubing age |
+| Pump Settings | 11 | Active profile + hourly schedule, max bolus, CIQ limits, alert thresholds |
+| Device & Timestamps | 7 | Serial, firmware, last sync, last glucose update |
 
 <details>
 <summary>Full sensor list</summary>
@@ -74,7 +75,7 @@
 | Pump suspended | Suspended / Active |
 | Pump suspend reason | User / Alarm / Malfunction / Auto-PLGS |
 | Cartridge insulin | Remaining insulin (units) |
-| Last cartridge fill amount | Fill volume from API (units; often Unknown — see below) |
+| Last cartridge fill amount | Fill volume from API (units; often Unknown — see note below) |
 | Last cartridge change | Timestamp of last cartridge fill |
 | Last site change | Timestamp (derived from cartridge fill) |
 | Last tubing change | Timestamp of last tubing prime |
@@ -105,110 +106,128 @@
 
 </details>
 
-**Long-term statistics** — CGM glucose, IOB, basal rate, meal carbs, total bolus, and correction bolus are imported into HA's statistics engine on every sync. Use native Statistics Graph cards for daily/weekly/monthly trends, or backfill gaps with [`carelink.import_history`](#actions).
+**Plus 5 long-term statistics** (CGM, IOB, basal, carbs, correction bolus) compatible with
+HA's Statistics Graph card. Import months of history with `carelink.import_history`.
 
 > **Note on "Last cartridge fill amount":** The Tandem Source API typically returns 0 for the fill volume, so this sensor usually shows Unknown. Set the **Cartridge fill volume** number entity manually when you change your cartridge — the integration uses that value to estimate remaining insulin.
 
 ---
 
-## Installation
+## Requirements
 
-### HACS (Recommended)
+- Tandem t:slim X2 with an active [Tandem Source](https://source.tandemdiabetes.com) account
+- Tandem mobile app installed on Android or iOS and syncing regularly
+- Home Assistant 2023.1.0+ with HACS installed
 
-Click the button above, or manually:
-1. HACS → Integrations → ⋮ → **Custom repositories** → add `https://github.com/jnctech/ha-tandem-pump` (category: Integration)
-2. Find **"Tandem t:slim Pump"**, click **Download**, then restart Home Assistant
+---
+
+## Install
+
+### Via HACS (recommended)
+
+1. HACS → Integrations → ⋮ → **Custom repositories** →
+   add `https://github.com/jnctech/ha-tandem-pump` (category: Integration)
+2. Find **Tandem t:slim Pump** → **Download** → restart Home Assistant
+3. **Settings → Devices & Services → Add Integration** → search **Carelink** →
+   enter your Tandem Source email, password, and region
+
+That's it. No developer account. Your pump's data starts flowing within minutes.
+
+Or click the **Add to HACS** button at the top of this page.
 
 ### Manual
 
-Copy `custom_components/carelink/` into your HA `config/custom_components/` directory and restart.
+Download the [latest release](https://github.com/jnctech/ha-tandem-pump/releases/latest),
+copy `custom_components/carelink/` into `config/custom_components/`, restart, and add
+the integration as above.
 
 ---
 
-## Upgrading
+## How it works
 
-### HACS
-1. HACS → Integrations → find **"Tandem t:slim Pump"** → **Update**
-2. Restart Home Assistant
-3. Your pump device and all entities continue working normally
+```
+Tandem t:slim X2  →  Tandem mobile app  →  Tandem Source cloud  →  Home Assistant (polls every 5 min)
+```
 
-> **Upgrading from v1.2.x?** v1.3.0 changed the internal device identifier used by HA.
-> You may see a duplicate "Tandem Pump" device with 0 entities after restarting.
-> See [Duplicate Device After Upgrading](TROUBLESHOOTING.md#duplicate-device-after-upgrade) for how to remove it.
+The Tandem app uploads roughly once per hour when running unrestricted.
+New data appears in Home Assistant within minutes of each upload.
 
-### Manual
-Replace `custom_components/carelink/` in `config/custom_components/` with the new version, then restart.
-
-### Clean Reinstall
-Use this if entities do not appear after an update:
-1. Note your credentials (email, region, scan interval)
-2. **Settings → Devices & Services → Carelink → Delete**
-3. Update (HACS or manual) and restart Home Assistant
-4. **Settings → Devices & Services → Add Integration → search "Carelink"**
-5. Re-enter your credentials
-
-> **New in v1.4.0:** Four new sensors (CGM rate of change, CGM status, last cartridge fill amount, pump suspend reason) and a correction bolus long-term statistic appear automatically after upgrading. Backfill historical correction bolus data with **Developer Tools → Actions → carelink.import_history**.
+> **Keep the Tandem app running unrestricted on your phone.**
+> Battery optimisation on Android or Low Power Mode on iOS will delay or stop uploads.
+> This is the most common cause of stale readings.
+> [Fix it now →](TROUBLESHOOTING.md#mobile-app-settings)
 
 ---
 
-## Configuration
+## Backfill historical data
 
-1. **Settings → Devices & Services → Add Integration**
-2. Search for **"Carelink"**
-3. Select **Tandem t:slim** as the platform
-4. Enter your **Tandem Source** email, password, and region (EU / US)
-5. Set scan interval (default: 300 seconds)
+Import months of CGM, insulin, carb, and correction bolus history into the Statistics Graph:
 
-**Prerequisites:** A Tandem t:slim X2 pump syncing to [Tandem Source](https://source.tandemdiabetes.com) via the Tandem t:slim mobile app, and Home Assistant **2023.1.0+**.
-
----
-
-## Mobile App & Sync
-
-Data flows: **Pump → Tandem t:slim app → Tandem Source cloud → This integration → HA**
-
-The app uploads pump data approximately **every 60 minutes** when unrestricted. HA picks up new data within minutes of each upload.
-
-- **Android:** Set Tandem t:slim to **Unrestricted** battery usage (Settings → Apps → Tandem t:slim → Battery). Most manufacturers add extra restrictions — [full per-manufacturer settings →](TROUBLESHOOTING.md#mobile-app-settings)
-- **iOS:** Enable **Background App Refresh** (Settings → General → Background App Refresh → Tandem t:slim: On). Avoid Low Power Mode. Do not force-quit the app.
-- **Data gaps:** Use `carelink.import_history` to recover missed statistics after fixing app settings.
-
----
-
-## Actions
-
-### `carelink.import_history`
-
-Backfill long-term statistics (CGM glucose, IOB, basal rate) for any date range where the Tandem app was not syncing.
-
-**Developer Tools → Actions → search `carelink.import_history`**
+**Developer Tools → Actions → `carelink.import_history`** → set a start and end date → Call Action
 
 | Field | Required | Description |
 |---|---|---|
-| `start_date` | ✅ | First date to import (date picker or YYYY-MM-DD) |
-| `end_date` | — | Last date to import. Defaults to today |
+| `start_date` | Yes | First date to import (date picker or YYYY-MM-DD) |
+| `end_date` | No | Last date to import — defaults to today |
 
-- Fetches in 7-day chunks — safe on large date ranges
-- **Idempotent** — running the same range twice is safe; gaps are filled, existing data is unchanged
-- Recommended max per run: **1 month**
+Data is fetched in 7-day chunks. The action is idempotent — safe to run multiple times.
 
 | Scenario | Suggested range |
 |---|---|
 | App backgrounded for a day | yesterday → today |
 | App not syncing for a week | 7 days ago → today |
-| First install — full backfill | integration start date → today (run in monthly chunks) |
+| First install — full history | earliest date → today (run in monthly chunks) |
 
 ---
 
-## Dashboard
+## Starter dashboards
 
-A starter dashboard with ApexCharts glucose and insulin graphs is at [`examples/dashboard.yaml`](examples/dashboard.yaml).
+Example dashboard YAML files are included in the [`examples/`](examples/) directory.
+A full multi-page T1D layout and a simpler single-page starter are both available.
 
 ---
 
-## Troubleshooting & Support
+## Upgrading
 
-See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for installation issues, authentication errors, missing sensors, Nightscout setup, and debug logging.
+<details>
+<summary>From v1.3.x</summary>
+
+Entity IDs now include a `tandem_` prefix.
+
+| Before | After |
+|---|---|
+| `sensor.last_glucose_level_mmol` | `sensor.tandem_last_glucose_level_mmol` |
+
+Update dashboards and automations after upgrading.
+Statistics Graph entities (`sensor.carelink_*`) are **not** affected.
+
+</details>
+
+<details>
+<summary>From v1.2.x or earlier</summary>
+
+You may see a phantom **Tandem Pump** device with 0 entities — safe to delete.
+See [Duplicate Device →](TROUBLESHOOTING.md#duplicate-device-after-upgrade)
+
+If entities do not appear after upgrading, do a clean reinstall:
+1. Note your credentials (email, region, scan interval)
+2. Settings → Devices & Services → Carelink → Delete
+3. Update the integration and restart HA
+4. Re-add and enter your credentials
+
+</details>
+
+---
+
+## Troubleshooting
+
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for the full guide.
+
+| Symptom | Most likely cause | Fix |
+|---|---|---|
+| Sensors show Unknown / data is stale | Tandem app battery-optimised | [Mobile App Settings →](TROUBLESHOOTING.md#mobile-app-settings) |
+| Authentication failure | Wrong region, or MFA enabled | [Configuration Issues →](TROUBLESHOOTING.md#configuration-issues) |
+| Sensors missing | Wrong platform selected at setup | [Missing Sensors →](TROUBLESHOOTING.md#missing-sensors) |
 
 Open an issue: https://github.com/jnctech/ha-tandem-pump/issues
 
@@ -216,8 +235,11 @@ Open an issue: https://github.com/jnctech/ha-tandem-pump/issues
 
 ## Credits
 
-- Tandem Source integration by [@jnctech](https://github.com/jnctech)
-- Original Carelink integration by [@yo-han](https://github.com/yo-han/Home-Assistant-Carelink)
-- Binary event format reference from [tconnectsync](https://github.com/jwoglom/tconnectsync) by [@jwoglom](https://github.com/jwoglom)
+Built and maintained by [@jnctech](https://github.com/jnctech).
+Original Carelink integration by [@yo-han](https://github.com/yo-han/Home-Assistant-Carelink).
+Tandem API research: [jwoglom/tconnectsync](https://github.com/jwoglom/tconnectsync) by [@jwoglom](https://github.com/jwoglom).
 
-> **Medtronic Carelink:** The Medtronic code path is preserved from the original fork but has not been tested under this fork. For verified Medtronic support use the [original repository](https://github.com/yo-han/Home-Assistant-Carelink).
+---
+
+> **Medtronic CareLink users:** This integration also supports Medtronic CareLink (limited sensors).
+> Use your CareLink credentials when adding the integration.

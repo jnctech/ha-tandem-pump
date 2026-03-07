@@ -1,55 +1,70 @@
 # Tandem t:slim Pump for Home Assistant
 
-The most comprehensive Tandem insulin pump integration for Home Assistant. Monitor your **Tandem t:slim X2** pump with **45+ sensors**, long-term statistics, glucose history, insulin delivery tracking, and full pump settings visibility.
+The only Home Assistant integration for the **Tandem t:slim X2** insulin pump.
+Connect to your existing **Tandem Source** account and get **49+ sensors** covering every
+metric your pump reports — glucose, insulin on board, Control-IQ status, and more.
 
-## What You Get
+**No extra hardware. No developer account. Just your Tandem Source login.**
 
-**Glucose Monitoring** — Live CGM readings (mg/dL + mmol/L), glucose delta, daily average, Time in Range, time below/above range, standard deviation, CV, and GMI. All computed locally from your pump's CGM events.
+---
 
-**Insulin Delivery** — Active insulin (IOB), current basal rate, last bolus details, daily totals (TDI, bolus, basal, split %), daily carbs, and bolus count.
+## What you get
 
-**Pump Status** — Control-IQ mode (Open/Closed Loop), activity mode (Normal/Sleep/Exercise), pump suspended state, cartridge level, and infusion set change timestamps (cartridge, site, tubing).
+**Glucose Monitoring (12 sensors)**
+Live CGM in mg/dL and mmol/L, rate of change, delta, time in range, GMI, SD, CV
 
-**Pump Settings** — Active basal profile with full schedule (rates, ISF, carb ratio, target BG per time segment), Control-IQ configuration, max bolus/basal limits, CGM and BG alert thresholds.
+**Insulin Delivery (10 sensors)**
+IOB, current basal rate, last bolus, TDI, daily totals, carb intake, bolus count
 
-**Long-Term Statistics** — CGM glucose, IOB, and basal rate imported into HA's statistics engine. Use native Statistics Graph cards for daily/weekly/monthly trends.
+**Pump Status (9 sensors)**
+Control-IQ mode, activity mode (Normal / Sleep / Exercise / Eating Soon), cartridge insulin
+remaining, suspend state + reason, site age, cartridge age, tubing age
 
-**Smart Polling** — Checks for new data before fetching, skips expensive API calls when nothing has changed. Sensors always show the **last known value** — no confusing "unavailable" gaps just because the phone was out of range briefly.
+**Pump Settings (11 sensors)**
+Active basal profile + full hourly schedule, max bolus, CIQ weight/TDI, alert thresholds
 
-**Manual Backfill** — The `carelink.import_history` action (Developer Tools → Actions) lets you recover statistics for any period when the Tandem app wasn't syncing — even weeks or months of missed data.
+**Long-Term Statistics (5)**
+CGM, IOB, basal, carbs, correction bolus — works with the Statistics Graph card.
+Backfill months of data: **Developer Tools → Actions → carelink.import_history**
 
-## How Sync Works
+---
 
-This integration reads from the **Tandem Source cloud** — it cannot talk to your pump directly. The Tandem t:slim mobile app must be running and connected to your pump via Bluetooth for uploads to occur.
+## How it works
 
-When unrestricted, the app uploads pump data to Tandem Source approximately **every 60 minutes**. HA then picks up the new data within minutes of each upload.
+```
+Tandem t:slim X2  →  Tandem mobile app  →  Tandem Source cloud  →  Home Assistant (polls every 5 min)
+```
 
-> **Android users:** Set the Tandem app to **Unrestricted** battery usage (Settings → Apps → Tandem t:slim → Battery). The default "Optimised" setting pauses background sync.
->
-> **iOS users:** Enable **Background App Refresh** for the Tandem app (Settings → General → Background App Refresh) and avoid Low Power Mode during monitoring periods.
+The Tandem app uploads roughly once per hour when running unrestricted.
 
-If the app wasn't syncing for a period, use `carelink.import_history` to backfill the missing statistics.
+> **Keep the Tandem app running unrestricted on your phone.**
+> Battery optimisation on Android or Low Power Mode on iOS is the most common cause of stale data.
+
+---
 
 ## Requirements
 
-- Tandem t:slim X2 pump syncing to Tandem Source via the Tandem t:slim mobile app
-- Tandem Source account credentials (email + password)
-- Home Assistant 2023.1.0+
+- Tandem t:slim X2 with [Tandem Source](https://source.tandemdiabetes.com) account
+- Tandem mobile app (Android or iOS), syncing regularly
+- Home Assistant 2023.1.0+ with HACS
 
-## Installation
+---
 
-1. Add this repository as a custom repository in HACS
-2. Download the integration
-3. Restart Home Assistant
-4. Add the integration via Settings > Devices & Services
-5. Select "Tandem t:slim" and enter your credentials
+## Quick install
 
-A starter dashboard with ApexCharts glucose and insulin graphs is included at `examples/dashboard.yaml`.
+1. HACS → Custom repositories → add `https://github.com/jnctech/ha-tandem-pump` (category: Integration)
+2. Install **Tandem t:slim Pump** → restart HA
+3. **Settings → Devices & Services → Add Integration → search "Carelink"**
 
-## Credits
+---
 
-- Tandem Source integration by [@jnctech](https://github.com/jnctech)
-- Forked from [@yo-han's Carelink integration](https://github.com/yo-han/Home-Assistant-Carelink)
-- Binary event format reference from [tconnectsync](https://github.com/jwoglom/tconnectsync) by [@jwoglom](https://github.com/jwoglom)
+## Upgrading from v1.3.x?
 
-> **Note:** Medtronic Carelink support is inherited from the original integration but has not been tested under this fork. For verified Medtronic support, use the [original repo](https://github.com/yo-han/Home-Assistant-Carelink).
+Entity IDs now include a `tandem_` prefix (e.g. `sensor.tandem_last_glucose_level_mmol`).
+Update dashboards and automations after upgrading.
+Statistics Graph entities (`sensor.carelink_*`) are **not** affected.
+
+---
+
+> **Medtronic CareLink:** This integration also supports legacy Medtronic CareLink (limited sensors).
+> Use your CareLink credentials when adding the integration.

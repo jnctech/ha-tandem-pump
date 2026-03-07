@@ -501,7 +501,7 @@ class TandemSourceClient:
 
         try:
             claims = json.loads(base64.urlsafe_b64decode(payload))
-        except ValueError as e:  # covers json.JSONDecodeError (subclass) + bad base64
+        except ValueError as e:  # NOSONAR S5713 - single exception type; comment mentioning JSONDecodeError (a subclass) was misread as a second caught type
             raise TandemAuthError(f"Cannot decode JWT payload: {e}") from e
 
         self.pumper_id = claims.get("pumperId")

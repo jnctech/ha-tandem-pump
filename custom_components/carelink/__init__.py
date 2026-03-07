@@ -934,7 +934,6 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         # ── Device info from pump metadata ───────────────────────────────
         metadata = recent_data.get("pump_metadata")
-        pumper_info = recent_data.get("pumper_info")
 
         if metadata:
             _LOGGER.debug("Tandem metadata keys: %s", list(metadata.keys()))

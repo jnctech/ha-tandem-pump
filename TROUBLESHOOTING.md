@@ -2,6 +2,10 @@
 
 Common issues and solutions for the Tandem t:slim Pump integration.
 
+> **New installation?** The most common setup issue is the Tandem app running with battery
+> optimisation enabled. If sensors show Unknown or data is stale, fix this first:
+> [Mobile App Settings →](#mobile-app-settings)
+
 ---
 
 ## Mobile App Settings {#mobile-app-settings}

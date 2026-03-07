@@ -21,6 +21,7 @@ from .const import (
     DOMAIN,
     PLATFORM_TYPE,
     PLATFORM_TANDEM,
+    TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,9 +86,13 @@ class CartridgeFillVolumeNumber(RestoreEntity, NumberEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
+        data = self._coordinator.data or {}
         return DeviceInfo(
-            identifiers={(DOMAIN, self._coordinator.data.get(DEVICE_PUMP_SERIAL, "unknown"))},
-            name=self._coordinator.data.get(DEVICE_PUMP_NAME, "Tandem Pump"),
-            manufacturer=self._coordinator.data.get(DEVICE_PUMP_MANUFACTURER, "Tandem Diabetes Care"),
-            model=self._coordinator.data.get(DEVICE_PUMP_MODEL, "t:slim X2"),
+            identifiers={(DOMAIN, self._coordinator.entry_id)},
+            name=data.get(DEVICE_PUMP_NAME, "Tandem Pump"),
+            manufacturer=data.get(DEVICE_PUMP_MANUFACTURER, "Tandem Diabetes Care"),
+            model=data.get(DEVICE_PUMP_MODEL, "t:slim X2"),
+            sw_version=data.get(TANDEM_SENSOR_KEY_SOFTWARE_VERSION),
+            serial_number=data.get(DEVICE_PUMP_SERIAL),
+            configuration_url=self._coordinator.configuration_url,
         )

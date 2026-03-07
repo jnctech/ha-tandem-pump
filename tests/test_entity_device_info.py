@@ -19,6 +19,8 @@ from custom_components.carelink.const import (
     DOMAIN,
     TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
 )
+
+_FIXED_DEVICE_NAME = "Tandem"
 from custom_components.carelink.helpers import PumpEntityMixin, pump_device_info
 from custom_components.carelink.sensor import CarelinkSensorEntity
 from custom_components.carelink.binary_sensor import CarelinkConnectivityEntity
@@ -52,7 +54,7 @@ def _make_sensor(data: dict, **kwargs) -> CarelinkSensorEntity:
     desc.native_unit_of_measurement = None
     desc.state_class = None
     desc.entity_category = None
-    return CarelinkSensorEntity(coordinator, desc, "test sensor")
+    return CarelinkSensorEntity(coordinator, desc)
 
 
 def _make_binary_sensor(data: dict, **kwargs) -> CarelinkConnectivityEntity:
@@ -106,16 +108,17 @@ class TestPumpDeviceInfoHelper:
         info = pump_device_info(coordinator)
         assert info.get("configuration_url") == _TANDEM_URL
 
-    def test_name_fallback_is_pump(self):
-        """Default name is 'Pump' when DEVICE_PUMP_NAME not in data."""
+    def test_name_is_always_tandem(self):
+        """Device name is always 'Tandem' regardless of coordinator data."""
         coordinator = _make_coordinator({})
         info = pump_device_info(coordinator)
-        assert info["name"] == "Pump"
+        assert info["name"] == _FIXED_DEVICE_NAME
 
-    def test_name_from_data(self):
+    def test_name_is_tandem_regardless_of_data(self):
+        """DEVICE_PUMP_NAME in data does not affect the fixed device name."""
         coordinator = _make_coordinator({DEVICE_PUMP_NAME: "My t:slim X2"})
         info = pump_device_info(coordinator)
-        assert info["name"] == "My t:slim X2"
+        assert info["name"] == _FIXED_DEVICE_NAME
 
     def test_coordinator_data_none_safe(self):
         """Does not crash when coordinator.data is None."""
@@ -123,7 +126,7 @@ class TestPumpDeviceInfoHelper:
         coordinator.data = None
         info = pump_device_info(coordinator)
         assert (DOMAIN, _TEST_ENTRY_ID) in info["identifiers"]
-        assert info["name"] == "Pump"
+        assert info["name"] == _FIXED_DEVICE_NAME
 
 
 # ── PumpEntityMixin ────────────────────────────────────────────────────────
@@ -230,7 +233,7 @@ class TestSensorDeviceInfoStableIdentifier:
         info = sensor.device_info
         assert info.get("configuration_url") == _CARELINK_URL
 
-    def test_name_and_manufacturer_from_data(self):
+    def test_name_is_fixed_and_manufacturer_from_data(self):
         sensor = _make_sensor(
             {
                 DEVICE_PUMP_NAME: "My t:slim X2",
@@ -239,14 +242,14 @@ class TestSensorDeviceInfoStableIdentifier:
             }
         )
         info = sensor.device_info
-        assert info["name"] == "My t:slim X2"
+        assert info["name"] == _FIXED_DEVICE_NAME
         assert info["manufacturer"] == "Tandem Diabetes Care"
         assert info["model"] == "t:slim X2"
 
-    def test_name_fallback_when_missing(self):
+    def test_name_is_fixed_when_data_missing(self):
         sensor = _make_sensor({})
         info = sensor.device_info
-        assert info["name"] == "Pump"
+        assert info["name"] == _FIXED_DEVICE_NAME
 
 
 # ── Binary sensor entity ───────────────────────────────────────────────────
@@ -289,10 +292,10 @@ class TestBinarySensorDeviceInfoStableIdentifier:
         info = bs.device_info
         assert info.get("configuration_url") == _CARELINK_URL
 
-    def test_name_fallback(self):
+    def test_name_is_fixed(self):
         bs = _make_binary_sensor({})
         info = bs.device_info
-        assert info["name"] == "Pump"
+        assert info["name"] == _FIXED_DEVICE_NAME
 
 
 # ── Number entity ──────────────────────────────────────────────────────────
@@ -327,11 +330,11 @@ class TestNumberDeviceInfoStableIdentifier:
         info = entity.device_info
         assert info.get("configuration_url") == _TANDEM_URL
 
-    def test_default_name_when_data_empty(self):
-        """Name defaults to 'Pump' when coordinator data has no pump name."""
+    def test_name_is_fixed_when_data_empty(self):
+        """Device name is always 'Tandem' regardless of coordinator data."""
         entity = _make_number({})
         info = entity.device_info
-        assert info["name"] == "Pump"
+        assert info["name"] == _FIXED_DEVICE_NAME
         assert info["manufacturer"] == "Tandem Diabetes Care"
 
     def test_model_from_data(self):

@@ -53,7 +53,9 @@ class NightscoutUploader:
     def async_client(self):
         """Return the httpx client, using a certifi-backed SSL context."""
         if not self._async_client:
-            ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+            ssl_ctx = ssl.create_default_context(
+                cafile=certifi.where()
+            )  # NOSONAR S4423 - create_default_context is the recommended secure approach; TLSv1_2 minimum is intentional
             ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
             self._async_client = httpx.AsyncClient(verify=ssl_ctx, timeout=30.0)
         return self._async_client
@@ -442,7 +444,9 @@ class NightscoutUploader:
         print("Sending...")
         asyncio.run(self.reachServer())
         if self.__is_reachable:
-            asyncio.run(self.send_recent_data(data, timezone))
+            asyncio.run(
+                self.send_recent_data(data, timezone)
+            )  # NOSONAR S930 - signature is (self, data, timezone); SonarCloud false positive
 
 
 if __name__ == "__main__":

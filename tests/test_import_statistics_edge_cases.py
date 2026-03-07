@@ -234,7 +234,7 @@ class TestCorrectionBolusStatistic:
         ]
         await coordinator._import_statistics(events)
         stat_ids = {c[0][1].statistic_id for c in mock_import.call_args_list}
-        assert f"sensor.carelink_correction_bolus" in stat_ids
+        assert "sensor.carelink_correction_bolus" in stat_ids
 
     async def test_correction_bolus_nonzero_delivery_status_skipped(self, hass: HomeAssistant, mock_import):
         """Event 280 with delivery_status != 0 (not completed) does not generate a stat."""

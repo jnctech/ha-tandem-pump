@@ -189,9 +189,7 @@ async def _make_coordinator(hass: HomeAssistant):
             "dashboard_summary": None,
         }
     )
-    mock_client.get_pump_event_metadata = AsyncMock(
-        return_value=[{"maxDateWithEvents": "2026-03-01T12:00:00"}]
-    )
+    mock_client.get_pump_event_metadata = AsyncMock(return_value=[{"maxDateWithEvents": "2026-03-01T12:00:00"}])
     mock_client.close = AsyncMock()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
@@ -296,9 +294,7 @@ class TestBolusStatisticsImport:
     async def test_bolus_stat_values_correct(self, hass: HomeAssistant, mock_import):
         """Bolus delivered value is correctly stored in StatisticData."""
         coordinator = await _make_coordinator(hass)
-        await coordinator._import_statistics(
-            [_make_bolus_completed_event(seq=1, insulin_delivered=4.75)]
-        )
+        await coordinator._import_statistics([_make_bolus_completed_event(seq=1, insulin_delivered=4.75)])
 
         _, stats = _find_stat_call(mock_import, "total_bolus")
         assert stats[0].mean == 4.75
@@ -322,17 +318,13 @@ class TestBolusStatisticsImport:
     async def test_extended_bolus_event_21_included(self, hass: HomeAssistant, mock_import):
         """BOLEX_COMPLETED (event_id=21) is also included in bolus statistics."""
         coordinator = await _make_coordinator(hass)
-        await coordinator._import_statistics(
-            [_make_bolex_completed_event(seq=1, insulin_delivered=6.0)]
-        )
+        await coordinator._import_statistics([_make_bolex_completed_event(seq=1, insulin_delivered=6.0)])
         assert f"sensor.{DOMAIN}_total_bolus" in _imported_stat_ids(mock_import)
 
     async def test_zero_insulin_excluded(self, hass: HomeAssistant, mock_import):
         """Bolus events with zero insulin_delivered are not imported."""
         coordinator = await _make_coordinator(hass)
-        await coordinator._import_statistics(
-            [_make_bolus_completed_event(seq=1, insulin_delivered=0.0)]
-        )
+        await coordinator._import_statistics([_make_bolus_completed_event(seq=1, insulin_delivered=0.0)])
         assert f"sensor.{DOMAIN}_total_bolus" not in _imported_stat_ids(mock_import)
 
 
@@ -367,9 +359,7 @@ class TestAllFiveStatisticsTypes:
     async def test_iob_and_bolus_from_same_event_20(self, hass: HomeAssistant, mock_import):
         """A single BOLUS_COMPLETED event produces both an IOB stat and a bolus stat."""
         coordinator = await _make_coordinator(hass)
-        await coordinator._import_statistics(
-            [_make_bolus_completed_event(seq=1, insulin_delivered=2.5)]
-        )
+        await coordinator._import_statistics([_make_bolus_completed_event(seq=1, insulin_delivered=2.5)])
 
         ids = _imported_stat_ids(mock_import)
         assert f"sensor.{DOMAIN}_active_insulin_iob" in ids

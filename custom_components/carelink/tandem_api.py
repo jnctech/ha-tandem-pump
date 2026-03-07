@@ -129,7 +129,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             status = struct.unpack_from(">H", payload, 2)[0]
             evt["glucose_mgdl"] = glucose
             evt["rate_of_change"] = round(rate_raw * 0.1, 1)
-            evt["status"] = status  # normal (0), high (1), low (2)
+            evt["status"] = status  # 0=normal, 1=high, 2=low
 
         elif event_id == EVT_BOLUS_COMPLETED:
             evt["event_name"] = "BolusCompleted"
@@ -139,7 +139,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             delivered = struct.unpack_from(">f", payload, 8)[0]
             requested = struct.unpack_from(">f", payload, 12)[0]
             evt["bolus_id"] = bolus_id
-            evt["completion_status"] = completion  # value 3 means Completed
+            evt["completion_status"] = completion  # 3=completed
             evt["iob"] = round(iob, 2)
             evt["insulin_delivered"] = round(delivered, 2)
             evt["insulin_requested"] = round(requested, 2)
@@ -153,7 +153,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             correction = struct.unpack_from(">H", payload, 8)[0]
             delivered_total = struct.unpack_from(">H", payload, 12)[0]
             evt["bolus_type"] = bolus_type
-            evt["delivery_status"] = status  # completed (0), started (1)
+            evt["delivery_status"] = status  # 0=completed, 1=started
             evt["bolus_id"] = bolus_id
             evt["requested_now_mu"] = requested_now  # milliunits
             evt["correction_mu"] = correction
@@ -371,11 +371,8 @@ class TandemSourceClient:
         return base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
 
     def _needs_login(self) -> bool:
-        """Check if we need to (re)authenticate."""
-        if not self.access_token:
-            return True
-        # Re-login 5 minutes before expiry
-        return time.time() >= (self.token_expires_at - 300)
+        """Return True if authentication is missing or expiring within 5 minutes."""
+        return not self.access_token or time.time() >= (self.token_expires_at - 300)
 
     async def login(self) -> None:
         """Perform OIDC/PKCE authentication.
@@ -504,7 +501,7 @@ class TandemSourceClient:
 
         try:
             claims = json.loads(base64.urlsafe_b64decode(payload))
-        except ValueError as e:
+        except ValueError as e:  # NOSONAR S5713 - single exception type; comment mentioning JSONDecodeError (a subclass) was misread as a second caught type
             raise TandemAuthError(f"Cannot decode JWT payload: {e}") from e
 
         self.pumper_id = claims.get("pumperId")

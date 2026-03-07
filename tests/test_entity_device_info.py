@@ -3,8 +3,12 @@
 All entity types (sensor, binary_sensor, number) must produce identical
 identifiers, serial_number, sw_version, and configuration_url because they
 all delegate to the shared pump_device_info() helper / PumpEntityMixin.
+
+Also covers entity properties (device_class, native_value, state_class, etc.)
+and async_setup_entry for all three platforms to meet the 80% coverage target.
 """
 
+import pytest
 from unittest.mock import MagicMock
 
 from custom_components.carelink.const import (
@@ -375,3 +379,209 @@ class TestAllEntityTypesProduceConsistentDeviceInfo:
         for info in (s, b, n):
             assert (DOMAIN, _TEST_ENTRY_ID) in info["identifiers"]
             assert (DOMAIN, "REAL-SN") not in info["identifiers"]
+
+
+# ── Sensor entity properties ───────────────────────────────────────────────
+
+
+class TestSensorEntityProperties:
+    """CarelinkSensorEntity property coverage (native_value, device_class, etc.)."""
+
+    def test_native_value_returns_value_from_coordinator_data(self):
+        sensor = _make_sensor({"test_key": 42.5})
+        assert sensor.native_value == 42.5
+
+    def test_native_value_returns_none_when_coordinator_data_is_none(self):
+        sensor = _make_sensor({})
+        sensor.coordinator.data = None
+        assert sensor.native_value is None
+
+    def test_native_value_returns_none_when_key_absent(self):
+        """Key not in data → None (and logs a debug message)."""
+        sensor = _make_sensor({})  # test_key not present
+        assert sensor.native_value is None
+
+    def test_device_class_from_sensor_description(self):
+        from homeassistant.components.sensor import SensorDeviceClass
+
+        sensor = _make_sensor({})
+        sensor.sensor_description.device_class = SensorDeviceClass.TEMPERATURE
+        assert sensor.device_class == SensorDeviceClass.TEMPERATURE
+
+    def test_device_class_none_when_unset(self):
+        sensor = _make_sensor({})
+        sensor.sensor_description.device_class = None
+        assert sensor.device_class is None
+
+    def test_native_unit_of_measurement_from_description(self):
+        sensor = _make_sensor({})
+        sensor.sensor_description.native_unit_of_measurement = "mg/dL"
+        assert sensor.native_unit_of_measurement == "mg/dL"
+
+    def test_state_class_from_description(self):
+        from homeassistant.components.sensor import SensorStateClass
+
+        sensor = _make_sensor({})
+        sensor.sensor_description.state_class = SensorStateClass.MEASUREMENT
+        assert sensor.state_class == SensorStateClass.MEASUREMENT
+
+    def test_extra_state_attributes_returns_attrs_when_present(self):
+        sensor = _make_sensor({"test_key_attributes": {"foo": "bar"}})
+        assert sensor.extra_state_attributes == {"foo": "bar"}
+
+    def test_extra_state_attributes_returns_empty_when_key_absent(self):
+        sensor = _make_sensor({})
+        assert sensor.extra_state_attributes == {}
+
+    def test_extra_state_attributes_returns_empty_when_coordinator_data_none(self):
+        sensor = _make_sensor({})
+        sensor.coordinator.data = None
+        assert sensor.extra_state_attributes == {}
+
+    def test_available_delegates_to_coordinator(self):
+        sensor = _make_sensor({})
+        sensor.coordinator.last_update_success = True
+        assert sensor.available is True
+
+
+# ── Binary sensor entity properties ───────────────────────────────────────
+
+
+class TestBinarySensorEntityProperties:
+    """CarelinkConnectivityEntity property coverage (device_class, is_on)."""
+
+    def test_device_class_from_sensor_description(self):
+        from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+
+        bs = _make_binary_sensor({})
+        bs.sensor_description.device_class = BinarySensorDeviceClass.CONNECTIVITY
+        assert bs.device_class == BinarySensorDeviceClass.CONNECTIVITY
+
+    def test_device_class_none_when_unset(self):
+        bs = _make_binary_sensor({})
+        bs.sensor_description.device_class = None
+        assert bs.device_class is None
+
+    def test_is_on_returns_true_when_key_is_true(self):
+        bs = _make_binary_sensor({"test_key": True})
+        assert bs.is_on is True
+
+    def test_is_on_returns_false_when_key_is_false(self):
+        bs = _make_binary_sensor({"test_key": False})
+        assert bs.is_on is False
+
+    def test_is_on_returns_false_when_key_absent(self):
+        bs = _make_binary_sensor({})
+        assert bs.is_on is False
+
+    def test_is_on_returns_false_when_coordinator_data_none(self):
+        bs = _make_binary_sensor({})
+        bs.coordinator.data = None
+        assert bs.is_on is False
+
+
+# ── async_setup_entry coverage ─────────────────────────────────────────────
+
+
+def _make_hass_and_entry(platform_type, coordinator=None):
+    """Build minimal hass/entry mocks for async_setup_entry tests."""
+    from custom_components.carelink.const import COORDINATOR, PLATFORM_TYPE
+
+    if coordinator is None:
+        coordinator = _make_coordinator({})
+    entry = MagicMock()
+    entry.entry_id = _TEST_ENTRY_ID
+    hass = MagicMock()
+    hass.data = {
+        DOMAIN: {
+            _TEST_ENTRY_ID: {
+                COORDINATOR: coordinator,
+                PLATFORM_TYPE: platform_type,
+            }
+        }
+    }
+    return hass, entry
+
+
+class TestSensorAsyncSetupEntry:
+    """sensor.async_setup_entry registers the correct entity list."""
+
+    @pytest.mark.asyncio
+    async def test_tandem_platform_registers_tandem_sensors(self):
+        from custom_components.carelink.const import PLATFORM_TANDEM, TANDEM_SENSORS
+        from custom_components.carelink.sensor import async_setup_entry
+
+        hass, entry = _make_hass_and_entry(PLATFORM_TANDEM)
+        async_add_entities = MagicMock()
+        await async_setup_entry(hass, entry, async_add_entities)
+        async_add_entities.assert_called_once()
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == len(TANDEM_SENSORS)
+
+    @pytest.mark.asyncio
+    async def test_carelink_platform_registers_carelink_sensors(self):
+        from custom_components.carelink.const import PLATFORM_CARELINK, SENSORS
+        from custom_components.carelink.sensor import async_setup_entry
+
+        hass, entry = _make_hass_and_entry(PLATFORM_CARELINK)
+        async_add_entities = MagicMock()
+        await async_setup_entry(hass, entry, async_add_entities)
+        async_add_entities.assert_called_once()
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == len(SENSORS)
+
+
+class TestBinarySensorAsyncSetupEntry:
+    """binary_sensor.async_setup_entry registers the correct entity list."""
+
+    @pytest.mark.asyncio
+    async def test_tandem_platform_registers_tandem_binary_sensors(self):
+        from custom_components.carelink.binary_sensor import async_setup_entry
+        from custom_components.carelink.const import PLATFORM_TANDEM, TANDEM_BINARY_SENSORS
+
+        hass, entry = _make_hass_and_entry(PLATFORM_TANDEM)
+        async_add_entities = MagicMock()
+        await async_setup_entry(hass, entry, async_add_entities)
+        async_add_entities.assert_called_once()
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == len(TANDEM_BINARY_SENSORS)
+
+    @pytest.mark.asyncio
+    async def test_carelink_platform_registers_carelink_binary_sensors(self):
+        from custom_components.carelink.binary_sensor import async_setup_entry
+        from custom_components.carelink.const import BINARY_SENSORS, PLATFORM_CARELINK
+
+        hass, entry = _make_hass_and_entry(PLATFORM_CARELINK)
+        async_add_entities = MagicMock()
+        await async_setup_entry(hass, entry, async_add_entities)
+        async_add_entities.assert_called_once()
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == len(BINARY_SENSORS)
+
+
+class TestNumberAsyncSetupEntry:
+    """number.async_setup_entry registers entity only for Tandem platform."""
+
+    @pytest.mark.asyncio
+    async def test_tandem_platform_registers_cartridge_fill_entity(self):
+        from custom_components.carelink.const import PLATFORM_TANDEM
+        from custom_components.carelink.number import CartridgeFillVolumeNumber
+        from custom_components.carelink.number import async_setup_entry as number_setup
+
+        hass, entry = _make_hass_and_entry(PLATFORM_TANDEM)
+        async_add_entities = MagicMock()
+        await number_setup(hass, entry, async_add_entities)
+        async_add_entities.assert_called_once()
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == 1
+        assert isinstance(entities[0], CartridgeFillVolumeNumber)
+
+    @pytest.mark.asyncio
+    async def test_carelink_platform_skips_entity_registration(self):
+        from custom_components.carelink.const import PLATFORM_CARELINK
+        from custom_components.carelink.number import async_setup_entry as number_setup
+
+        hass, entry = _make_hass_and_entry(PLATFORM_CARELINK)
+        async_add_entities = MagicMock()
+        await number_setup(hass, entry, async_add_entities)
+        async_add_entities.assert_not_called()

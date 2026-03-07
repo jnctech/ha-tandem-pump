@@ -533,6 +533,10 @@ TANDEM_SENSOR_KEY_CGM_STATUS = "tandem_cgm_status"
 TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL = "tandem_last_cartridge_fill_amount"
 TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON = "tandem_pump_suspend_reason"
 
+# ── Lookup maps for event-derived sensor values ───────────────────────
+CGM_STATUS_MAP: dict[int, str] = {0: "Normal", 1: "High", 2: "Low"}
+SUSPEND_REASON_MAP: dict[int, str] = {0: "User", 1: "Alarm", 2: "Malfunction", 3: "Auto-PLGS"}
+
 # ── Computed insulin summary keys ──────────────────────────────────────
 TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN = "tandem_total_daily_insulin"
 TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL = "tandem_daily_bolus_total"

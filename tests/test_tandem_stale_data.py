@@ -139,7 +139,6 @@ class TestSensorAvailability:
         entity = CarelinkSensorEntity(
             coordinator=coordinator,
             sensor_description=description,
-            entity_name=f"test_{sensor_key}",
             platform_type=platform_type,
         )
         return entity
@@ -199,7 +198,6 @@ class TestSensorAvailability:
         entity = CarelinkSensorEntity(
             coordinator=coordinator,
             sensor_description=description,
-            entity_name="test",
             platform_type=PLATFORM_TANDEM,
         )
         assert entity.available is False

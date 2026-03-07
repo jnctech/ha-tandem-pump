@@ -7,7 +7,6 @@ from homeassistant.util import dt as dt_util
 from .const import (
     DEVICE_PUMP_MANUFACTURER,
     DEVICE_PUMP_MODEL,
-    DEVICE_PUMP_NAME,
     DEVICE_PUMP_SERIAL,
     DOMAIN,
     TANDEM_DATA_STALE_TIMEDELTA,
@@ -49,7 +48,7 @@ def pump_device_info(coordinator) -> DeviceInfo:
     data = coordinator.data or {}
     return DeviceInfo(
         identifiers={(DOMAIN, coordinator.entry_id)},
-        name=data.get(DEVICE_PUMP_NAME, "Pump"),
+        name="Tandem",
         manufacturer=data.get(DEVICE_PUMP_MANUFACTURER, "Tandem Diabetes Care"),
         model=data.get(DEVICE_PUMP_MODEL),
         sw_version=data.get(TANDEM_SENSOR_KEY_SOFTWARE_VERSION),
@@ -66,6 +65,8 @@ class PumpEntityMixin:
     List this mixin first in the MRO so its property definitions take priority over any
     conflicting defaults in CoordinatorEntity.
     """
+
+    _attr_has_entity_name = True
 
     @property
     def device_info(self) -> DeviceInfo:

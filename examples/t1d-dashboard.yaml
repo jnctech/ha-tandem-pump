@@ -100,30 +100,30 @@ views:
           - type: custom:mushroom-chips-card
             chips:
               - type: entity
-                entity: sensor.time_in_range
+                entity: sensor.tandem_time_in_range
                 icon: mdi:bullseye-arrow
                 content_info: state
               - type: entity
-                entity: sensor.average_glucose_level_mmol
+                entity: sensor.tandem_average_glucose_level_mmol
                 icon: mdi:chart-line
                 content_info: state
               - type: entity
-                entity: sensor.active_insulin_iob
+                entity: sensor.tandem_active_insulin_iob
                 icon: mdi:water-alert
                 content_info: state
           # ── Secondary Stats Chips (Row 2) ──
           - type: custom:mushroom-chips-card
             chips:
               - type: entity
-                entity: sensor.total_daily_insulin
+                entity: sensor.tandem_total_daily_insulin
                 icon: mdi:needle
                 content_info: state
               - type: entity
-                entity: sensor.last_glucose_update
+                entity: sensor.tandem_last_glucose_update
                 icon: mdi:clock-outline
                 content_info: state
               - type: entity
-                entity: sensor.last_pump_upload
+                entity: sensor.tandem_last_pump_upload
                 icon: mdi:cloud-upload
                 content_info: state
 
@@ -207,7 +207,7 @@ views:
                     color: "#ff9800"
                   - value: 13.9
                     color: "#d32f2f"
-              - entity: sensor.last_glucose_level_mmol
+              - entity: sensor.tandem_last_glucose_level_mmol
                 name: "Tandem CGM"
                 yaxis_id: glucose
                 type: line
@@ -259,7 +259,7 @@ views:
                 x:
                   format: "HH:mm"
             series:
-              - entity: sensor.active_insulin_iob
+              - entity: sensor.tandem_active_insulin_iob
                 name: "IOB"
                 yaxis_id: iob
                 type: area
@@ -269,7 +269,7 @@ views:
                 group_by:
                   func: avg
                   duration: 5min
-              - entity: sensor.basal_rate
+              - entity: sensor.tandem_basal_rate
                 name: "Basal Rate"
                 yaxis_id: basal
                 type: line
@@ -299,15 +299,15 @@ views:
           - type: custom:mushroom-chips-card
             chips:
               - type: entity
-                entity: sensor.average_glucose_level_mmol
+                entity: sensor.tandem_average_glucose_level_mmol
                 icon: mdi:chart-line
                 content_info: state
               - type: entity
-                entity: sensor.gmi
+                entity: sensor.tandem_gmi
                 icon: mdi:diabetes
                 content_info: state
               - type: entity
-                entity: sensor.daily_carbs
+                entity: sensor.tandem_daily_carbs
                 icon: mdi:food
                 content_info: state
 
@@ -363,7 +363,7 @@ views:
                     color: "#ff9800"
                   - value: 13.9
                     color: "#d32f2f"
-              - entity: sensor.last_glucose_level_mmol
+              - entity: sensor.tandem_last_glucose_level_mmol
                 name: "Tandem CGM"
                 yaxis_id: glucose24
                 type: line
@@ -398,7 +398,7 @@ views:
             header:
               show: false
             series:
-              - entity: sensor.time_in_range
+              - entity: sensor.tandem_time_in_range
                 name: "Time in Range"
                 show:
                   legend_value: false
@@ -428,19 +428,19 @@ views:
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
-                entity: sensor.time_below_range
+                entity: sensor.tandem_time_below_range
                 name: "Below"
                 icon: mdi:arrow-down-bold
                 icon_color: red
                 layout: vertical
               - type: custom:mushroom-entity-card
-                entity: sensor.time_in_range
+                entity: sensor.tandem_time_in_range
                 name: "In Range"
                 icon: mdi:check-circle
                 icon_color: green
                 layout: vertical
               - type: custom:mushroom-entity-card
-                entity: sensor.time_above_range
+                entity: sensor.tandem_time_above_range
                 name: "Above"
                 icon: mdi:arrow-up-bold
                 icon_color: orange
@@ -450,17 +450,17 @@ views:
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
-                entity: sensor.glucose_standard_deviation
+                entity: sensor.tandem_glucose_standard_deviation
                 name: "SD"
                 icon: mdi:chart-bell-curve
                 icon_color: blue
               - type: custom:mushroom-entity-card
-                entity: sensor.glucose_cv
+                entity: sensor.tandem_glucose_cv
                 name: "CV"
                 icon: mdi:chart-bell-curve-cumulative
                 icon_color: teal
               - type: custom:mushroom-entity-card
-                entity: sensor.cgm_usage
+                entity: sensor.tandem_cgm_usage
                 name: "CGM Use"
                 icon: mdi:percent
                 icon_color: green
@@ -522,7 +522,7 @@ views:
                 x:
                   format: "HH:mm"
             series:
-              - entity: sensor.active_insulin_iob
+              - entity: sensor.tandem_active_insulin_iob
                 name: "IOB"
                 yaxis_id: iob
                 type: area
@@ -532,7 +532,7 @@ views:
                 group_by:
                   func: avg
                   duration: 5min
-              - entity: sensor.basal_rate
+              - entity: sensor.tandem_basal_rate
                 name: "Basal Rate"
                 yaxis_id: basal
                 type: line
@@ -546,24 +546,24 @@ views:
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
-                entity: sensor.last_bolus
+                entity: sensor.tandem_last_bolus
                 name: "Last Bolus"
                 icon: mdi:needle
                 icon_color: red
               - type: custom:mushroom-entity-card
-                entity: sensor.last_meal_bolus
+                entity: sensor.tandem_last_meal_bolus
                 name: "Meal Bolus"
                 icon: mdi:food
                 icon_color: purple
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
-                entity: sensor.daily_bolus_count
+                entity: sensor.tandem_daily_bolus_count
                 name: "Boluses"
                 icon: mdi:counter
                 icon_color: blue
               - type: custom:mushroom-entity-card
-                entity: sensor.last_carb_entry
+                entity: sensor.tandem_last_carb_entry
                 name: "Last Carbs"
                 icon: mdi:food-apple
                 icon_color: amber
@@ -572,24 +572,24 @@ views:
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
-                entity: sensor.total_daily_insulin
+                entity: sensor.tandem_total_daily_insulin
                 name: "TDI"
                 icon: mdi:needle
                 icon_color: deep-orange
               - type: custom:mushroom-entity-card
-                entity: sensor.daily_bolus_total
+                entity: sensor.tandem_daily_bolus_total
                 name: "Bolus Total"
                 icon: mdi:needle
                 icon_color: red
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
-                entity: sensor.daily_basal_total
+                entity: sensor.tandem_daily_basal_total
                 name: "Basal Total"
                 icon: mdi:chart-line
                 icon_color: blue
               - type: custom:mushroom-entity-card
-                entity: sensor.basal_percentage
+                entity: sensor.tandem_basal_percentage
                 name: "Basal %"
                 icon: mdi:chart-pie
                 icon_color: teal
@@ -625,25 +625,25 @@ views:
           - type: custom:mushroom-chips-card
             chips:
               - type: entity
-                entity: sensor.pump_suspended
+                entity: sensor.tandem_pump_suspended
                 icon: mdi:play-circle
                 content_info: state
               - type: entity
-                entity: sensor.control_iq_mode
+                entity: sensor.tandem_control_iq_mode
                 icon: mdi:robot
                 content_info: state
               - type: entity
-                entity: sensor.pump_activity_mode
+                entity: sensor.tandem_pump_activity_mode
                 icon: mdi:run
                 content_info: state
               - type: entity
-                entity: sensor.control_iq_enabled
+                entity: sensor.tandem_control_iq_enabled
                 icon: mdi:robot-outline
                 content_info: state
 
           # ── Cartridge Insulin Gauge ──
           - type: gauge
-            entity: sensor.cartridge_insulin
+            entity: sensor.tandem_cartridge_insulin
             name: "Cartridge Insulin"
             min: 0
             max: 300
@@ -657,24 +657,24 @@ views:
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
-                entity: sensor.cartridge_insulin
+                entity: sensor.tandem_cartridge_insulin
                 name: "Cartridge"
                 icon: mdi:cup-water
                 icon_color: blue
               - type: custom:mushroom-entity-card
-                entity: sensor.last_site_change
+                entity: sensor.tandem_last_site_change
                 name: "Site Change"
                 icon: mdi:needle
                 icon_color: teal
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
-                entity: sensor.last_cartridge_change
+                entity: sensor.tandem_last_cartridge_change
                 name: "Cartridge Change"
                 icon: mdi:cup-water
                 icon_color: cyan
               - type: custom:mushroom-entity-card
-                entity: sensor.last_tubing_change
+                entity: sensor.tandem_last_tubing_change
                 name: "Tubing Change"
                 icon: mdi:pipe
                 icon_color: indigo
@@ -689,16 +689,16 @@ views:
           - type: markdown
             title: "Active Basal Profile"
             content: >
-              **{{ state_attr('sensor.active_basal_profile', 'profile_name') }}**
-              &nbsp;|&nbsp; Insulin Duration: {{ state_attr('sensor.active_basal_profile', 'insulin_duration_hours') }}h
-              &nbsp;|&nbsp; Carbs: {{ 'Enabled' if state_attr('sensor.active_basal_profile', 'carb_entry_enabled') else 'Disabled' }}
+              **{{ state_attr('sensor.tandem_active_basal_profile', 'profile_name') }}**
+              &nbsp;|&nbsp; Insulin Duration: {{ state_attr('sensor.tandem_active_basal_profile', 'insulin_duration_hours') }}h
+              &nbsp;|&nbsp; Carbs: {{ 'Enabled' if state_attr('sensor.tandem_active_basal_profile', 'carb_entry_enabled') else 'Disabled' }}
 
 
               | Time | Basal (U/hr) | ISF (mg/dL) | C:I Ratio | Target (mg/dL) |
 
               |------|:---:|:---:|:---:|:---:|
 
-              {% for seg in state_attr('sensor.active_basal_profile', 'schedule') -%}
+              {% for seg in state_attr('sensor.tandem_active_basal_profile', 'schedule') -%}
               | {{ seg.time }} | {{ seg.basal_rate }} | {{ seg.isf_mgdl }} | 1:{{ seg.carb_ratio }} | {{ seg.target_bg_mgdl }} |
 
               {% endfor %}
@@ -707,24 +707,24 @@ views:
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
-                entity: sensor.control_iq_weight
+                entity: sensor.tandem_control_iq_weight
                 name: "Weight"
                 icon: mdi:weight-kilogram
                 icon_color: blue
               - type: custom:mushroom-entity-card
-                entity: sensor.control_iq_total_daily_insulin
+                entity: sensor.tandem_control_iq_total_daily_insulin
                 name: "CIQ TDI"
                 icon: mdi:needle
                 icon_color: purple
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
-                entity: sensor.max_bolus_setting
+                entity: sensor.tandem_max_bolus_setting
                 name: "Max Bolus"
                 icon: mdi:needle
                 icon_color: orange
               - type: custom:mushroom-entity-card
-                entity: sensor.basal_rate_limit
+                entity: sensor.tandem_basal_rate_limit
                 name: "Basal Limit"
                 icon: mdi:speedometer
                 icon_color: teal
@@ -733,17 +733,17 @@ views:
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
-                entity: sensor.cgm_low_glucose_alert
+                entity: sensor.tandem_cgm_low_glucose_alert
                 name: "Low Alert"
                 icon: mdi:alert-circle-outline
                 icon_color: red
               - type: custom:mushroom-entity-card
-                entity: sensor.cgm_high_glucose_alert
+                entity: sensor.tandem_cgm_high_glucose_alert
                 name: "High Alert"
                 icon: mdi:alert-circle
                 icon_color: orange
               - type: custom:mushroom-entity-card
-                entity: sensor.low_insulin_alert_threshold
+                entity: sensor.tandem_low_insulin_alert_threshold
                 name: "Low Insulin"
                 icon: mdi:battery-alert
                 icon_color: red
@@ -758,17 +758,17 @@ views:
           - type: horizontal-stack
             cards:
               - type: custom:mushroom-entity-card
-                entity: sensor.last_glucose_update
+                entity: sensor.tandem_last_glucose_update
                 name: "Last CGM"
                 icon: mdi:clock
                 icon_color: green
               - type: custom:mushroom-entity-card
-                entity: sensor.last_pump_upload
+                entity: sensor.tandem_last_pump_upload
                 name: "Last Upload"
                 icon: mdi:cloud-upload
                 icon_color: blue
               - type: custom:mushroom-entity-card
-                entity: sensor.last_update
+                entity: sensor.tandem_last_update
                 name: "Last API"
                 icon: mdi:refresh
                 icon_color: teal
@@ -777,13 +777,13 @@ views:
           - type: entities
             title: "Pump Details"
             entities:
-              - entity: sensor.pump_serial_number
+              - entity: sensor.tandem_pump_serial_number
                 name: "Serial Number"
-              - entity: sensor.pump_model
+              - entity: sensor.tandem_pump_model
                 name: "Model"
-              - entity: sensor.software_version
+              - entity: sensor.tandem_software_version
                 name: "Software"
-              - entity: sensor.active_basal_profile
+              - entity: sensor.tandem_active_basal_profile
                 name: "Active Profile"
-              - entity: sensor.last_bg_reading
+              - entity: sensor.tandem_last_bg_reading
                 name: "Last BG (Fingerstick)"

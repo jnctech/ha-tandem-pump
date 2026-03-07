@@ -98,11 +98,11 @@ class TestTandemCoordinatorFullData:
         assert coordinator.data[DEVICE_PUMP_MODEL] == "t:slim X2"
         assert coordinator.data[DEVICE_PUMP_MANUFACTURER] == "Tandem Diabetes Care"
 
-    async def test_pump_name_from_pumper_info(self, hass: HomeAssistant, mock_tandem_recent_data):
-        """Test pump name is populated from pumper info."""
+    async def test_pump_name_from_metadata(self, hass: HomeAssistant, mock_tandem_recent_data):
+        """Test pump name falls back to 'Tandem Pump' when patientName not in metadata."""
         coordinator = await _setup_tandem_coordinator(hass, mock_tandem_recent_data)
 
-        assert coordinator.data[DEVICE_PUMP_NAME] == "Test User"
+        assert coordinator.data[DEVICE_PUMP_NAME] == "Tandem Pump"
 
     async def test_sensor_keys_from_metadata(self, hass: HomeAssistant, mock_tandem_recent_data):
         """Test sensor-level metadata values."""

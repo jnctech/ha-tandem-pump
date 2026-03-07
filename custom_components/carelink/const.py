@@ -537,6 +537,9 @@ TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON = "tandem_pump_suspend_reason"
 CGM_STATUS_MAP: dict[int, str] = {0: "Normal", 1: "High", 2: "Low"}
 SUSPEND_REASON_MAP: dict[int, str] = {0: "User", 1: "Alarm", 2: "Malfunction", 3: "Auto-PLGS"}
 
+# ── Shared icon strings (S1192: avoid duplicating literals 3+ times) ──
+ICON_ALERT_CIRCLE_OUTLINE = "mdi:alert-circle-outline"
+
 # ── Computed insulin summary keys ──────────────────────────────────────
 TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN = "tandem_total_daily_insulin"
 TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL = "tandem_daily_bolus_total"
@@ -648,7 +651,7 @@ TANDEM_SENSORS = (
         native_unit_of_measurement=None,
         state_class=None,
         device_class=None,
-        icon="mdi:alert-circle-outline",
+        icon=ICON_ALERT_CIRCLE_OUTLINE,
         entity_category=None,
     ),
     SensorEntityDescription(
@@ -1066,7 +1069,7 @@ TANDEM_SENSORS = (
         native_unit_of_measurement=MGDL,
         state_class=None,
         device_class=None,
-        icon="mdi:alert-circle-outline",
+        icon=ICON_ALERT_CIRCLE_OUTLINE,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
@@ -1075,7 +1078,7 @@ TANDEM_SENSORS = (
         native_unit_of_measurement=MGDL,
         state_class=None,
         device_class=None,
-        icon="mdi:alert-circle-outline",
+        icon=ICON_ALERT_CIRCLE_OUTLINE,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(

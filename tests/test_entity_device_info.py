@@ -20,11 +20,12 @@ from custom_components.carelink.const import (
     TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
 )
 
-_FIXED_DEVICE_NAME = "Tandem"
 from custom_components.carelink.helpers import PumpEntityMixin, pump_device_info
 from custom_components.carelink.sensor import CarelinkSensorEntity
 from custom_components.carelink.binary_sensor import CarelinkConnectivityEntity
 from custom_components.carelink.number import CartridgeFillVolumeNumber
+
+_FIXED_DEVICE_NAME = "Tandem"
 
 _TEST_ENTRY_ID = "test-entry-id-abc123"
 _TANDEM_URL = "https://source.tandemdiabetes.com"

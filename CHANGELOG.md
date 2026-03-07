@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.4.0] - 2026-03-07
 
+> **Breaking change** — entity IDs now use a `tandem_` prefix (e.g. `sensor.last_glucose_level_mmol`
+> → `sensor.tandem_last_glucose_level_mmol`). Update dashboards and automations after upgrading.
+> Statistics Graph cards using `sensor.carelink_*` statistic IDs are **not** affected.
+> Re-run `carelink.import_history` to backfill statistics under the new entity IDs.
+
 ### Added
 - **4 new live sensors** populated from decoded pump events:
   - `CGM rate of change` (mg/dL/min) — from `EVT_CGM_DATA_GXB` events
@@ -25,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Duplicate device troubleshooting** — new section in TROUBLESHOOTING.md explaining how to
   delete the phantom v1.2.x device left after the v1.3.0 device-identifier change (correct
   delete path: open the device detail page via the `›` arrow, not the three-dot menu)
+
+### Changed
+- **Entity IDs include `tandem_` prefix** — all 50 entities now use `sensor.tandem_*` /
+  `number.tandem_*` IDs so sensors are easy to find and filter in Settings → Entities. The
+  device name in Settings → Devices is now consistently "Tandem" for all users.
 
 ## [1.3.0] - 2026-03-06
 

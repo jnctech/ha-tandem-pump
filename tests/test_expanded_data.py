@@ -425,6 +425,69 @@ class TestNewEventDecoders:
         events = decode_pump_events(b64)
         assert len(events) == 0
 
+    def test_decode_bolus_completed(self):
+        """Event 20 (EVT_BOLUS_COMPLETED) is decoded correctly."""
+        payload = (
+            struct.pack(">H", 7)  # bolus_id
+            + struct.pack(">H", 3)  # completion (3=completed)
+            + struct.pack(">f", 1.5)  # iob
+            + struct.pack(">f", 2.0)  # delivered
+            + struct.pack(">f", 2.0)  # requested
+        )
+        evt = self._decode_single(20, payload)
+        assert evt["event_name"] == "BolusCompleted"
+        assert evt["bolus_id"] == 7
+        assert evt["completion_status"] == 3
+        assert evt["iob"] == 1.5
+        assert evt["insulin_delivered"] == 2.0
+        assert evt["insulin_requested"] == 2.0
+
+    def test_decode_basal_rate_change(self):
+        """Event 3 (EVT_BASAL_RATE_CHANGE) is decoded correctly."""
+        payload = (
+            struct.pack(">f", 0.85)  # commanded_rate
+            + struct.pack(">f", 0.80)  # base_rate
+            + struct.pack(">f", 2.0)  # max_rate
+            + b"\x00\x00\x00\x00\x00"  # padding to byte 13
+        )
+        # Insert change_type at byte 13
+        payload = payload[:12] + b"\x00" + struct.pack(">B", 2)
+        evt = self._decode_single(3, payload)
+        assert evt["event_name"] == "BasalRateChange"
+        assert evt["commanded_rate"] == 0.85
+        assert evt["base_rate"] == 0.8
+        assert evt["change_type"] == 2
+
+    def test_decode_basal_delivery(self):
+        """Event 279 (EVT_BASAL_DELIVERY) is decoded correctly."""
+        payload = (
+            b"\x00\x00"  # bytes 0-1 (unused)
+            + struct.pack(">H", 1)  # commanded_source at offset 2
+            + struct.pack(">H", 850)  # profile_rate at offset 4 (milliunits/hr)
+            + struct.pack(">H", 800)  # commanded_rate at offset 6 (milliunits/hr)
+        )
+        evt = self._decode_single(279, payload)
+        assert evt["event_name"] == "BasalDelivery"
+        assert evt["commanded_source"] == 1
+        assert evt["profile_rate_mu"] == 850
+        assert evt["commanded_rate_mu"] == 800
+        assert evt["commanded_rate"] == 0.8
+
+    def test_decode_base64_error_returns_empty(self):
+        """Invalid base64 input returns empty list without raising."""
+        events = decode_pump_events("!!!invalid base64!!!")
+        assert events == []
+
+    def test_decode_truncated_chunk_skipped(self):
+        """A record shorter than EVENT_LEN is skipped gracefully."""
+        # Build a valid 26-byte event then truncate to 20 bytes
+        payload = b"\x00" * 16
+        raw = _build_binary_event(256, 1, 500000000, payload)
+        truncated = raw[:20]  # shorter than 26-byte EVENT_LEN
+        b64 = base64.b64encode(truncated).decode()
+        events = decode_pump_events(b64)
+        assert events == []
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Tests: Computed CGM summary

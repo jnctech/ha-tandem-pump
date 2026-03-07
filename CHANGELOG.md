@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+## [1.3.0] - 2026-03-06
+
+### Added
+- **Carb and bolus long-term statistics** — two new statistic entities that appear in the
+  Statistics Graph card for trend analysis:
+  - `sensor.carelink_meal_carbs` (grams) — hourly carb intake from `EVT_CARBS_ENTERED` events
+  - `sensor.carelink_total_bolus` (units) — hourly completed bolus delivery from
+    `EVT_BOLUS_COMPLETED` / `EVT_BOLEX_COMPLETED` events (completion_status=3 only)
+  - Both stat types are automatically included when running `carelink.import_history` for
+    historical backfill — no extra steps required
+
+### Changed
+- **Stable device identifiers** — all 46 entities (45 sensors + cartridge fill volume number)
+  now use the config entry ID as the device identifier instead of the pump serial number;
+  this eliminates phantom/split devices when the serial is temporarily unavailable during
+  early setup or after an API failure
+- **Device info enriched** — device panel in Settings → Devices & Services now shows:
+  serial number, firmware version, and a direct link to Tandem Source or Carelink portal
+
 ## [1.2.3] - 2026-03-06
 
 ### Added

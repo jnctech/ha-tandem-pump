@@ -5,7 +5,7 @@
 [![build](https://img.shields.io/github/actions/workflow/status/jnctech/ha-tandem-pump/ci.yml?branch=develop&label=build)](https://github.com/jnctech/ha-tandem-pump/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/jnctech/ha-tandem-pump)](LICENSE)
 
-**45+ sensors from your Tandem t:slim X2 insulin pump — live glucose, IOB, Control-IQ status, basal profile, and long-term statistics — directly in Home Assistant.** No Nightscout relay required.
+**49+ sensors from your Tandem t:slim X2 insulin pump — live glucose, IOB, Control-IQ status, basal profile, and long-term statistics — directly in Home Assistant.** No Nightscout relay required.
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jnctech&repository=ha-tandem-pump&category=integration)
 
@@ -24,25 +24,27 @@
 
 ---
 
-## Sensors (45)
+## Sensors (49)
 
 | Category | Count | Includes |
 |---|---|---|
-| Glucose Monitoring | 10 | CGM readings, delta, avg glucose, TIR, time below/above range, SD, CV, GMI |
+| Glucose Monitoring | 12 | CGM readings, delta, rate of change, CGM status, avg glucose, TIR, time below/above range, SD, CV, GMI |
 | Insulin Delivery | 10 | IOB, basal rate, last bolus/meal, TDI, daily totals, carbs, bolus count |
-| Pump Status | 7 | Control-IQ mode, activity mode, suspended state, cartridge level, site/cartridge/tubing changes |
+| Pump Status | 9 | Control-IQ mode, activity mode, suspended state + reason, cartridge level + fill amount, site/cartridge/tubing changes |
 | Pump Settings | 11 | Active basal profile + schedule, CIQ config, max bolus/basal limits, CGM + BG alert thresholds |
 | Device & Timestamps | 7 | Last glucose update, last upload, serial, model, software version, CGM usage |
 
 <details>
 <summary>Full sensor list</summary>
 
-### Glucose Monitoring (10)
+### Glucose Monitoring (12)
 | Sensor | Description |
 |---|---|
 | Last glucose (mmol/L) | Latest CGM reading in mmol/L |
 | Last glucose (mg/dL) | Latest CGM reading in mg/dL |
 | Glucose delta | Change since previous reading |
+| CGM rate of change | Rate of glucose change (mg/dL/min) |
+| CGM status | Sensor signal quality (Normal / High / Low) |
 | Average glucose (mmol/L) | Daily average computed from CGM events |
 | Average glucose (mg/dL) | Daily average computed from CGM events |
 | Time in Range | % of readings 70–180 mg/dL |
@@ -64,13 +66,15 @@
 | Daily carbs | Total carbs entered today |
 | Last carb entry | Most recent carb entry with timestamp |
 
-### Pump Status (7)
+### Pump Status (9)
 | Sensor | Description |
 |---|---|
 | Control-IQ status | Open Loop / Closed Loop |
 | Activity mode | Normal / Sleep / Exercise / Eating Soon |
 | Pump suspended | Suspended / Active |
+| Pump suspend reason | User / Alarm / Malfunction / Auto-PLGS |
 | Cartridge insulin | Remaining insulin (units) |
+| Last cartridge fill amount | Fill volume from API (units; often Unknown — see below) |
 | Last cartridge change | Timestamp of last cartridge fill |
 | Last site change | Timestamp (derived from cartridge fill) |
 | Last tubing change | Timestamp of last tubing prime |
@@ -101,7 +105,9 @@
 
 </details>
 
-**Long-term statistics** — CGM glucose, IOB, and basal rate are imported into HA's statistics engine on every sync. Use native Statistics Graph cards for daily/weekly/monthly trends, or backfill gaps with [`carelink.import_history`](#actions).
+**Long-term statistics** — CGM glucose, IOB, basal rate, meal carbs, total bolus, and correction bolus are imported into HA's statistics engine on every sync. Use native Statistics Graph cards for daily/weekly/monthly trends, or backfill gaps with [`carelink.import_history`](#actions).
+
+> **Note on "Last cartridge fill amount":** The Tandem Source API typically returns 0 for the fill volume, so this sensor usually shows Unknown. Set the **Cartridge fill volume** number entity manually when you change your cartridge — the integration uses that value to estimate remaining insulin.
 
 ---
 
@@ -116,6 +122,32 @@ Click the button above, or manually:
 ### Manual
 
 Copy `custom_components/carelink/` into your HA `config/custom_components/` directory and restart.
+
+---
+
+## Upgrading
+
+### HACS
+1. HACS → Integrations → find **"Tandem t:slim Pump"** → **Update**
+2. Restart Home Assistant
+3. Your pump device and all entities continue working normally
+
+> **Upgrading from v1.2.x?** v1.3.0 changed the internal device identifier used by HA.
+> You may see a duplicate "Tandem Pump" device with 0 entities after restarting.
+> See [Duplicate Device After Upgrading](TROUBLESHOOTING.md#duplicate-device-after-upgrade) for how to remove it.
+
+### Manual
+Replace `custom_components/carelink/` in `config/custom_components/` with the new version, then restart.
+
+### Clean Reinstall
+Use this if entities do not appear after an update:
+1. Note your credentials (email, region, scan interval)
+2. **Settings → Devices & Services → Carelink → Delete**
+3. Update (HACS or manual) and restart Home Assistant
+4. **Settings → Devices & Services → Add Integration → search "Carelink"**
+5. Re-enter your credentials
+
+> **New in v1.4.0:** Four new sensors (CGM rate of change, CGM status, last cartridge fill amount, pump suspend reason) and a correction bolus long-term statistic appear automatically after upgrading. Backfill historical correction bolus data with **Developer Tools → Actions → carelink.import_history**.
 
 ---
 

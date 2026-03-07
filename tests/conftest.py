@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
+from unittest.mock import AsyncMock
+
 import pytest
 
+from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.carelink.api import CarelinkClient
 from custom_components.carelink.nightscout_uploader import NightscoutUploader
-from custom_components.carelink.const import DOMAIN
+from custom_components.carelink.const import (
+    DOMAIN,
+    PLATFORM_TANDEM,
+    PLATFORM_TYPE,
+    TANDEM_CLIENT,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -344,3 +353,58 @@ def mock_tandem_recent_data_minimal() -> dict[str, Any]:
         "therapy_timeline": None,
         "dashboard_summary": None,
     }
+
+
+# ── Shared Tandem coordinator factory ─────────────────────────────────────
+
+
+async def make_tandem_coordinator(
+    hass: HomeAssistant,
+    pump_events: list[dict] | None = None,
+):
+    """Create a minimal TandemCoordinator with specific pump_events.
+
+    Shared factory used by test_additional_sensors and test_extended_statistics
+    to avoid duplicating the coordinator setup boilerplate.
+    """
+    from custom_components.carelink import TandemCoordinator
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "platform_type": "tandem",
+            "tandem_email": "test@example.com",
+            "tandem_password": "testpassword",
+            "tandem_region": "EU",
+            "scan_interval": 300,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    mock_client = AsyncMock()
+    mock_client.login = AsyncMock(return_value=True)
+    mock_client.get_recent_data = AsyncMock(
+        return_value={
+            "pump_metadata": {
+                "serialNumber": "12345678",
+                "modelNumber": "t:slim X2",
+                "softwareVersion": "7.6.0",
+                "lastUpload": "/Date(1705320000000)/",
+            },
+            "pumper_info": {"firstName": "Test", "lastName": "User"},
+            "pump_events": pump_events if pump_events is not None else [],
+            "therapy_timeline": None,
+            "dashboard_summary": None,
+        }
+    )
+    mock_client.get_pump_event_metadata = AsyncMock(return_value=[{"maxDateWithEvents": "2026-03-01T12:00:00"}])
+    mock_client.close = AsyncMock()
+
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        TANDEM_CLIENT: mock_client,
+        PLATFORM_TYPE: PLATFORM_TANDEM,
+    }
+
+    coordinator = TandemCoordinator(hass, entry, update_interval=timedelta(seconds=300))
+    await coordinator.async_config_entry_first_refresh()
+    return coordinator

@@ -76,7 +76,7 @@ class CarelinkSensorEntity(PumpEntityMixin, CoordinatorEntity, SensorEntity):
         return super().available
 
     @property
-    def native_value(self) -> float:
+    def native_value(self) -> float | None:
         if self.coordinator.data is None:
             return None
         value = self.coordinator.data.get(self.sensor_description.key)

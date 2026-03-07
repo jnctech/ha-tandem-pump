@@ -153,6 +153,7 @@ class TestPumpEntityMixinProperties:
 
     def test_entity_category_from_sensor_description(self):
         from homeassistant.helpers.entity import EntityCategory
+
         obj = self._make_mixin_instance()
         obj.sensor_description.entity_category = EntityCategory.DIAGNOSTIC
         assert obj.entity_category == EntityCategory.DIAGNOSTIC
@@ -361,19 +362,12 @@ class TestAllEntityTypesProduceConsistentDeviceInfo:
         assert s.get("serial_number") == b.get("serial_number") == n.get("serial_number") == "SN-Y"
 
     def test_sw_version_identical_across_entity_types(self):
-        s, b, n = self._get_device_info_from_all_types(
-            {TANDEM_SENSOR_KEY_SOFTWARE_VERSION: "7.9.0"}
-        )
+        s, b, n = self._get_device_info_from_all_types({TANDEM_SENSOR_KEY_SOFTWARE_VERSION: "7.9.0"})
         assert s.get("sw_version") == b.get("sw_version") == n.get("sw_version") == "7.9.0"
 
     def test_configuration_url_identical_across_entity_types(self):
         s, b, n = self._get_device_info_from_all_types({})
-        assert (
-            s.get("configuration_url")
-            == b.get("configuration_url")
-            == n.get("configuration_url")
-            == _TANDEM_URL
-        )
+        assert s.get("configuration_url") == b.get("configuration_url") == n.get("configuration_url") == _TANDEM_URL
 
     def test_all_three_use_entry_id_not_serial(self):
         data = {DEVICE_PUMP_SERIAL: "REAL-SN"}

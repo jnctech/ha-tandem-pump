@@ -11,18 +11,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Any
-from unittest.mock import AsyncMock
 
-import pytest
 from homeassistant.core import HomeAssistant
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from conftest import make_tandem_coordinator
 
 from custom_components.carelink.const import (
-    DOMAIN,
-    TANDEM_CLIENT,
-    PLATFORM_TYPE,
-    PLATFORM_TANDEM,
     UNAVAILABLE,
     TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE,
     TANDEM_SENSOR_KEY_CGM_STATUS,
@@ -90,52 +84,12 @@ def _suspend_event(
     return evt
 
 
-# ── Coordinator factory ────────────────────────────────────────────────────
+# ── Coordinator factory (delegates to shared conftest helper) ──────────────
 
 
 async def _make_coordinator(hass: HomeAssistant, pump_events: list[dict]):
     """Create a minimal TandemCoordinator with specific pump_events."""
-    from custom_components.carelink import TandemCoordinator
-
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "platform_type": "tandem",
-            "tandem_email": "test@example.com",
-            "tandem_password": "testpassword",
-            "tandem_region": "EU",
-            "scan_interval": 300,
-        },
-    )
-    entry.add_to_hass(hass)
-
-    mock_client = AsyncMock()
-    mock_client.login = AsyncMock(return_value=True)
-    mock_client.get_recent_data = AsyncMock(
-        return_value={
-            "pump_metadata": {
-                "serialNumber": "12345678",
-                "modelNumber": "t:slim X2",
-                "softwareVersion": "7.6.0",
-                "lastUpload": "/Date(1705320000000)/",
-            },
-            "pumper_info": {"firstName": "Test", "lastName": "User"},
-            "pump_events": pump_events,
-            "therapy_timeline": None,
-            "dashboard_summary": None,
-        }
-    )
-    mock_client.get_pump_event_metadata = AsyncMock(return_value=[{"maxDateWithEvents": "2026-03-01T12:00:00"}])
-    mock_client.close = AsyncMock()
-
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        TANDEM_CLIENT: mock_client,
-        PLATFORM_TYPE: PLATFORM_TANDEM,
-    }
-
-    coordinator = TandemCoordinator(hass, entry, update_interval=timedelta(seconds=300))
-    await coordinator.async_config_entry_first_refresh()
-    return coordinator
+    return await make_tandem_coordinator(hass, pump_events=pump_events)
 
 
 # ===========================================================================
@@ -279,10 +233,14 @@ class TestPumpSuspendReason:
         coordinator = await _make_coordinator(hass, [_suspend_event(event_id=12, suspend_reason=None)])
         assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] is UNAVAILABLE
 
-    async def test_unknown_suspend_reason_is_unavailable(self, hass: HomeAssistant):
-        """Unrecognised suspend reason code falls back to UNAVAILABLE."""
+    async def test_unknown_suspend_reason_returns_unknown_string(self, hass: HomeAssistant):
+        """Unrecognised suspend reason code returns 'Unknown (N)' string, not UNAVAILABLE.
+
+        This ensures a new firmware reason code is surfaced to the user rather than
+        silently appearing as unavailable (indistinguishable from "no suspend events").
+        """
         coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason=99)])
-        assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Unknown (99)"
 
     async def test_no_suspend_events_is_unavailable(self, hass: HomeAssistant):
         """No suspend/resume events produces UNAVAILABLE for suspend reason."""

@@ -7,19 +7,14 @@ import types
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from homeassistant.core import HomeAssistant
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from conftest import make_tandem_coordinator
 
-from custom_components.carelink.const import (
-    DOMAIN,
-    TANDEM_CLIENT,
-    PLATFORM_TYPE,
-    PLATFORM_TANDEM,
-)
+from custom_components.carelink.const import DOMAIN
 
 
 # -- Mock stat data classes ------------------------------------------------
@@ -171,52 +166,12 @@ def _make_cgm_event(seq: int, glucose_mgdl: int, minutes_ago: int = 0) -> dict[s
     }
 
 
-# -- Coordinator fixture ---------------------------------------------------
+# -- Coordinator fixture (delegates to shared conftest helper) ─────────────
 
 
 async def _make_coordinator(hass: HomeAssistant):
     """Create a minimal TandemCoordinator wired to hass (no network calls)."""
-    from custom_components.carelink import TandemCoordinator
-
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            "platform_type": "tandem",
-            "tandem_email": "test@example.com",
-            "tandem_password": "testpassword",
-            "tandem_region": "EU",
-            "scan_interval": 300,
-        },
-    )
-    entry.add_to_hass(hass)
-
-    mock_client = AsyncMock()
-    mock_client.login = AsyncMock(return_value=True)
-    mock_client.get_recent_data = AsyncMock(
-        return_value={
-            "pump_metadata": {
-                "serialNumber": "12345678",
-                "modelNumber": "t:slim X2",
-                "softwareVersion": "7.6.0",
-                "lastUpload": "/Date(1705320000000)/",
-            },
-            "pumper_info": {"firstName": "Test", "lastName": "User"},
-            "pump_events": [],
-            "therapy_timeline": None,
-            "dashboard_summary": None,
-        }
-    )
-    mock_client.get_pump_event_metadata = AsyncMock(return_value=[{"maxDateWithEvents": "2026-03-01T12:00:00"}])
-    mock_client.close = AsyncMock()
-
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        TANDEM_CLIENT: mock_client,
-        PLATFORM_TYPE: PLATFORM_TANDEM,
-    }
-
-    coordinator = TandemCoordinator(hass, entry, update_interval=timedelta(seconds=300))
-    await coordinator.async_config_entry_first_refresh()
-    return coordinator
+    return await make_tandem_coordinator(hass)
 
 
 # -- Helper: extract statistic IDs from mock_import calls ------------------
@@ -346,7 +301,7 @@ class TestBolusStatisticsImport:
 
 
 # ===========================================================================
-# Tests: all 5 statistic types together
+# Tests: all 6 statistic types together
 # ===========================================================================
 
 

@@ -934,7 +934,6 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         # ── Device info from pump metadata ───────────────────────────────
         metadata = recent_data.get("pump_metadata")
-        pumper_info = recent_data.get("pumper_info")
 
         if metadata:
             _LOGGER.debug("Tandem metadata keys: %s", list(metadata.keys()))
@@ -989,14 +988,6 @@ class TandemCoordinator(DataUpdateCoordinator):
             self._parse_pump_settings(None, data)
 
         data[DEVICE_PUMP_MANUFACTURER] = "Tandem Diabetes Care"
-
-        # Override name from pumper info if available
-        if pumper_info:
-            first = pumper_info.get("firstName", "")
-            last = pumper_info.get("lastName", "")
-            name = f"{first} {last}".strip()
-            if name:
-                data[DEVICE_PUMP_NAME] = name
 
         # ── Therapy data (CGM, bolus, basal) ─────────────────────────────
         pump_events = recent_data.get("pump_events")

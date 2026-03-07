@@ -990,14 +990,6 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         data[DEVICE_PUMP_MANUFACTURER] = "Tandem Diabetes Care"
 
-        # Override name from pumper info if available
-        if pumper_info:
-            first = pumper_info.get("firstName", "")
-            last = pumper_info.get("lastName", "")
-            name = f"{first} {last}".strip()
-            if name:
-                data[DEVICE_PUMP_NAME] = name
-
         # ── Therapy data (CGM, bolus, basal) ─────────────────────────────
         pump_events = recent_data.get("pump_events")
         timeline = recent_data.get("therapy_timeline")

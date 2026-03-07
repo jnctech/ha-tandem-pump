@@ -46,6 +46,7 @@ class CartridgeFillVolumeNumber(RestoreEntity, NumberEntity):
     remaining insulin by subtracting cumulative usage.
     """
 
+    _attr_has_entity_name = True
     _attr_name = "Cartridge fill volume"
     _attr_unique_id = f"{DOMAIN}_cartridge_fill_volume"
     _attr_icon = "mdi:cup-water"

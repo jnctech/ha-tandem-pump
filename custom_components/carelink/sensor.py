@@ -43,9 +43,7 @@ async def async_setup_entry(
 
     sensor_definitions = TANDEM_SENSORS if platform_type == PLATFORM_TANDEM else SENSORS
 
-    entities = [
-        CarelinkSensorEntity(coordinator, desc, f"{DOMAIN} {desc.name}", platform_type) for desc in sensor_definitions
-    ]
+    entities = [CarelinkSensorEntity(coordinator, desc, platform_type) for desc in sensor_definitions]
 
     async_add_entities(entities)
     _LOGGER.info("Sensor setup: %d entities for %s", len(entities), platform_type)
@@ -58,14 +56,12 @@ class CarelinkSensorEntity(PumpEntityMixin, CoordinatorEntity, SensorEntity):
         self,
         coordinator: DataUpdateCoordinator,
         sensor_description,
-        entity_name,
         platform_type=PLATFORM_CARELINK,
     ):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
         self.coordinator = coordinator
         self.sensor_description = sensor_description
-        self.entity_name = entity_name
         self._platform_type = platform_type
 
     @property

@@ -90,6 +90,30 @@ config/
 
 ---
 
+## Duplicate Device After Upgrading {#duplicate-device-after-upgrade}
+
+**Symptoms:** Two devices with the same name appear in Settings → Devices & Services after upgrading to v1.3.0+. One has all your entities, the other has 0 entities.
+
+**Cause:** v1.3.0 changed the internal device identifier from the pump serial number to the integration's config entry ID. All entities moved to the new device, leaving the old entry empty.
+
+**How to delete the old device:**
+
+> **Note:** The three-dot menu on the integration page only shows "Enable/Disable" for devices with 0 entities — it does not show a Delete option there.
+
+1. Find the device with **0 entities** in Settings → Devices & Services
+2. **Click the `›` arrow** next to it (or click its name) to open the device detail page
+3. Scroll to the bottom of the page — click **Delete Device**
+
+Alternatively:
+1. Go to **Settings → Devices & Services → Devices** tab (at the top of the page)
+2. Search for your pump name
+3. Open the device showing **0 entities**
+4. Scroll to the bottom → **Delete Device**
+
+No data is lost. All entities remain under the active device. If both devices show entities, use a [Clean Reinstall](README.md#upgrading).
+
+---
+
 ## Configuration Issues
 
 ### Authentication Fails
@@ -148,7 +172,7 @@ config/
 **Symptoms**: Some expected sensors not appearing
 
 **Tandem Pumps**:
-- All 45 sensors are populated from the Tandem Source Reports API — no ControlIQ API access required
+- All 49 sensors are populated from the Tandem Source Reports API — no ControlIQ API access required
 - If sensors are missing, check HA logs for parsing errors and ensure the pump has recent data on Tandem Source
 
 **Medtronic Pumps**:

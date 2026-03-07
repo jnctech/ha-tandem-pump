@@ -143,6 +143,23 @@ def _make_bolex_completed_event(
     }
 
 
+def _make_bolus_delivery_event(
+    seq: int,
+    correction_mu: int,
+    delivery_status: int = 0,
+    minutes_ago: int = 0,
+) -> dict[str, Any]:
+    """Create a mock EVT_BOLUS_DELIVERY event (event_id=280)."""
+    return {
+        "event_id": 280,
+        "event_name": "BolusDelivery",
+        "seq": seq,
+        "timestamp": _BASE_TS - timedelta(minutes=minutes_ago),
+        "delivery_status": delivery_status,
+        "correction_mu": correction_mu,
+    }
+
+
 def _make_cgm_event(seq: int, glucose_mgdl: int, minutes_ago: int = 0) -> dict[str, Any]:
     """Create a mock CGM_DATA_GXB event (event_id=256)."""
     return {
@@ -333,17 +350,18 @@ class TestBolusStatisticsImport:
 # ===========================================================================
 
 
-class TestAllFiveStatisticsTypes:
-    """Verify all 5 statistic types are imported in a single _import_statistics call."""
+class TestAllSixStatisticsTypes:
+    """Verify all 6 statistic types are imported in a single _import_statistics call."""
 
-    async def test_all_five_stats_imported_together(self, hass: HomeAssistant, mock_import):
-        """A mixed event list produces imports for CGM, IOB, basal, carbs, and bolus."""
+    async def test_all_six_stats_imported_together(self, hass: HomeAssistant, mock_import):
+        """A mixed event list produces imports for CGM, IOB, basal, carbs, bolus, correction."""
         coordinator = await _make_coordinator(hass)
         events = [
             _make_cgm_event(seq=1, glucose_mgdl=120),
             _make_bolus_completed_event(seq=2, insulin_delivered=3.5),  # IOB + bolus
             {"event_id": 3, "timestamp": datetime(2026, 3, 1, 10, 0, 0), "commanded_rate": 0.85},
             _make_carb_event(seq=4, carbs=30.0),
+            _make_bolus_delivery_event(seq=5, correction_mu=1500),
         ]
         await coordinator._import_statistics(events)
 
@@ -354,6 +372,7 @@ class TestAllFiveStatisticsTypes:
             f"sensor.{DOMAIN}_basal_rate",
             f"sensor.{DOMAIN}_meal_carbs",
             f"sensor.{DOMAIN}_total_bolus",
+            f"sensor.{DOMAIN}_correction_bolus",
         }
 
     async def test_iob_and_bolus_from_same_event_20(self, hass: HomeAssistant, mock_import):
@@ -364,3 +383,63 @@ class TestAllFiveStatisticsTypes:
         ids = _imported_stat_ids(mock_import)
         assert f"sensor.{DOMAIN}_active_insulin_iob" in ids
         assert f"sensor.{DOMAIN}_total_bolus" in ids
+
+
+# ===========================================================================
+# Tests: correction bolus statistics
+# ===========================================================================
+
+
+class TestCorrectionBolusStatisticsImport:
+    """Tests for correction bolus (event 280) statistics import."""
+
+    async def test_correction_bolus_stat_imported(self, hass: HomeAssistant, mock_import):
+        """Completed correction bolus event produces a correction_bolus statistics import."""
+        coordinator = await _make_coordinator(hass)
+        events = [_make_bolus_delivery_event(seq=1, correction_mu=2000)]
+        await coordinator._import_statistics(events)
+
+        assert f"sensor.{DOMAIN}_correction_bolus" in _imported_stat_ids(mock_import)
+        meta, stats = _find_stat_call(mock_import, "correction_bolus")
+        assert meta.unit_of_measurement == "units"
+        assert meta.has_mean is True
+        assert meta.has_sum is False
+        assert len(stats) == 1
+
+    async def test_correction_bolus_value_converted_from_milliunits(self, hass: HomeAssistant, mock_import):
+        """correction_mu (milliunits) is divided by 1000 to get units."""
+        coordinator = await _make_coordinator(hass)
+        await coordinator._import_statistics([_make_bolus_delivery_event(seq=1, correction_mu=3500)])
+
+        _, stats = _find_stat_call(mock_import, "correction_bolus")
+        assert stats[0].mean == 3.5
+        assert stats[0].state == 3.5
+
+    async def test_incomplete_delivery_excluded(self, hass: HomeAssistant, mock_import):
+        """delivery_status != 0 (in-progress) is excluded from correction stats."""
+        coordinator = await _make_coordinator(hass)
+        events = [
+            _make_bolus_delivery_event(seq=1, correction_mu=2000, delivery_status=1),
+            _make_bolus_delivery_event(seq=2, correction_mu=1500, delivery_status=2),
+        ]
+        await coordinator._import_statistics(events)
+        assert f"sensor.{DOMAIN}_correction_bolus" not in _imported_stat_ids(mock_import)
+
+    async def test_zero_correction_excluded(self, hass: HomeAssistant, mock_import):
+        """correction_mu of 0 (meal-only bolus, no correction component) is excluded."""
+        coordinator = await _make_coordinator(hass)
+        await coordinator._import_statistics([_make_bolus_delivery_event(seq=1, correction_mu=0, delivery_status=0)])
+        assert f"sensor.{DOMAIN}_correction_bolus" not in _imported_stat_ids(mock_import)
+
+    async def test_multiple_correction_boluses(self, hass: HomeAssistant, mock_import):
+        """Multiple correction bolus events all produce StatisticData entries."""
+        coordinator = await _make_coordinator(hass)
+        events = [
+            _make_bolus_delivery_event(seq=1, correction_mu=1000),
+            _make_bolus_delivery_event(seq=2, correction_mu=2000, minutes_ago=60),
+            _make_bolus_delivery_event(seq=3, correction_mu=500, minutes_ago=120),
+        ]
+        await coordinator._import_statistics(events)
+
+        _, stats = _find_stat_call(mock_import, "correction_bolus")
+        assert len(stats) == 3

@@ -180,7 +180,7 @@ class CarelinkClient:
                 printdbg(f"__get_data() failed: request timeout - {error}")
             except httpx.RequestError as error:
                 printdbg(f"__get_data() failed: network error - {error}")
-            except (ValueError, KeyError) as error:
+            except (ValueError, KeyError) as error:  # NOSONAR S5713 - neither is a subclass of the other
                 printdbg(f"__get_data() failed: response error - {error}")
             else:
                 jsondata = json.loads(response.text)
@@ -309,7 +309,7 @@ class CarelinkClient:
             # Get expiration time stamp
             token_validto = payload_json["exp"]
             token_validto -= 600
-        except (KeyError, IndexError, ValueError) as error:
+        except (KeyError, IndexError, ValueError) as error:  # NOSONAR S5713 - independent exception types
             printdbg(f"Malformed access token: {error}")
             return None
         # Save expiration time
@@ -400,7 +400,7 @@ class CarelinkClient:
         except httpx.RequestError as error:
             printdbg(f"Token refresh failed: network error - {error}")
             success = False
-        except (ValueError, KeyError) as error:
+        except (ValueError, KeyError) as error:  # NOSONAR S5713 - neither is a subclass of the other
             printdbg(f"Token refresh failed: {error}")
             success = False
         return success

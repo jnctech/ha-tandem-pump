@@ -211,3 +211,55 @@ class TestImportExceptionResilience:
         ]
         await coordinator._import_statistics(events)
         assert mock_import.call_count == 2
+
+
+# ===========================================================================
+# Tests: correction bolus (event 280)
+# ===========================================================================
+
+
+class TestCorrectionBolusStatistic:
+    """Event 280 (BolusDelivery) correction bolus branches in _import_statistics."""
+
+    async def test_correction_bolus_delivery_status_0_creates_stat(self, hass: HomeAssistant, mock_import):
+        """Event 280 with delivery_status=0 and correction_mu>0 generates a correction stat."""
+        coordinator = await _make_coordinator(hass)
+        events = [
+            {
+                "event_id": 280,
+                "timestamp": _BASE_TS,
+                "delivery_status": 0,
+                "correction_mu": 1500,
+            }
+        ]
+        await coordinator._import_statistics(events)
+        stat_ids = {c[0][1].statistic_id for c in mock_import.call_args_list}
+        assert f"sensor.carelink_correction_bolus" in stat_ids
+
+    async def test_correction_bolus_nonzero_delivery_status_skipped(self, hass: HomeAssistant, mock_import):
+        """Event 280 with delivery_status != 0 (not completed) does not generate a stat."""
+        coordinator = await _make_coordinator(hass)
+        events = [
+            {
+                "event_id": 280,
+                "timestamp": _BASE_TS,
+                "delivery_status": 1,
+                "correction_mu": 1500,
+            }
+        ]
+        await coordinator._import_statistics(events)
+        assert mock_import.call_count == 0
+
+    async def test_correction_bolus_zero_correction_mu_skipped(self, hass: HomeAssistant, mock_import):
+        """Event 280 with correction_mu=0 does not generate a stat."""
+        coordinator = await _make_coordinator(hass)
+        events = [
+            {
+                "event_id": 280,
+                "timestamp": _BASE_TS,
+                "delivery_status": 0,
+                "correction_mu": 0,
+            }
+        ]
+        await coordinator._import_statistics(events)
+        assert mock_import.call_count == 0

@@ -112,6 +112,49 @@ class TestAsyncSetupEntryRouting:
         assert result is True
 
 
+# ── _async_setup_carelink_entry (nightscout branch) ──────────────────────────
+
+
+class TestCarelinkSetupNightscout:
+    """Nightscout uploader is created for Carelink when nightscout config is present."""
+
+    async def test_carelink_setup_with_nightscout(self, hass: HomeAssistant):
+        """Nightscout uploader is stored when nightscout_url and nightscout_api are set."""
+        from custom_components.carelink import _async_setup_carelink_entry
+
+        data = {
+            PLATFORM_TYPE: PLATFORM_CARELINK,
+            "cl_refresh_token": "refresh",
+            "cl_token": "token",
+            "cl_client_id": "client_id",
+            "cl_client_secret": "client_secret",
+            "cl_mag_identifier": "mag",
+            "patientId": "patient",
+            "scan_interval": 60,
+            "nightscout_url": "https://nightscout.example.com",
+            "nightscout_api": "secret",
+        }
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        entry = MockConfigEntry(domain=DOMAIN, data=data)
+        entry.add_to_hass(hass)
+
+        mock_coord = MagicMock()
+        mock_coord.async_config_entry_first_refresh = AsyncMock()
+
+        with (
+            patch("custom_components.carelink._migrate_legacy_logindata"),
+            patch("custom_components.carelink.CarelinkClient"),
+            patch("custom_components.carelink.CarelinkCoordinator", return_value=mock_coord),
+            patch.object(hass.config_entries, "async_forward_entry_setups", return_value=None),
+            patch("custom_components.carelink.NightscoutUploader") as mock_ns,
+        ):
+            await _async_setup_carelink_entry(hass, entry, data)
+
+        mock_ns.assert_called_once_with("https://nightscout.example.com", "secret")
+        assert UPLOADER in hass.data[DOMAIN][entry.entry_id]
+
+
 # ── _async_setup_tandem_entry (nightscout branch) ────────────────────────────
 
 

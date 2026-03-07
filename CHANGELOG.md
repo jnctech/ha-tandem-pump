@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+## [1.4.0] - 2026-03-07
+
+### Added
+- **4 new live sensors** populated from decoded pump events:
+  - `CGM rate of change` (mg/dL/min) — from `EVT_CGM_DATA_GXB` events
+  - `CGM status` (Normal / High / Low) — signal quality from `EVT_CGM_DATA_GXB` events
+  - `Last cartridge fill amount` (units) — fill volume from `EVT_CARTRIDGE_FILLED`; shows
+    Unknown when the API returns 0 (common Tandem API limitation)
+  - `Pump suspend reason` (User / Alarm / Malfunction / Auto-PLGS) — from `EVT_PUMPING_SUSPENDED`
+    events; shows Unknown when pump is currently active
+- **Correction bolus long-term statistic** — `sensor.carelink_correction_bolus` (units) imported
+  from `EVT_BOLUS_DELIVERY` events (delivery_status=0, correction_mu>0); automatically included
+  in `carelink.import_history` backfill runs
+- **Upgrade documentation** — new `## Upgrading` section in README covering HACS update,
+  manual update, and clean reinstall paths
+- **Duplicate device troubleshooting** — new section in TROUBLESHOOTING.md explaining how to
+  delete the phantom v1.2.x device left after the v1.3.0 device-identifier change (correct
+  delete path: open the device detail page via the `›` arrow, not the three-dot menu)
+
 ## [1.3.0] - 2026-03-06
 
 ### Added

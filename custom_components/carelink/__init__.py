@@ -132,6 +132,10 @@ from .const import (
     TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE,
     TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN,
     TANDEM_SENSOR_KEY_LAST_BG_READING,
+    TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE,
+    TANDEM_SENSOR_KEY_CGM_STATUS,
+    TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL,
+    TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON,
     # Computed insulin summary
     TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN,
     TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL,
@@ -1053,6 +1057,10 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_CGM_STATUS] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] = UNAVAILABLE
 
         if not timeline:
             data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
@@ -1341,6 +1349,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                 latest = cgm_readings[-1]
                 sg_mgdl = latest.get("glucose_mgdl", 0)
 
+                _CGM_STATUS_MAP = {0: "Normal", 1: "High", 2: "Low"}
                 if sg_mgdl and sg_mgdl > 0:
                     data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = int(sg_mgdl)
                     data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = round(sg_mgdl * 0.0555, 2)
@@ -1353,6 +1362,10 @@ class TandemCoordinator(DataUpdateCoordinator):
                     else:
                         data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
                     self._prev_sg_mgdl = float(sg_mgdl)
+
+                    roc = latest.get("rate_of_change")
+                    data[TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE] = round(roc, 1) if roc is not None else UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_CGM_STATUS] = _CGM_STATUS_MAP.get(latest.get("status"), UNAVAILABLE)
                 else:
                     _LOGGER.warning(
                         "Tandem: CGM event has zero/missing glucose: %s",
@@ -1362,17 +1375,23 @@ class TandemCoordinator(DataUpdateCoordinator):
                     data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = UNAVAILABLE
                     data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = UNAVAILABLE
                     data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE] = UNAVAILABLE
+                    data[TANDEM_SENSOR_KEY_CGM_STATUS] = UNAVAILABLE
             else:
                 data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
                 data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = UNAVAILABLE
                 data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = UNAVAILABLE
                 data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_CGM_STATUS] = UNAVAILABLE
         except Exception as e:
             _LOGGER.warning("Error parsing CGM: %s", e, exc_info=True)
             data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_CGM_STATUS] = UNAVAILABLE
 
         # ── Store recent readings history as attributes ───────────────
         # Custom Lovelace cards (e.g. ApexCharts) can use these for
@@ -1539,11 +1558,16 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
 
         # ── Pump suspend/resume state ──────────────────────────────────
+        _SUSPEND_REASON_MAP = {0: "User", 1: "Alarm", 2: "Malfunction", 3: "Auto-PLGS"}
         if suspend_resume:
             last_sr = suspend_resume[-1]
-            data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = "Suspended" if last_sr.get("event_id") == 11 else "Active"
+            is_suspended = last_sr.get("event_id") == 11
+            data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = "Suspended" if is_suspended else "Active"
+            reason = last_sr.get("suspend_reason") if is_suspended else None
+            data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] = _SUSPEND_REASON_MAP.get(reason, UNAVAILABLE)
         else:
             data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] = UNAVAILABLE
 
         # ── Activity mode (sleep/exercise/eating soon) ─────────────────
         if user_mode_changes:
@@ -1586,6 +1610,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             # entity, which is used to estimate remaining insulin.
             if fill_volume and fill_volume > 0:
                 data[TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN] = fill_volume
+                data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL] = round(fill_volume, 1)
             else:
                 _LOGGER.debug(
                     "Cartridge fill volume is %s — Tandem API limitation. "
@@ -1593,9 +1618,11 @@ class TandemCoordinator(DataUpdateCoordinator):
                     fill_volume,
                 )
                 data[TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL] = UNAVAILABLE
         else:
             data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL] = UNAVAILABLE
 
         # ── Site change ───────────────────────────────────────────────
         # The Tandem Source API does not return CANNULA_FILLED (event 61)
@@ -2032,6 +2059,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         basal_stats: list[StatisticData] = []
         carb_stats: list[StatisticData] = []
         bolus_stats: list[StatisticData] = []
+        correction_stats: list[StatisticData] = []
 
         for evt in pump_events:
             eid = evt.get("event_id")
@@ -2115,6 +2143,19 @@ class TandemCoordinator(DataUpdateCoordinator):
                         )
                     )
 
+            elif eid == 280:  # EVT_BOLUS_DELIVERY — completed correction bolus
+                if evt.get("delivery_status") == 0:
+                    correction_mu = evt.get("correction_mu", 0)
+                    if correction_mu and correction_mu > 0:
+                        correction_val = round(correction_mu / 1000, 2)
+                        correction_stats.append(
+                            StatisticData(
+                                start=period_start,
+                                mean=correction_val,
+                                state=correction_val,
+                            )
+                        )
+
         # Import each statistic type — each in its own try/except so a failure
         # in one type does not prevent the others from being recorded.
         entity_prefix = f"sensor.{DOMAIN}"
@@ -2125,6 +2166,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             ("basal_rate", "Basal rate", "U/hr", "basal", basal_stats),
             ("meal_carbs", "Meal carbs", "g", "carb", carb_stats),
             ("total_bolus", "Total bolus", "units", "bolus", bolus_stats),
+            ("correction_bolus", "Correction bolus", "units", "correction", correction_stats),
         ]
 
         for stat_id_suffix, name, unit, log_label, stats in stat_types:

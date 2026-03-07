@@ -528,6 +528,10 @@ TANDEM_SENSOR_KEY_LAST_SITE_CHANGE = "tandem_last_site_change"
 TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE = "tandem_last_tubing_change"
 TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN = "tandem_cartridge_insulin"
 TANDEM_SENSOR_KEY_LAST_BG_READING = "tandem_last_bg_reading"
+TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE = "tandem_cgm_rate_of_change"
+TANDEM_SENSOR_KEY_CGM_STATUS = "tandem_cgm_status"
+TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL = "tandem_last_cartridge_fill_amount"
+TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON = "tandem_pump_suspend_reason"
 
 # ── Computed insulin summary keys ──────────────────────────────────────
 TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN = "tandem_total_daily_insulin"
@@ -623,6 +627,24 @@ TANDEM_SENSORS = (
         state_class=SensorStateClass.MEASUREMENT,
         device_class=None,
         icon="mdi:plus-minus-variant",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE,
+        name="CGM rate of change",
+        native_unit_of_measurement="mg/dL/min",
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:trending-up",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CGM_STATUS,
+        name="CGM status",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:alert-circle-outline",
         entity_category=None,
     ),
     SensorEntityDescription(
@@ -835,6 +857,15 @@ TANDEM_SENSORS = (
         entity_category=None,
     ),
     SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON,
+        name="Pump suspend reason",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:pause-circle-outline",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_LAST_CARBS,
         name="Last carb entry",
         native_unit_of_measurement="g",
@@ -859,6 +890,15 @@ TANDEM_SENSORS = (
         state_class=None,
         device_class=SensorDeviceClass.TIMESTAMP,
         icon="mdi:cup-water",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL,
+        name="Last cartridge fill amount",
+        native_unit_of_measurement=UNITS,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:needle",
         entity_category=None,
     ),
     SensorEntityDescription(

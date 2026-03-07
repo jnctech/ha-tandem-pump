@@ -14,14 +14,11 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (
     COORDINATOR,
-    DEVICE_PUMP_MODEL,
-    DEVICE_PUMP_NAME,
-    DEVICE_PUMP_SERIAL,
-    DEVICE_PUMP_MANUFACTURER,
     DOMAIN,
     PLATFORM_TYPE,
     PLATFORM_TANDEM,
 )
+from .helpers import pump_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -85,9 +82,4 @@ class CartridgeFillVolumeNumber(RestoreEntity, NumberEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._coordinator.data.get(DEVICE_PUMP_SERIAL, "unknown"))},
-            name=self._coordinator.data.get(DEVICE_PUMP_NAME, "Tandem Pump"),
-            manufacturer=self._coordinator.data.get(DEVICE_PUMP_MANUFACTURER, "Tandem Diabetes Care"),
-            model=self._coordinator.data.get(DEVICE_PUMP_MODEL, "t:slim X2"),
-        )
+        return pump_device_info(self._coordinator)

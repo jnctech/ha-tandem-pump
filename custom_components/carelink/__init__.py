@@ -456,6 +456,8 @@ class CarelinkCoordinator(DataUpdateCoordinator):
 
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=update_interval)
 
+        self.entry_id = entry.entry_id
+        self.configuration_url = "https://carelink.minimed.eu"
         self.uploader = None
         self.client = hass.data[DOMAIN][entry.entry_id][CLIENT]
         self.timezone = hass.config.time_zone
@@ -837,6 +839,8 @@ class TandemCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, entry, update_interval: timedelta):
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=update_interval)
 
+        self.entry_id = entry.entry_id
+        self.configuration_url = "https://source.tandemdiabetes.com"
         self.uploader = None
         self.client = hass.data[DOMAIN][entry.entry_id][TANDEM_CLIENT]
         self.timezone = hass.config.time_zone
@@ -2026,6 +2030,8 @@ class TandemCoordinator(DataUpdateCoordinator):
         cgm_stats: list[StatisticData] = []
         iob_stats: list[StatisticData] = []
         basal_stats: list[StatisticData] = []
+        carb_stats: list[StatisticData] = []
+        bolus_stats: list[StatisticData] = []
 
         for evt in pump_events:
             eid = evt.get("event_id")
@@ -2057,7 +2063,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                         )
                     )
 
-            elif eid == 20:  # BOLUS_COMPLETED (has IOB)
+            elif eid in (20, 21):  # BOLUS_COMPLETED / BOLEX_COMPLETED (has IOB + delivered)
                 iob = evt.get("iob")
                 if iob is not None:
                     iob_val = round(float(iob), 2)
@@ -2070,6 +2076,18 @@ class TandemCoordinator(DataUpdateCoordinator):
                             state=iob_val,
                         )
                     )
+                # Collect completed bolus delivery for bolus statistics
+                if evt.get("completion_status") == 3:
+                    delivered = evt.get("insulin_delivered")
+                    if delivered is not None and delivered > 0:
+                        bolus_val = round(float(delivered), 2)
+                        bolus_stats.append(
+                            StatisticData(
+                                start=period_start,
+                                mean=bolus_val,
+                                state=bolus_val,
+                            )
+                        )
 
             elif eid in (3, 279):  # Basal
                 rate = evt.get("commanded_rate")
@@ -2085,53 +2103,46 @@ class TandemCoordinator(DataUpdateCoordinator):
                         )
                     )
 
-        # Import each statistic type
+            elif eid == 48:  # CARBS_ENTERED
+                carbs = evt.get("carbs")
+                if carbs is not None and carbs > 0:
+                    carbs_val = round(float(carbs), 1)
+                    carb_stats.append(
+                        StatisticData(
+                            start=period_start,
+                            mean=carbs_val,
+                            state=carbs_val,
+                        )
+                    )
+
+        # Import each statistic type — each in its own try/except so a failure
+        # in one type does not prevent the others from being recorded.
         entity_prefix = f"sensor.{DOMAIN}"
 
-        if cgm_stats:
-            try:
-                cgm_meta = StatisticMetaData(
-                    has_mean=True,
-                    has_sum=False,
-                    name="Last glucose level mmol",
-                    source="recorder",
-                    statistic_id=f"{entity_prefix}_last_glucose_level_mmol",
-                    unit_of_measurement="mmol/L",
-                )
-                async_import_statistics(self.hass, cgm_meta, cgm_stats)
-                _LOGGER.info("[Tandem] Imported %d CGM statistics", len(cgm_stats))
-            except Exception as e:
-                _LOGGER.warning("Tandem: Failed to import CGM statistics: %s", e)
+        stat_types = [
+            ("last_glucose_level_mmol", "Last glucose level mmol", "mmol/L", "CGM", cgm_stats),
+            ("active_insulin_iob", "Active insulin (IOB)", "units", "IOB", iob_stats),
+            ("basal_rate", "Basal rate", "U/hr", "basal", basal_stats),
+            ("meal_carbs", "Meal carbs", "g", "carb", carb_stats),
+            ("total_bolus", "Total bolus", "units", "bolus", bolus_stats),
+        ]
 
-        if iob_stats:
+        for stat_id_suffix, name, unit, log_label, stats in stat_types:
+            if not stats:
+                continue
             try:
-                iob_meta = StatisticMetaData(
+                meta = StatisticMetaData(
                     has_mean=True,
                     has_sum=False,
-                    name="Active insulin (IOB)",
+                    name=name,
                     source="recorder",
-                    statistic_id=f"{entity_prefix}_active_insulin_iob",
-                    unit_of_measurement="units",
+                    statistic_id=f"{entity_prefix}_{stat_id_suffix}",
+                    unit_of_measurement=unit,
                 )
-                async_import_statistics(self.hass, iob_meta, iob_stats)
-                _LOGGER.info("[Tandem] Imported %d IOB statistics", len(iob_stats))
+                async_import_statistics(self.hass, meta, stats)
+                _LOGGER.info("[Tandem] Imported %d %s statistics", len(stats), log_label)
             except Exception as e:
-                _LOGGER.warning("Tandem: Failed to import IOB statistics: %s", e)
-
-        if basal_stats:
-            try:
-                basal_meta = StatisticMetaData(
-                    has_mean=True,
-                    has_sum=False,
-                    name="Basal rate",
-                    source="recorder",
-                    statistic_id=f"{entity_prefix}_basal_rate",
-                    unit_of_measurement="U/hr",
-                )
-                async_import_statistics(self.hass, basal_meta, basal_stats)
-                _LOGGER.info("[Tandem] Imported %d basal statistics", len(basal_stats))
-            except Exception as e:
-                _LOGGER.warning("Tandem: Failed to import basal statistics: %s", e)
+                _LOGGER.warning("Tandem: Failed to import %s statistics: %s", log_label, e)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -63,4 +63,3 @@ class CarelinkConnectivityEntity(PumpEntityMixin, CoordinatorEntity, BinarySenso
         if self.coordinator.data is None:
             return False
         return self.coordinator.data.get(self.sensor_description.key) is True
-

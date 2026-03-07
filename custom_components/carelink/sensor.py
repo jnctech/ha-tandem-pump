@@ -26,6 +26,7 @@ from .const import (
     DEVICE_PUMP_MANUFACTURER,
     DOMAIN,
     SENSORS,
+    TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
     TANDEM_SENSORS,
     PLATFORM_TYPE,
     PLATFORM_CARELINK,
@@ -121,12 +122,15 @@ class CarelinkSensorEntity(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device info."""
-        manufacturer = self.coordinator.data.get(DEVICE_PUMP_MANUFACTURER, "Medtronic")
+        data = self.coordinator.data or {}
         return DeviceInfo(
-            identifiers={(DOMAIN, self.coordinator.data.get(DEVICE_PUMP_SERIAL, "unknown"))},
-            name=self.coordinator.data.get(DEVICE_PUMP_NAME, "Pump"),
-            manufacturer=manufacturer,
-            model=self.coordinator.data.get(DEVICE_PUMP_MODEL),
+            identifiers={(DOMAIN, self.coordinator.entry_id)},
+            name=data.get(DEVICE_PUMP_NAME, "Pump"),
+            manufacturer=data.get(DEVICE_PUMP_MANUFACTURER, "Tandem Diabetes Care"),
+            model=data.get(DEVICE_PUMP_MODEL),
+            sw_version=data.get(TANDEM_SENSOR_KEY_SOFTWARE_VERSION),
+            serial_number=data.get(DEVICE_PUMP_SERIAL),
+            configuration_url=self.coordinator.configuration_url,
         )
 
     @property

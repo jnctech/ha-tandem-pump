@@ -27,6 +27,10 @@ Active basal profile + full hourly schedule, max bolus, CIQ weight/TDI, alert th
 CGM, IOB, basal, carbs, correction bolus — works with the Statistics Graph card.
 Backfill months of data: **Developer Tools → Actions → carelink.import_history**
 
+**Example Dashboard**
+A starter Lovelace dashboard with Mushroom cards and ApexCharts glucose graph.
+Copy the YAML from `examples/` and customise to taste.
+
 ---
 
 ## How it works

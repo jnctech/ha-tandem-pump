@@ -180,6 +180,32 @@ Data is fetched in 7-day chunks. The action is idempotent — safe to run multip
 
 ---
 
+## Example dashboard
+
+A starter dashboard is included in [`examples/`](examples/) — one file for computed template
+sensors and one for the Lovelace layout.
+
+**Prerequisites** (install via HACS → Frontend):
+- [Mushroom](https://github.com/piitaya/lovelace-mushroom) — `custom:mushroom-template-card`, `custom:mushroom-chips-card`
+- [ApexCharts Card](https://github.com/RomRider/apexcharts-card) — `custom:apexcharts-card`
+
+**Setup:**
+1. Copy [`examples/template_sensors.yaml`](examples/template_sensors.yaml) into your
+   `configuration.yaml` (or a packages file) and restart HA
+2. Create a new dashboard: **Settings → Dashboards → Add Dashboard**
+3. Open it → ⋮ → **Edit** → ⋮ → **Raw configuration editor**
+4. Paste the contents of [`examples/simple-dashboard.yaml`](examples/simple-dashboard.yaml) → Save
+
+**Template sensors included:**
+
+| Sensor | What it does |
+|---|---|
+| `sensor.tandem_glucose_display` | Glucose + trend arrow (e.g. "124 ↗") |
+| `sensor.tandem_data_age` | Minutes since last glucose update |
+| `sensor.tandem_insulin_total` | IOB + cartridge insulin combined |
+
+> **mmol/L users:** See the conversion notes at the bottom of `template_sensors.yaml`.
+
 ## Upgrading
 
 <details>

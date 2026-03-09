@@ -23,7 +23,7 @@ remaining, suspend state + reason, site age, cartridge age, tubing age
 **Pump Settings (11 sensors)**
 Active basal profile + full hourly schedule, max bolus, CIQ weight/TDI, alert thresholds
 
-**Long-Term Statistics (5)**
+**Long-Term Statistics (6)**
 CGM, IOB, basal, carbs, correction bolus — works with the Statistics Graph card.
 Backfill months of data: **Developer Tools → Actions → carelink.import_history**
 

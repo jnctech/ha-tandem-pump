@@ -99,23 +99,6 @@ template:
                | round(0) | int(0) }}
           {% endif %}
 
-  # -------------------------------------------------------------------------
-  # Insulin Total — IOB + cartridge remaining
-  # -------------------------------------------------------------------------
-  # Useful for a quick glance at total insulin available. IOB is the active
-  # insulin on board; cartridge is the physical reservoir level.
-  # -------------------------------------------------------------------------
-  - sensor:
-      - name: "Tandem insulin total"
-        unique_id: tandem_insulin_total
-        icon: mdi:needle
-        unit_of_measurement: "u"
-        state_class: measurement
-        state: >-
-          {% set iob = states('sensor.tandem_active_insulin_iob') | float(0) %}
-          {% set cartridge = states('sensor.tandem_cartridge_insulin') | float(0) %}
-          {{ (iob + cartridge) | round(1) }}
-
 # ===========================================================================
 # mmol/L conversion
 # ===========================================================================

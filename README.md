@@ -187,8 +187,8 @@ sensors and one for the Lovelace layout.
 
 **Prerequisites** (install via HACS → Frontend):
 - [Mushroom](https://github.com/piitaya/lovelace-mushroom) — `custom:mushroom-template-card`, `custom:mushroom-chips-card`
-- [ApexCharts Card](https://github.com/RomRider/apexcharts-card)
-- [card-mod](https://github.com/thomasloven/lovelace-card-mod) (optional, for large glucose display) — `custom:apexcharts-card`
+- [ApexCharts Card](https://github.com/RomRider/apexcharts-card) — `custom:apexcharts-card`
+- [card-mod](https://github.com/thomasloven/lovelace-card-mod) (optional, for gradient glucose hero)
 
 **Setup:**
 1. Copy [`examples/template_sensors.yaml`](examples/template_sensors.yaml) into your
@@ -203,7 +203,6 @@ sensors and one for the Lovelace layout.
 |---|---|
 | `sensor.tandem_glucose_display` | Glucose + trend arrow (e.g. "124 ↗") |
 | `sensor.tandem_data_age` | Minutes since last glucose update |
-| `sensor.tandem_insulin_total` | IOB + cartridge insulin combined |
 
 > **mmol/L users:** See the conversion notes at the bottom of `template_sensors.yaml`.
 

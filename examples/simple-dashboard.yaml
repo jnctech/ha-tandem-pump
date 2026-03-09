@@ -3,8 +3,8 @@
 # Simple Dashboard for Tandem t:slim Pump (ha-tandem-pump)
 # ===========================================================================
 #
-# A mobile-friendly single-page dashboard showing glucose, insulin, and
-# pump status at a glance.
+# Mobile-friendly single-page dashboard showing Tandem pump glucose, insulin,
+# and pump status at a glance. Uses mg/dL.
 #
 # Prerequisites (install via HACS -> Frontend):
 #   - custom:mushroom-template-card  (piitaya/lovelace-mushroom)
@@ -52,10 +52,27 @@ views:
                 ha-card {
                   --primary-font-size: 2.4rem;
                   --secondary-font-size: 1rem;
+                  color: white;
+                  {% set gl = states('sensor.tandem_last_glucose_level_mg_dl') | int(0) %}
+                  {% if gl < 54 %}
+                    background: linear-gradient(160deg, #1565c0 0%, #0d47a1 100%);
+                  {% elif gl < 70 %}
+                    background: linear-gradient(160deg, #1976d2 0%, #1565c0 100%);
+                  {% elif gl <= 180 %}
+                    background: linear-gradient(160deg, #2e7d32 0%, #1b5e20 100%);
+                  {% elif gl <= 250 %}
+                    background: linear-gradient(160deg, #e65100 0%, #bf360c 100%);
+                  {% elif gl <= 324 %}
+                    background: linear-gradient(160deg, #d84315 0%, #bf360c 100%);
+                  {% elif gl > 324 %}
+                    background: linear-gradient(160deg, #c62828 0%, #b71c1c 100%);
+                  {% else %}
+                    background: linear-gradient(160deg, #616161 0%, #424242 100%);
+                  {% endif %}
                 }
 
           # -----------------------------------------------------------------
-          # Chips row - IOB, cartridge, Control-IQ status
+          # Chips row - IOB, cartridge, Control-IQ, carbs
           # -----------------------------------------------------------------
           # No pump battery chip - Tandem API does not expose battery %.
           # Tracked for investigation in v1.5.0.
@@ -70,6 +87,8 @@ views:
                 content: >-
                   {{ states('sensor.tandem_active_insulin_iob')
                      | float(0) | round(1) }} u IOB
+                tap_action:
+                  action: more-info
               - type: template
                 entity: sensor.tandem_cartridge_insulin
                 icon: mdi:cup-water
@@ -83,6 +102,8 @@ views:
                 content: >-
                   {{ states('sensor.tandem_cartridge_insulin')
                      | float(0) | round(0) | int(0) }} u
+                tap_action:
+                  action: more-info
               - type: template
                 entity: sensor.tandem_control_iq_status
                 icon: mdi:robot
@@ -93,62 +114,74 @@ views:
                   {% endif %}
                 content: >-
                   {{ states('sensor.tandem_control_iq_status') }}
+                tap_action:
+                  action: more-info
+              - type: template
+                entity: sensor.tandem_last_carb_entry
+                icon: mdi:food-apple
+                icon_color: amber
+                content: >-
+                  {{ states('sensor.tandem_last_carb_entry')
+                     | float(0) | round(0) | int(0) }} g last
+                tap_action:
+                  action: more-info
+              - type: template
+                entity: sensor.tandem_daily_carbs
+                icon: mdi:food
+                icon_color: amber
+                content: >-
+                  {{ states('sensor.tandem_daily_carbs')
+                     | float(0) | round(0) | int(0) }} g today
+                tap_action:
+                  action: more-info
 
           # -----------------------------------------------------------------
           # 24-hour Glucose Chart - apexcharts-card, NO JavaScript
           # -----------------------------------------------------------------
           - type: custom:apexcharts-card
             header:
-              show: true
               title: Glucose (24 h)
-              show_states: false
+              show: true
             graph_span: 24h
-            span:
-              end: now
+            update_interval: 10min
             yaxis:
-              - min: 40
+              - id: glucose
+                min: 40
                 max: 300
-                decimalsInFloat: 0
+                apex_config:
+                  forceNiceScale: true
             apex_config:
               chart:
                 height: 220
-              tooltip:
-                x:
-                  format: "HH:mm"
+                animations:
+                  enabled: false
+                toolbar:
+                  show: false
+              stroke:
+                width: 2
+                curve: smooth
               annotations:
                 yaxis:
                   # Green in-range zone (70-180 mg/dL)
                   - y: 70
                     y2: 180
                     fillColor: "#4CAF50"
-                    opacity: 0.12
-                    borderColor: "transparent"
-                    label:
-                      text: ""
+                    opacity: 0.08
                   # Low threshold line (70 mg/dL)
                   - y: 70
                     borderColor: "#F44336"
                     strokeDashArray: 4
-                    label:
-                      text: "Low"
-                      style:
-                        color: "#F44336"
-                        background: "transparent"
                   # High threshold line (250 mg/dL)
                   - y: 250
                     borderColor: "#FF9800"
                     strokeDashArray: 4
-                    label:
-                      text: "High"
-                      style:
-                        color: "#FF9800"
-                        background: "transparent"
             series:
               - entity: sensor.tandem_last_glucose_level_mg_dl
                 name: Glucose
                 type: line
                 color: "#2196F3"
                 stroke_width: 2
+                yaxis_id: glucose
                 group_by:
                   func: last
                   duration: 5min

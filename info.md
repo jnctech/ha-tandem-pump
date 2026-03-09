@@ -28,7 +28,7 @@ CGM, IOB, basal, carbs, correction bolus — works with the Statistics Graph car
 Backfill months of data: **Developer Tools → Actions → carelink.import_history**
 
 **Example Dashboard**
-A starter Lovelace dashboard with Mushroom cards and ApexCharts glucose graph.
+A starter Lovelace dashboard with Mushroom cards, ApexCharts glucose graph, and template sensors.
 Copy the YAML from `examples/` and customise to taste.
 
 ---

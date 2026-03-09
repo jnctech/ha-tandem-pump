@@ -1,0 +1,224 @@
+---
+# ===========================================================================
+# Simple Dashboard for Tandem t:slim Pump (ha-tandem-pump)
+# ===========================================================================
+#
+# Mobile-friendly single-page dashboard showing Tandem pump glucose, insulin,
+# and pump status at a glance. Uses mg/dL.
+#
+# Prerequisites (install via HACS -> Frontend):
+#   - custom:mushroom-template-card  (piitaya/lovelace-mushroom)
+#   - custom:mushroom-chips-card     (piitaya/lovelace-mushroom)
+#   - custom:apexcharts-card         (RomRider/apexcharts-card)
+#   - card-mod                        (thomasloven/lovelace-card-mod, optional)
+#
+# Also requires the template sensors from template_sensors.yaml.
+#
+# Setup:
+#   1. Copy template_sensors.yaml into your HA config and restart
+#   2. Settings -> Dashboards -> Add Dashboard -> name it
+#   3. Open the new dashboard -> three-dot menu -> Edit -> Raw config editor
+#   4. Paste this file content -> Save
+#
+# Standards: yamllint strict, pure YAML + Jinja2 (no inline JS), mg/dL.
+# See template_sensors.yaml footer for mmol/L conversion notes.
+# ===========================================================================
+
+views:
+  - title: Tandem Pump
+    type: panel
+    cards:
+      - type: vertical-stack
+        cards:
+          # -----------------------------------------------------------------
+          # Glucose Hero - large reading with trend arrow and data age
+          # -----------------------------------------------------------------
+          - type: custom:mushroom-template-card
+            primary: >-
+              {{ states('sensor.tandem_glucose_display') }}
+            secondary: >-
+              {{ states('sensor.tandem_data_age') }} min ago
+            icon: mdi:diabetes
+            icon_color: >-
+              {% set gl = states('sensor.tandem_last_glucose_level_mg_dl')
+                          | int(0) %}
+              {% if gl < 70 %}red
+              {% elif gl > 180 %}amber
+              {% else %}green
+              {% endif %}
+            layout: vertical
+            card_mod:
+              style: |
+                ha-card {
+                  --primary-font-size: 2.4rem;
+                  --secondary-font-size: 1rem;
+                  color: white;
+                  {% set gl = states('sensor.tandem_last_glucose_level_mg_dl') | int(0) %}
+                  {% if gl < 54 %}
+                    background: linear-gradient(160deg, #1565c0 0%, #0d47a1 100%);
+                  {% elif gl < 70 %}
+                    background: linear-gradient(160deg, #1976d2 0%, #1565c0 100%);
+                  {% elif gl <= 180 %}
+                    background: linear-gradient(160deg, #2e7d32 0%, #1b5e20 100%);
+                  {% elif gl <= 250 %}
+                    background: linear-gradient(160deg, #e65100 0%, #bf360c 100%);
+                  {% elif gl <= 324 %}
+                    background: linear-gradient(160deg, #d84315 0%, #bf360c 100%);
+                  {% elif gl > 324 %}
+                    background: linear-gradient(160deg, #c62828 0%, #b71c1c 100%);
+                  {% else %}
+                    background: linear-gradient(160deg, #616161 0%, #424242 100%);
+                  {% endif %}
+                }
+
+          # -----------------------------------------------------------------
+          # Chips row - IOB, Control-IQ, carbs
+          # -----------------------------------------------------------------
+          # No pump battery chip - Tandem API does not expose battery %.
+          # Tracked for investigation in v1.5.0.
+          # -----------------------------------------------------------------
+          - type: custom:mushroom-chips-card
+            alignment: center
+            chips:
+              - type: template
+                entity: sensor.tandem_active_insulin_iob
+                icon: mdi:water-alert
+                icon_color: blue
+                content: >-
+                  {{ states('sensor.tandem_active_insulin_iob')
+                     | float(0) | round(1) }} u IOB
+                tap_action:
+                  action: more-info
+              - type: template
+                entity: sensor.tandem_control_iq_status
+                icon: mdi:robot
+                icon_color: >-
+                  {% if is_state('sensor.tandem_control_iq_status',
+                                 'Closed Loop') %}green
+                  {% else %}amber
+                  {% endif %}
+                content: >-
+                  {{ states('sensor.tandem_control_iq_status') }}
+                tap_action:
+                  action: more-info
+              - type: template
+                entity: sensor.tandem_last_carb_entry
+                icon: mdi:food-apple
+                icon_color: amber
+                content: >-
+                  {{ states('sensor.tandem_last_carb_entry')
+                     | float(0) | round(0) | int(0) }} g last
+                tap_action:
+                  action: more-info
+              - type: template
+                entity: sensor.tandem_daily_carbs
+                icon: mdi:food
+                icon_color: amber
+                content: >-
+                  {{ states('sensor.tandem_daily_carbs')
+                     | float(0) | round(0) | int(0) }} g today
+                tap_action:
+                  action: more-info
+
+          # -----------------------------------------------------------------
+          # 24-hour Glucose Chart - apexcharts-card, NO JavaScript
+          # -----------------------------------------------------------------
+          - type: custom:apexcharts-card
+            header:
+              title: Glucose (24 h)
+              show: true
+            graph_span: 24h
+            update_interval: 10min
+            yaxis:
+              - id: glucose
+                min: 40
+                max: 300
+                apex_config:
+                  forceNiceScale: true
+            apex_config:
+              chart:
+                height: 220
+                animations:
+                  enabled: false
+                toolbar:
+                  show: false
+              stroke:
+                width: 2
+                curve: smooth
+              annotations:
+                yaxis:
+                  # Green in-range zone (70-180 mg/dL)
+                  - y: 70
+                    y2: 180
+                    fillColor: "#4CAF50"
+                    opacity: 0.08
+                  # Low threshold line (70 mg/dL)
+                  - y: 70
+                    borderColor: "#F44336"
+                    strokeDashArray: 4
+                  # High threshold line (250 mg/dL)
+                  - y: 250
+                    borderColor: "#FF9800"
+                    strokeDashArray: 4
+            series:
+              - entity: sensor.tandem_last_glucose_level_mg_dl
+                name: Glucose
+                type: line
+                color: "#2196F3"
+                stroke_width: 2
+                yaxis_id: glucose
+                group_by:
+                  func: last
+                  duration: 5min
+
+          # -----------------------------------------------------------------
+          # Stats Grid - TIR, TDI, GMI, CV (2x2)
+          # -----------------------------------------------------------------
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{ states('sensor.tandem_time_in_range') | float(0)
+                     | round(0) | int(0) }}%
+                secondary: Time in Range
+                icon: mdi:target
+                icon_color: >-
+                  {% set tir = states('sensor.tandem_time_in_range')
+                               | float(0) %}
+                  {% if tir >= 70 %}green
+                  {% elif tir >= 50 %}amber
+                  {% else %}red
+                  {% endif %}
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{ states('sensor.tandem_total_daily_insulin')
+                     | float(0) | round(1) }} u
+                secondary: Total Daily Insulin
+                icon: mdi:needle
+                icon_color: blue
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{ states('sensor.tandem_gmi') | float(0)
+                     | round(1) }}%
+                secondary: GMI
+                icon: mdi:chart-line
+                icon_color: >-
+                  {% set gmi = states('sensor.tandem_gmi') | float(0) %}
+                  {% if gmi <= 7.0 %}green
+                  {% elif gmi <= 8.0 %}amber
+                  {% else %}red
+                  {% endif %}
+              - type: custom:mushroom-template-card
+                primary: >-
+                  {{ states('sensor.tandem_glucose_cv') | float(0)
+                     | round(0) | int(0) }}%
+                secondary: Glucose CV
+                icon: mdi:chart-bell-curve
+                icon_color: >-
+                  {% set cv = states('sensor.tandem_glucose_cv')
+                              | float(0) %}
+                  {% if cv <= 36 %}green
+                  {% else %}amber
+                  {% endif %}

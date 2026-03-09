@@ -482,3 +482,230 @@ class TestExtractJwtClaims:
         client._extract_jwt_claims()
         assert client.pumper_id == "pump-abc"
         assert client.account_id == "acc-1"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _needs_login and login skip
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestNeedsLogin:
+    """Tests for _needs_login and login early-return (lines 373-383)."""
+
+    def test_needs_login_no_token(self):
+        """No access_token → needs login."""
+        client = TandemSourceClient("user@test.com", "pass")
+        assert client._needs_login() is True
+
+    def test_needs_login_expired_token(self):
+        """Token expiring within 5 minutes → needs login."""
+        import time
+
+        client = TandemSourceClient("user@test.com", "pass")
+        client.access_token = "valid"
+        client.token_expires_at = time.time() + 60  # expires in 60s (< 300s buffer)
+        assert client._needs_login() is True
+
+    def test_needs_login_valid_token(self):
+        """Token with plenty of time left → does NOT need login."""
+        import time
+
+        client = TandemSourceClient("user@test.com", "pass")
+        client.access_token = "valid"
+        client.token_expires_at = time.time() + 3600  # expires in 1 hour
+        assert client._needs_login() is False
+
+    async def test_login_skips_when_not_needed(self):
+        """Login returns immediately when token is still valid (line 383)."""
+        import time
+
+        client = TandemSourceClient("user@test.com", "pass")
+        client.access_token = "valid_token"
+        client.token_expires_at = time.time() + 3600
+
+        # If login tried to do anything it would fail because _get_client isn't mocked
+        await client.login()  # should return immediately, no exception
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Login error paths (lines 405-406, 410, 441, 464-465)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestLoginErrors:
+    """Tests for login authentication error paths."""
+
+    async def test_login_non_200_status(self):
+        """Login with non-200 HTTP status raises TandemAuthError (line 405-406)."""
+        client = TandemSourceClient("user@test.com", "pass")
+
+        mock_login_page = MagicMock()
+        mock_login_page.status_code = 200
+
+        mock_login_resp = MagicMock()
+        mock_login_resp.status_code = 401
+        mock_login_resp.text = "Unauthorized"
+
+        mock_http = AsyncMock()
+        mock_http.get = AsyncMock(return_value=mock_login_page)
+        mock_http.post = AsyncMock(return_value=mock_login_resp)
+        mock_http.is_closed = False
+        client._client = mock_http
+
+        with pytest.raises(TandemAuthError, match="Login failed with HTTP 401"):
+            await client.login()
+
+    async def test_login_rejected_status(self):
+        """Login with status != SUCCESS raises TandemAuthError (line 410)."""
+        client = TandemSourceClient("user@test.com", "pass")
+
+        mock_login_page = MagicMock()
+        mock_login_page.status_code = 200
+
+        mock_login_resp = MagicMock()
+        mock_login_resp.status_code = 200
+        mock_login_resp.json.return_value = {"status": "LOCKED_OUT", "message": "Too many attempts"}
+
+        mock_http = AsyncMock()
+        mock_http.get = AsyncMock(return_value=mock_login_page)
+        mock_http.post = AsyncMock(return_value=mock_login_resp)
+        mock_http.is_closed = False
+        client._client = mock_http
+
+        with pytest.raises(TandemAuthError, match="Login rejected"):
+            await client.login()
+
+    async def test_login_no_auth_code(self):
+        """Missing authorization code in redirect raises TandemAuthError (line 441)."""
+        client = TandemSourceClient("user@test.com", "pass")
+
+        mock_login_page = MagicMock()
+        mock_login_page.status_code = 200
+
+        mock_login_resp = MagicMock()
+        mock_login_resp.status_code = 200
+        mock_login_resp.json.return_value = {"status": "SUCCESS"}
+
+        mock_auth_resp = MagicMock()
+        mock_auth_resp.url = "https://example.com/callback?error=access_denied"
+
+        mock_http = AsyncMock()
+        mock_http.get = AsyncMock(side_effect=[mock_login_page, mock_auth_resp])
+        mock_http.post = AsyncMock(return_value=mock_login_resp)
+        mock_http.is_closed = False
+        client._client = mock_http
+
+        with pytest.raises(TandemAuthError, match="No authorization code"):
+            await client.login()
+
+    async def test_login_token_exchange_bad_status(self):
+        """Token exchange with non-2xx status raises TandemAuthError (lines 464-465)."""
+        client = TandemSourceClient("user@test.com", "pass")
+
+        mock_login_page = MagicMock()
+        mock_login_page.status_code = 200
+
+        mock_login_resp = MagicMock()
+        mock_login_resp.status_code = 200
+        mock_login_resp.json.return_value = {"status": "SUCCESS"}
+
+        mock_auth_resp = MagicMock()
+        mock_auth_resp.url = "https://example.com/callback?code=test_auth_code"
+
+        mock_token_resp = MagicMock()
+        mock_token_resp.status_code = 400
+        mock_token_resp.text = "Bad Request"
+
+        mock_http = AsyncMock()
+        mock_http.get = AsyncMock(side_effect=[mock_login_page, mock_auth_resp])
+        mock_http.post = AsyncMock(side_effect=[mock_login_resp, mock_token_resp])
+        mock_http.is_closed = False
+        client._client = mock_http
+
+        with pytest.raises(TandemAuthError, match="Token exchange HTTP 400"):
+            await client.login()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _api_get retry on transient errors (lines 539, 560)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestApiGetRetry:
+    """Tests for _api_get transient error retry logic."""
+
+    async def test_api_get_retries_on_connect_error(self):
+        """ConnectError retries and eventually raises TandemApiError (line 539, 560)."""
+        client = TandemSourceClient("user@test.com", "pass")
+        client.access_token = "valid_token"
+
+        mock_http = AsyncMock()
+        mock_http.get = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+        mock_http.is_closed = False
+        client._client = mock_http
+
+        with pytest.raises(TandemApiError, match="failed after"):
+            await client._api_get("https://api.test.com/data", _retries=1)
+
+        # Should have retried: 1 initial + 1 retry = 2 calls
+        assert mock_http.get.call_count == 2
+
+    async def test_api_get_retries_on_read_timeout(self):
+        """ReadTimeout retries then raises TandemApiError."""
+        client = TandemSourceClient("user@test.com", "pass")
+        client.access_token = "valid_token"
+
+        mock_http = AsyncMock()
+        mock_http.get = AsyncMock(side_effect=httpx.ReadTimeout("read timed out"))
+        mock_http.is_closed = False
+        client._client = mock_http
+
+        with pytest.raises(TandemApiError, match="failed after"):
+            await client._api_get("https://api.test.com/data", _retries=0)
+
+        assert mock_http.get.call_count == 1
+
+    async def test_api_get_succeeds_after_transient_failure(self):
+        """First call fails with ConnectError, second succeeds."""
+        client = TandemSourceClient("user@test.com", "pass")
+        client.access_token = "valid_token"
+
+        mock_success = MagicMock()
+        mock_success.status_code = 200
+        mock_success.json.return_value = {"ok": True}
+
+        mock_http = AsyncMock()
+        mock_http.get = AsyncMock(side_effect=[httpx.ConnectError("transient"), mock_success])
+        mock_http.is_closed = False
+        client._client = mock_http
+
+        result = await client._api_get("https://api.test.com/data", _retries=1)
+        assert result == {"ok": True}
+        assert mock_http.get.call_count == 2
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# get_pumper_info (line 579)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestGetPumperInfo:
+    """Tests for get_pumper_info endpoint."""
+
+    async def test_get_pumper_info_calls_api_get(self):
+        """get_pumper_info delegates to _api_get with correct URL (line 579)."""
+        client = TandemSourceClient("user@test.com", "pass")
+        client.pumper_id = "pump-abc"
+
+        with patch.object(
+            client,
+            "_api_get",
+            new_callable=AsyncMock,
+            return_value={"firstName": "Test", "lastName": "User"},
+        ) as mock_get:
+            result = await client.get_pumper_info()
+
+        assert result["firstName"] == "Test"
+        mock_get.assert_called_once()
+        call_url = mock_get.call_args[0][0]
+        assert "pump-abc" in call_url

@@ -953,3 +953,93 @@ class TestNightscoutSendRecentData:
         ):
             # Should complete without raising
             await mock_nightscout_uploader.send_recent_data(recent_data, tz)
+
+
+# -- send_recent_data with non-None markers / notificationHistory --------------
+
+
+class TestSendRecentDataWithData:
+    """send_recent_data exercises the non-None branches for markers and notifications."""
+
+    def _base(self):
+        return {
+            "medicalDeviceInformation": {"modelNumber": "MMT-1780"},
+            "conduitBatteryStatus": "NORMAL",
+            "conduitBatteryLevel": 100,
+            "activeInsulin": {"amount": 2.5},
+            "systemStatusMessage": "OK",
+            "pumpSuspended": False,
+        }
+
+    async def test_sgs_none_branch_skips_sgs_upload(self, mock_nightscout_uploader):
+        """When sgs=None the 'No SGS data available' branch is taken."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        recent_data = {**self._base(), "sgs": None, "markers": None, "notificationHistory": None}
+        with patch.object(
+            mock_nightscout_uploader,
+            "_NightscoutUploader__upload_section",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_up:
+            await mock_nightscout_uploader.send_recent_data(recent_data, tz)
+        calls = [c.args[0] for c in mock_up.call_args_list]
+        assert "SGS entries" not in calls
+        assert "device status" in calls
+
+    async def test_markers_not_none_uploads_basal_and_bolus(self, mock_nightscout_uploader):
+        """When markers is a list the basal/meal-bolus/auto-bolus uploads are attempted."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        recent_data = {**self._base(), "sgs": [], "markers": [], "notificationHistory": None}
+        with patch.object(
+            mock_nightscout_uploader,
+            "_NightscoutUploader__upload_section",
+            new_callable=AsyncMock,
+            return_value=False,
+        ) as mock_up:
+            await mock_nightscout_uploader.send_recent_data(recent_data, tz)
+        calls = [c.args[0] for c in mock_up.call_args_list]
+        assert "basal" in calls
+        assert "meal bolus" in calls
+        assert "auto bolus" in calls
+
+    async def test_notification_history_not_none_uploads_notifications(self, mock_nightscout_uploader):
+        """When notificationHistory is a dict the alarms/messages/alerts uploads are attempted."""
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        notification_data = {"clearedNotifications": []}
+        recent_data = {**self._base(), "sgs": [], "markers": None, "notificationHistory": notification_data}
+        with patch.object(
+            mock_nightscout_uploader,
+            "_NightscoutUploader__upload_section",
+            new_callable=AsyncMock,
+            return_value=False,
+        ) as mock_up:
+            await mock_nightscout_uploader.send_recent_data(recent_data, tz)
+        calls = [c.args[0] for c in mock_up.call_args_list]
+        assert "alarms" in calls
+        assert "messages" in calls
+        assert "alerts" in calls
+
+
+# -- __getSGSEntries trend exception recovery ----------------------------------
+
+
+class TestSGSEntriesTrendException:
+    """When __ns_trend raises, __getSGSEntries falls back to 'null' trend."""
+
+    def test_trend_exception_falls_back_to_null(self, mock_nightscout_uploader):
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("UTC")
+        sgs = [
+            {"sg": 100, "timestamp": "2024-01-15T12:00:00.000-00:00"},
+            {"sg": 110, "timestamp": "2024-01-15T12:05:00.000-00:00"},
+        ]
+        with patch.object(mock_nightscout_uploader, "_NightscoutUploader__ns_trend", side_effect=Exception("fail")):
+            result = mock_nightscout_uploader._NightscoutUploader__getSGSEntries(sgs, tz)
+        assert result[1]["direction"] == "null"

@@ -1,0 +1,111 @@
+---
+# ===========================================================================
+# Template Sensors for Tandem t:slim Pump (ha-tandem-pump)
+# ===========================================================================
+#
+# Copy this into your configuration.yaml or a packages file, then restart HA.
+# Requires: ha-tandem-pump v1.4.0+
+#
+# Standards: yamllint strict, unique_id on all entities, pure Jinja2 (no JS).
+# Uses mg/dL — see bottom of file for mmol/L conversion notes.
+# ===========================================================================
+
+template:
+  # -------------------------------------------------------------------------
+  # Glucose Display — combines reading + trend arrow (e.g. "124 ↗")
+  # -------------------------------------------------------------------------
+  # Maps sensor.tandem_cgm_rate_of_change (mg/dL/min) to trend arrows.
+  # The Tandem integration provides a numeric rate, not text — this sensor
+  # translates it into human-readable Dexcom-style trend names and arrows.
+  #
+  #   Rate (mg/dL/min)   Trend          Arrow
+  #   <= -3.0            DoubleDown     ↓↓
+  #   <= -1.5            Down           ↓
+  #   <= -0.5            SlightDown     ↘
+  #   -0.5 to 0.5       Flat           →
+  #   >= 0.5             SlightUp       ↗
+  #   >= 1.5             Up             ↑
+  #   >= 3.0             DoubleUp       ↑↑
+  #
+  # -- Dexcom alternative --
+  # If you also run the Dexcom integration, its trend sensor is more current
+  # (updates every 5 min vs Tandem's ~60-min upload). To use it instead,
+  # replace the rate_of_change mapping below with your Dexcom trend entity
+  # and map its text values (e.g. "Flat", "FortyFiveUp") to arrows directly.
+  # -------------------------------------------------------------------------
+  - sensor:
+      - name: "Tandem glucose display"
+        unique_id: tandem_glucose_display
+        icon: mdi:diabetes
+        state: >-
+          {% set glucose = states('sensor.tandem_last_glucose_level_mg_dl') %}
+          {% set roc = states('sensor.tandem_cgm_rate_of_change') %}
+          {% if glucose in ['unknown', 'unavailable'] %}
+            ---
+          {% elif roc in ['unknown', 'unavailable'] %}
+            {{ glucose | int(0) }}
+          {% else %}
+            {% set r = roc | float(0) %}
+            {% if r >= 3.0 %}{% set arrow = '↑↑' %}
+            {% elif r >= 1.5 %}{% set arrow = '↑' %}
+            {% elif r >= 0.5 %}{% set arrow = '↗' %}
+            {% elif r > -0.5 %}{% set arrow = '→' %}
+            {% elif r > -1.5 %}{% set arrow = '↘' %}
+            {% elif r > -3.0 %}{% set arrow = '↓' %}
+            {% else %}{% set arrow = '↓↓' %}
+            {% endif %}
+            {{ glucose | int(0) }} {{ arrow }}
+          {% endif %}
+        attributes:
+          trend_name: >-
+            {% set roc = states('sensor.tandem_cgm_rate_of_change') %}
+            {% if roc in ['unknown', 'unavailable'] %}
+              Unknown
+            {% else %}
+              {% set r = roc | float(0) %}
+              {% if r >= 3.0 %}DoubleUp
+              {% elif r >= 1.5 %}Up
+              {% elif r >= 0.5 %}SlightUp
+              {% elif r > -0.5 %}Flat
+              {% elif r > -1.5 %}SlightDown
+              {% elif r > -3.0 %}Down
+              {% else %}DoubleDown
+              {% endif %}
+            {% endif %}
+          glucose_mgdl: >-
+            {{ states('sensor.tandem_last_glucose_level_mg_dl') | int(0) }}
+          rate_of_change: >-
+            {{ states('sensor.tandem_cgm_rate_of_change') | float(0) }}
+
+  # -------------------------------------------------------------------------
+  # Data Age — minutes since the glucose sensor last changed
+  # -------------------------------------------------------------------------
+  # Uses last_changed (when the state object was updated in HA), not
+  # last_pump_upload (when the pump synced to cloud). This gives a more
+  # accurate picture of how fresh the displayed glucose value really is.
+  # -------------------------------------------------------------------------
+  - sensor:
+      - name: "Tandem data age"
+        unique_id: tandem_data_age
+        icon: mdi:clock-outline
+        unit_of_measurement: "min"
+        state_class: measurement
+        state: >-
+          {% set entity = 'sensor.tandem_last_glucose_level_mg_dl' %}
+          {% if states(entity) in ['unknown', 'unavailable'] %}
+            0
+          {% else %}
+            {{ ((now() - states[entity].last_changed).total_seconds() / 60)
+               | round(0) | int(0) }}
+          {% endif %}
+
+# ===========================================================================
+# mmol/L conversion
+# ===========================================================================
+# Replace sensor.tandem_last_glucose_level_mg_dl with
+# sensor.tandem_last_glucose_level_mmol throughout, and adjust any
+# thresholds in your dashboard:
+#   70 mg/dL  =  3.9 mmol/L
+#  180 mg/dL  = 10.0 mmol/L
+#  250 mg/dL  = 13.9 mmol/L
+# ===========================================================================

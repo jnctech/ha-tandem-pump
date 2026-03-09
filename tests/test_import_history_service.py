@@ -259,6 +259,21 @@ class TestImportHistoryServiceErrors:
         client.get_pump_events.assert_not_called()
         coordinator._import_statistics.assert_not_called()
 
+    async def test_dict_metadata_extracts_device_id(self, hass: HomeAssistant):
+        """When get_pump_event_metadata returns a dict (not list), device_id is extracted."""
+        from custom_components.carelink import _handle_import_history
+
+        entry = _make_entry(hass)
+        client = _make_mock_client()
+        client.get_pump_event_metadata = AsyncMock(return_value={"tconnectDeviceId": "device-abc"})
+        coordinator = _setup_hass_data(hass, entry, client)
+        sample_event = {"event_id": 256, "timestamp": None}
+        client.get_pump_events = AsyncMock(return_value=[sample_event])
+
+        await _handle_import_history(hass, entry.entry_id, _make_call("2026-03-01", "2026-03-03"))
+
+        coordinator._import_statistics.assert_called_once_with([sample_event])
+
 
 # ── Service registration / constant tests ────────────────────────────────────
 

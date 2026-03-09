@@ -359,6 +359,64 @@ class TestNewEventDecoders:
         assert evt["current_pcm"] == "Closed Loop"
         assert evt["previous_pcm"] == "Open Loop"
 
+    def test_decode_cgm_data_event(self):
+        """Event 256 (CGM_DATA_GXB) decodes glucose, rate of change and status."""
+        # int8 @ offset 0 (rate_raw), uint16 @ offset 2 (status), uint16 @ offset 4 (glucose)
+        payload = struct.pack(">b", 5) + b"\x00" + struct.pack(">H", 0) + struct.pack(">H", 120)
+        evt = self._decode_single(256, payload)
+        assert evt["event_name"] == "CGM"
+        assert evt["glucose_mgdl"] == 120
+        assert evt["rate_of_change"] == 0.5  # 5 * 0.1
+        assert evt["status"] == 0
+
+    def test_decode_cgm_data_event_rate_zero(self):
+        """Event 256 with rate_raw=0 and non-zero status decodes correctly."""
+        payload = struct.pack(">b", 0) + b"\x00" + struct.pack(">H", 1) + struct.pack(">H", 85)
+        evt = self._decode_single(256, payload)
+        assert evt["rate_of_change"] == 0.0
+        assert evt["glucose_mgdl"] == 85
+        assert evt["status"] == 1
+
+    def test_decode_bolus_delivery_event(self):
+        """Event 280 (BolusDelivery) decodes type, status, correction and delivered."""
+        payload = (
+            struct.pack(">B", 1)  # bolus_type
+            + struct.pack(">B", 0)  # delivery_status = 0 (completed)
+            + struct.pack(">H", 42)  # bolus_id
+            + struct.pack(">H", 2000)  # requested_now_mu
+            + b"\x00\x00"  # unknown
+            + struct.pack(">H", 500)  # correction_mu
+            + b"\x00\x00"  # unknown
+            + struct.pack(">H", 2000)  # delivered_total_mu
+        )
+        evt = self._decode_single(280, payload)
+        assert evt["event_name"] == "BolusDelivery"
+        assert evt["delivery_status"] == 0
+        assert evt["correction_mu"] == 500
+        assert evt["insulin_delivered"] == 2.0  # 2000 / 1000
+
+    def test_decode_bolus_delivery_no_correction(self):
+        """Event 280 with correction_mu=0 and delivery_status=1 (started)."""
+        payload = (
+            struct.pack(">B", 0)  # bolus_type
+            + struct.pack(">B", 1)  # delivery_status = 1
+            + struct.pack(">H", 1)  # bolus_id
+            + struct.pack(">H", 1000)  # requested_now_mu
+            + b"\x00\x00"  # unknown
+            + struct.pack(">H", 0)  # correction_mu = 0
+            + b"\x00\x00"  # unknown
+            + struct.pack(">H", 1000)  # delivered_total_mu
+        )
+        evt = self._decode_single(280, payload)
+        assert evt["correction_mu"] == 0
+        assert evt["delivery_status"] == 1
+
+    def test_decode_unknown_suspend_reason(self):
+        """Event 11 with an unrecognised reason code falls back to 'Reason_N'."""
+        payload = struct.pack(">B", 99) + b"\x00\x00\x00" + struct.pack(">f", 0.0)
+        evt = self._decode_single(11, payload)
+        assert evt["suspend_reason"] == "Reason_99"
+
     def test_unknown_event_skipped(self):
         """Events we don't handle are skipped."""
         payload = b"\x00" * 16
@@ -366,6 +424,69 @@ class TestNewEventDecoders:
         b64 = base64.b64encode(raw).decode()
         events = decode_pump_events(b64)
         assert len(events) == 0
+
+    def test_decode_bolus_completed(self):
+        """Event 20 (EVT_BOLUS_COMPLETED) is decoded correctly."""
+        payload = (
+            struct.pack(">H", 7)  # bolus_id
+            + struct.pack(">H", 3)  # completion (3=completed)
+            + struct.pack(">f", 1.5)  # iob
+            + struct.pack(">f", 2.0)  # delivered
+            + struct.pack(">f", 2.0)  # requested
+        )
+        evt = self._decode_single(20, payload)
+        assert evt["event_name"] == "BolusCompleted"
+        assert evt["bolus_id"] == 7
+        assert evt["completion_status"] == 3
+        assert evt["iob"] == 1.5
+        assert evt["insulin_delivered"] == 2.0
+        assert evt["insulin_requested"] == 2.0
+
+    def test_decode_basal_rate_change(self):
+        """Event 3 (EVT_BASAL_RATE_CHANGE) is decoded correctly."""
+        payload = (
+            struct.pack(">f", 0.85)  # commanded_rate
+            + struct.pack(">f", 0.80)  # base_rate
+            + struct.pack(">f", 2.0)  # max_rate
+            + b"\x00\x00\x00\x00\x00"  # padding to byte 13
+        )
+        # Insert change_type at byte 13
+        payload = payload[:12] + b"\x00" + struct.pack(">B", 2)
+        evt = self._decode_single(3, payload)
+        assert evt["event_name"] == "BasalRateChange"
+        assert evt["commanded_rate"] == 0.85
+        assert evt["base_rate"] == 0.8
+        assert evt["change_type"] == 2
+
+    def test_decode_basal_delivery(self):
+        """Event 279 (EVT_BASAL_DELIVERY) is decoded correctly."""
+        payload = (
+            b"\x00\x00"  # bytes 0-1 (unused)
+            + struct.pack(">H", 1)  # commanded_source at offset 2
+            + struct.pack(">H", 850)  # profile_rate at offset 4 (milliunits/hr)
+            + struct.pack(">H", 800)  # commanded_rate at offset 6 (milliunits/hr)
+        )
+        evt = self._decode_single(279, payload)
+        assert evt["event_name"] == "BasalDelivery"
+        assert evt["commanded_source"] == 1
+        assert evt["profile_rate_mu"] == 850
+        assert evt["commanded_rate_mu"] == 800
+        assert evt["commanded_rate"] == 0.8
+
+    def test_decode_base64_error_returns_empty(self):
+        """Invalid base64 input returns empty list without raising."""
+        events = decode_pump_events("!!!invalid base64!!!")
+        assert events == []
+
+    def test_decode_truncated_chunk_skipped(self):
+        """A record shorter than EVENT_LEN is skipped gracefully."""
+        # Build a valid 26-byte event then truncate to 20 bytes
+        payload = b"\x00" * 16
+        raw = _build_binary_event(256, 1, 500000000, payload)
+        truncated = raw[:20]  # shorter than 26-byte EVENT_LEN
+        b64 = base64.b64encode(truncated).decode()
+        events = decode_pump_events(b64)
+        assert events == []
 
 
 # ═══════════════════════════════════════════════════════════════════════

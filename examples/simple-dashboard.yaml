@@ -72,7 +72,7 @@ views:
                 }
 
           # -----------------------------------------------------------------
-          # Chips row - IOB, cartridge, Control-IQ, carbs
+          # Chips row - IOB, Control-IQ, carbs
           # -----------------------------------------------------------------
           # No pump battery chip - Tandem API does not expose battery %.
           # Tracked for investigation in v1.5.0.
@@ -87,21 +87,6 @@ views:
                 content: >-
                   {{ states('sensor.tandem_active_insulin_iob')
                      | float(0) | round(1) }} u IOB
-                tap_action:
-                  action: more-info
-              - type: template
-                entity: sensor.tandem_cartridge_insulin
-                icon: mdi:cup-water
-                icon_color: >-
-                  {% set u = states('sensor.tandem_cartridge_insulin')
-                             | float(0) %}
-                  {% if u < 20 %}red
-                  {% elif u < 50 %}amber
-                  {% else %}green
-                  {% endif %}
-                content: >-
-                  {{ states('sensor.tandem_cartridge_insulin')
-                     | float(0) | round(0) | int(0) }} u
                 tap_action:
                   action: more-info
               - type: template

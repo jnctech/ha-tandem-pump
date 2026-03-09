@@ -7,7 +7,7 @@ using your existing Tandem Source account. No extra hardware required.
 [![release](https://img.shields.io/github/v/release/jnctech/ha-tandem-pump)](https://github.com/jnctech/ha-tandem-pump/releases)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![build](https://img.shields.io/github/actions/workflow/status/jnctech/ha-tandem-pump/ci.yml?branch=develop&label=build)](https://github.com/jnctech/ha-tandem-pump/actions/workflows/ci.yml)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=jnctech_ha_hinen_power&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=jnctech_ha_hinen_power)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=jnctech_ha-tandem-pump&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=jnctech_ha-tandem-pump)
 [![License](https://img.shields.io/github/license/jnctech/ha-tandem-pump)](LICENSE)
 
 [![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jnctech&repository=ha-tandem-pump&category=integration)
@@ -106,7 +106,7 @@ using your existing Tandem Source account. No extra hardware required.
 
 </details>
 
-**Plus 5 long-term statistics** (CGM, IOB, basal, carbs, correction bolus) compatible with
+**Plus 6 long-term statistics** (CGM, IOB, basal, carbs, total bolus, correction bolus) compatible with
 HA's Statistics Graph card. Import months of history with `carelink.import_history`.
 
 > **Note on "Last cartridge fill amount":** The Tandem Source API typically returns 0 for the fill volume, so this sensor usually shows Unknown. Set the **Cartridge fill volume** number entity manually when you change your cartridge — the integration uses that value to estimate remaining insulin.
@@ -177,13 +177,6 @@ Data is fetched in 7-day chunks. The action is idempotent — safe to run multip
 | App backgrounded for a day | yesterday → today |
 | App not syncing for a week | 7 days ago → today |
 | First install — full history | earliest date → today (run in monthly chunks) |
-
----
-
-## Starter dashboards
-
-Example dashboard YAML files are included in the [`examples/`](examples/) directory.
-A full multi-page T1D layout and a simpler single-page starter are both available.
 
 ---
 

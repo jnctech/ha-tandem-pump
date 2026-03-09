@@ -187,7 +187,8 @@ sensors and one for the Lovelace layout.
 
 **Prerequisites** (install via HACS → Frontend):
 - [Mushroom](https://github.com/piitaya/lovelace-mushroom) — `custom:mushroom-template-card`, `custom:mushroom-chips-card`
-- [ApexCharts Card](https://github.com/RomRider/apexcharts-card) — `custom:apexcharts-card`
+- [ApexCharts Card](https://github.com/RomRider/apexcharts-card)
+- [card-mod](https://github.com/thomasloven/lovelace-card-mod) (optional, for large glucose display) — `custom:apexcharts-card`
 
 **Setup:**
 1. Copy [`examples/template_sensors.yaml`](examples/template_sensors.yaml) into your

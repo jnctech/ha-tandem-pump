@@ -10,6 +10,7 @@
 #   - custom:mushroom-template-card  (piitaya/lovelace-mushroom)
 #   - custom:mushroom-chips-card     (piitaya/lovelace-mushroom)
 #   - custom:apexcharts-card         (RomRider/apexcharts-card)
+#   - card-mod                        (thomasloven/lovelace-card-mod, optional)
 #
 # Also requires the template sensors from template_sensors.yaml.
 #

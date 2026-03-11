@@ -7,7 +7,11 @@ using your existing Tandem Source account. No extra hardware required.
 [![release](https://img.shields.io/github/v/release/jnctech/ha-tandem-pump)](https://github.com/jnctech/ha-tandem-pump/releases)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![build](https://img.shields.io/github/actions/workflow/status/jnctech/ha-tandem-pump/ci.yml?branch=develop&label=build)](https://github.com/jnctech/ha-tandem-pump/actions/workflows/ci.yml)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=jnctech_ha-tandem-pump&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=jnctech_ha-tandem-pump)
+[![Reliability](https://sonarcloud.io/api/project_badges/measure?project=jnctech_ha-tandem-pump&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=jnctech_ha-tandem-pump)
+[![Security](https://sonarcloud.io/api/project_badges/measure?project=jnctech_ha-tandem-pump&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=jnctech_ha-tandem-pump)
+[![Maintainability](https://sonarcloud.io/api/project_badges/measure?project=jnctech_ha-tandem-pump&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=jnctech_ha-tandem-pump)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=jnctech_ha-tandem-pump&metric=coverage)](https://sonarcloud.io/summary/new_code?id=jnctech_ha-tandem-pump)
+[![Duplicated Lines](https://sonarcloud.io/api/project_badges/measure?project=jnctech_ha-tandem-pump&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=jnctech_ha-tandem-pump)
 [![License](https://img.shields.io/github/license/jnctech/ha-tandem-pump)](LICENSE)
 
 [![Add to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jnctech&repository=ha-tandem-pump&category=integration)
@@ -249,6 +253,25 @@ See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for the full guide.
 | Sensors missing | Wrong platform selected at setup | [Missing Sensors →](TROUBLESHOOTING.md#missing-sensors) |
 
 Open an issue: https://github.com/jnctech/ha-tandem-pump/issues
+
+---
+
+## Development approach
+
+This project is built with AI assistance (Claude) operating under strict engineering constraints:
+
+- All code passes **SonarCloud** quality analysis — reliability, security, maintainability, coverage, and duplication tracked per-PR
+- **Ruff** lint and format checks enforced in CI — no merge without passing
+- **Bandit** static security analysis runs on every push
+- **pytest** test suite with coverage reporting on every push
+- **hassfest** and **HACS** validation ensure Home Assistant compatibility
+- Structured AI code review on each PR: logic correctness, silent failure detection, and code simplification
+- Git Flow branching with conventional commits
+
+AI is used as a tool. The engineering standards are not negotiable.
+
+Have questions, ideas, or want to contribute? [Open an issue](https://github.com/jnctech/ha-tandem-pump/issues) or
+[start a discussion](https://github.com/jnctech/ha-tandem-pump/discussions) — feedback from the community helps shape this project.
 
 ---
 

@@ -70,5 +70,23 @@ Statistics Graph entities (`sensor.carelink_*`) are **not** affected.
 
 ---
 
+## Development approach
+
+This project is built with AI assistance (Claude) operating under strict engineering constraints:
+
+- All code passes **SonarCloud** quality analysis — reliability, security, maintainability, coverage, and duplication tracked per-PR
+- **Ruff** lint and format checks enforced in CI — no merge without passing
+- **Bandit** static security analysis runs on every push
+- **pytest** test suite with coverage reporting on every push
+- **hassfest** and **HACS** validation ensure Home Assistant compatibility
+- Structured AI code review on each PR: logic correctness, silent failure detection, and code simplification
+
+AI is used as a tool. The engineering standards are not negotiable.
+
+Have questions, ideas, or want to contribute? [Open an issue](https://github.com/jnctech/ha-tandem-pump/issues) or
+[start a discussion](https://github.com/jnctech/ha-tandem-pump/discussions) — feedback from the community helps shape this project.
+
+---
+
 > **Medtronic CareLink:** This integration also supports legacy Medtronic CareLink (limited sensors).
 > Use your CareLink credentials when adding the integration.

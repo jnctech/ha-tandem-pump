@@ -24,7 +24,7 @@ jobs:
         run: cd custom_components && zip -r ../carelink.zip carelink/
 
       - name: Generate SBOM
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@57aae528053a48a3f6235f2d9461b05fbcb7366d  # v0
         with:
           path: custom_components/carelink/
           format: spdx-json

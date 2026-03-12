@@ -6,13 +6,10 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 
 | ID | Severity | Status | Fixed In | Description |
 |----|----------|--------|----------|-------------|
-| L-1 | Medium | FIXED | bugfix/l1-suspend-reason | Suspend reason lookup uses wrong key type |
 | L-5 | Low | OPEN | — | Profile `idp` matching may silently fail |
 | D-1 | Medium | OPEN | — | No binary event fixture |
 | D-2 | Low | OPEN | — | `partNumber` missing from drift check |
-| S-1 | Medium | FIXED | fix/sensor-state-class | state_class=MEASUREMENT on discrete events |
 | S-2 | Low | DEFERRED | — | Inconsistent insulin unit strings (next major) |
-| S-3 | Medium | FIXED | fix/sensor-state-class | Daily totals use MEASUREMENT |
 | S-4 | Low | OPEN | — | Threshold sensors missing BLOOD_GLUCOSE |
 | S-5 | Low | OPEN | — | suggested_display_precision not set |
 
@@ -20,6 +17,9 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 
 | ID | Status | Notes |
 |----|--------|-------|
+| L-1 | FIXED | Suspend reason lookup — PR #39, merged 2026-03-12 |
+| S-1 | FIXED | state_class on discrete events — PR #40, merged 2026-03-13 |
+| S-3 | FIXED | Daily totals MEASUREMENT — PR #40, merged 2026-03-13 |
 | L-2 | ACCEPTED | resp.json() not wrapped — caught by broad except |
 | L-3 | ACCEPTED | CGM usage calc works via min() cap |
 | L-4 | ACCEPTED | Timestamp approach correct, documented |
@@ -33,10 +33,10 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 Compare before reading files. Skip unchanged files.
 
 ```
-7f8473fc __init__.py
-37a6952e tandem_api.py
-688cabcf const.py
-f61f7695 sensor.py
+e0c1096e __init__.py
+48767598 tandem_api.py
+634ac28a const.py
+d0a63142 sensor.py
 ```
 
 **Status values:** OPEN, ACCEPTED, FIXED, DEFERRED, OK

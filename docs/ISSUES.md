@@ -41,6 +41,14 @@ Docker host's Gitea remote (`origin`) only has the inner-loop CI workflow. Pushi
 
 ## Completed
 
+### ISS-009 — Fix Sensor state_class Metadata (S-1, S-3)
+**Closed:** 2026-03-13 (PR #40)
+Removed `state_class=MEASUREMENT` from 8 sensors: 3 discrete events (last bolus, meal bolus, cartridge fill) and 5 daily totals. These produced meaningless HA long-term statistics. See CR-004.
+
+### ISS-008 — Fix Suspend Reason Lookup Bug (L-1)
+**Closed:** 2026-03-12 (PR #39)
+Removed redundant `SUSPEND_REASON_MAP` lookup — API already returns decoded strings. Standardised unknown-code format. Added defensive try/except. See CR-003.
+
 ### ISS-007 — Baseline AI Review
 **Closed:** 2026-03-12
 Full 3-review baseline pass (Logic, API Drift, Sensor) completed by Opus. 16 findings tracked in `docs/reviews/review-findings.md`. Baseline narrative at `docs/reviews/review-baseline-2026-03-12.md`. PR review template and token-efficiency rules added to CLAUDE.md.

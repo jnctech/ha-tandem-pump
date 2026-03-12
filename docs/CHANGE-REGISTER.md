@@ -7,7 +7,8 @@ Significant changes to this repository, listed in reverse chronological order.
 ## CR-004 — Fix Sensor state_class Metadata (S-1, S-3)
 **Date:** 2026-03-12
 **Branch:** `fix/sensor-state-class`
-**Status:** Open
+**PR:** [#40](https://github.com/jnctech/ha-tandem-pump/pull/40)
+**Status:** Merged to `develop`
 
 ### What Changed
 | Area | Change |

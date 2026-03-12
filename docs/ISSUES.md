@@ -39,19 +39,11 @@ Docker host's Gitea remote (`origin`) only has the inner-loop CI workflow. Pushi
 
 ---
 
-### ISS-007 — Baseline AI Review Not Yet Run
-**Type:** Quality / Documentation
-**Priority:** Medium
-**Created:** 2026-03-12
-**Status:** 🟡 Backlog
-
-Per CLAUDE.md AI review policy, a full 3-review baseline pass across the entire codebase must be completed before the first PR-scoped review. This has not been run yet.
-
-**Steps:** Open a new Opus session. Prompt: `Read CLAUDE.md then run a full baseline review. Output to docs/reviews/review-baseline-2026-MM-DD.md.`
-
----
-
 ## Completed
+
+### ISS-007 — Baseline AI Review
+**Closed:** 2026-03-12
+Full 3-review baseline pass (Logic, API Drift, Sensor) completed by Opus. 16 findings tracked in `docs/reviews/review-findings.md`. Baseline narrative at `docs/reviews/review-baseline-2026-03-12.md`. PR review template and token-efficiency rules added to CLAUDE.md.
 
 ### ISS-003 — GitHub Branch Protection: Required Checks
 **Closed:** 2026-03-12

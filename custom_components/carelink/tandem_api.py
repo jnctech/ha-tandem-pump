@@ -67,6 +67,10 @@ EVT_CARTRIDGE_FILLED = 33
 EVT_CARBS_ENTERED = 48
 EVT_CANNULA_FILLED = 61
 EVT_TUBING_FILLED = 63
+EVT_USB_CONNECTED = 36
+EVT_USB_DISCONNECTED = 37
+EVT_SHELF_MODE = 53
+EVT_DAILY_BASAL = 81
 EVT_AA_USER_MODE_CHANGE = 229
 EVT_AA_PCM_CHANGE = 230
 EVT_CGM_DATA_GXB = 256
@@ -277,6 +281,49 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             }
             evt["current_pcm"] = pcm_map.get(current_pcm, f"PCM_{current_pcm}")
             evt["previous_pcm"] = pcm_map.get(previous_pcm, f"PCM_{previous_pcm}")
+
+        elif event_id == EVT_USB_CONNECTED:
+            evt["event_name"] = "USBConnected"
+            negotiated_current = struct.unpack_from(">f", payload, 0)[0]
+            evt["negotiated_current_ma"] = round(negotiated_current, 1)
+
+        elif event_id == EVT_USB_DISCONNECTED:
+            evt["event_name"] = "USBDisconnected"
+            negotiated_current = struct.unpack_from(">f", payload, 0)[0]
+            evt["negotiated_current_ma"] = round(negotiated_current, 1)
+
+        elif event_id == EVT_SHELF_MODE:
+            evt["event_name"] = "ShelfMode"
+            # Battery detail from LID_SHELF_MODE event
+            msec_since_reset = struct.unpack_from(">I", payload, 0)[0]
+            lipo_ibc = struct.unpack_from(">B", payload, 4)[0]  # battery % (display)
+            lipo_abc = struct.unpack_from(">B", payload, 5)[0]  # alternate battery %
+            lipo_current = struct.unpack_from(">h", payload, 6)[0]  # mA (signed)
+            lipo_rem_cap = struct.unpack_from(">I", payload, 8)[0]  # mAh
+            lipo_mv = struct.unpack_from(">I", payload, 12)[0]  # mV
+            evt["msec_since_reset"] = msec_since_reset
+            evt["battery_percent"] = lipo_ibc
+            evt["battery_percent_alt"] = lipo_abc
+            evt["battery_current_ma"] = lipo_current
+            evt["battery_remaining_mah"] = lipo_rem_cap
+            evt["battery_voltage_mv"] = lipo_mv
+
+        elif event_id == EVT_DAILY_BASAL:
+            evt["event_name"] = "DailyBasal"
+            # LID_DAILY_BASAL: daily totals + battery data
+            daily_total_basal = struct.unpack_from(">f", payload, 0)[0]
+            last_basal_rate = struct.unpack_from(">f", payload, 4)[0]
+            iob = struct.unpack_from(">f", payload, 8)[0]
+            battery_msb_raw = struct.unpack_from(">B", payload, 12)[0]
+            battery_lsb_raw = struct.unpack_from(">B", payload, 13)[0]
+            battery_mv = struct.unpack_from(">H", payload, 14)[0]
+            # Battery % formula from tconnectsync transforms.py
+            battery_pct = min(100, max(0, round((256 * (battery_msb_raw - 14) + battery_lsb_raw) / (3 * 256) * 100, 1)))
+            evt["daily_total_basal"] = round(daily_total_basal, 2)
+            evt["last_basal_rate"] = round(last_basal_rate, 3)
+            evt["iob"] = round(iob, 2)
+            evt["battery_percent"] = battery_pct
+            evt["battery_voltage_mv"] = battery_mv
 
         else:
             evt["event_name"] = f"Event_{event_id}"
@@ -684,9 +731,13 @@ class TandemSourceClient:
                 "12,"  # PUMPING_RESUMED
                 "16,"  # BG_READING_TAKEN (manual BG)
                 "33,"  # CARTRIDGE_FILLED
+                "36,"  # USB_CONNECTED (charging)
+                "37,"  # USB_DISCONNECTED
                 "48,"  # CARBS_ENTERED
+                "53,"  # SHELF_MODE (battery detail)
                 "61,"  # CANNULA_FILLED (site change)
                 "63,"  # TUBING_FILLED
+                "81,"  # DAILY_BASAL (battery %, voltage, daily totals)
                 "229,"  # AA_USER_MODE_CHANGE (sleep/exercise)
                 "230"  # AA_PCM_CHANGE (Control-IQ mode)
             )

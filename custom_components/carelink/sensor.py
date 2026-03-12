@@ -97,7 +97,7 @@ class CarelinkSensorEntity(PumpEntityMixin, CoordinatorEntity, SensorEntity):
         return self.sensor_description.native_unit_of_measurement
 
     @property
-    def state_class(self) -> SensorStateClass:
+    def state_class(self) -> SensorStateClass | None:
         return self.sensor_description.state_class
 
     @property

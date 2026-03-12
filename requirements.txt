@@ -1,5 +1,6 @@
 colorlog==6.7.0
 pytest-homeassistant-custom-component==0.13.80
+tzdata>=2024.1
 pip>=25.3
 ruff==0.15.5
 pytest>=7.4.0

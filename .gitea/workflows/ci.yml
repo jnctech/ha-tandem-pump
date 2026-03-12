@@ -1,0 +1,38 @@
+name: Inner-loop CI
+
+on:
+  push:
+    branches: ["**"]
+
+jobs:
+  ci:
+    name: Lint, test, security
+    runs-on: ubuntu-latest
+    container: python:3.12-slim
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Ruff lint
+        run: ruff check custom_components/carelink tests
+
+      - name: Ruff format check
+        run: ruff format --check custom_components/carelink tests
+
+      - name: Run tests
+        run: pytest -v --tb=short
+
+      - name: Bandit security scan
+        run: |
+          pip install bandit[toml]
+          bandit -c bandit.yaml -r custom_components/carelink
+
+      - name: Gitleaks (HEAD only)
+        uses: gitleaks/gitleaks-action@v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_ENABLE_COMMENTS: false

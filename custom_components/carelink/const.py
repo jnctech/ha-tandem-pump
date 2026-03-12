@@ -533,6 +533,12 @@ TANDEM_SENSOR_KEY_CGM_STATUS = "tandem_cgm_status"
 TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL = "tandem_last_cartridge_fill_amount"
 TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON = "tandem_pump_suspend_reason"
 
+# ── Battery monitoring keys (Phase 1 — from events 81, 53, 36, 37) ────
+TANDEM_SENSOR_KEY_BATTERY_PERCENT = "tandem_battery_percent"
+TANDEM_SENSOR_KEY_BATTERY_VOLTAGE = "tandem_battery_voltage"
+TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH = "tandem_battery_remaining_mah"
+TANDEM_SENSOR_KEY_CHARGING_STATUS = "tandem_charging_status"
+
 # ── Lookup maps for event-derived sensor values ───────────────────────
 CGM_STATUS_MAP: dict[int, str] = {0: "Normal", 1: "High", 2: "Low"}
 
@@ -596,6 +602,8 @@ TANDEM_SENSORS_ALWAYS_AVAILABLE = (
     TANDEM_SENSOR_KEY_LOW_BG_THRESHOLD,
     TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD,
     TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT,
+    TANDEM_SENSOR_KEY_BATTERY_PERCENT,
+    TANDEM_SENSOR_KEY_CHARGING_STATUS,
 )
 
 TANDEM_SENSORS = (
@@ -1096,6 +1104,43 @@ TANDEM_SENSORS = (
         state_class=None,
         device_class=None,
         icon="mdi:battery-alert",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # ── Battery monitoring sensors (Phase 1) ────────────────────────────
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_BATTERY_PERCENT,
+        name="Pump battery level",
+        native_unit_of_measurement=PERCENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.BATTERY,
+        icon="mdi:battery",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_BATTERY_VOLTAGE,
+        name="Pump battery voltage",
+        native_unit_of_measurement="mV",
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.VOLTAGE,
+        icon="mdi:flash",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH,
+        name="Pump battery remaining",
+        native_unit_of_measurement="mAh",
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:battery-charging",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CHARGING_STATUS,
+        name="Pump charging status",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:power-plug",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )

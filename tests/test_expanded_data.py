@@ -43,6 +43,11 @@ from custom_components.carelink.const import (
     TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT,
     TANDEM_SENSOR_KEY_DAILY_CARBS,
     TANDEM_SENSOR_KEY_DAILY_BOLUS_COUNT,
+    # Battery sensors
+    TANDEM_SENSOR_KEY_BATTERY_PERCENT,
+    TANDEM_SENSOR_KEY_BATTERY_VOLTAGE,
+    TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH,
+    TANDEM_SENSOR_KEY_CHARGING_STATUS,
 )
 
 from custom_components.carelink.tandem_api import decode_pump_events
@@ -735,3 +740,345 @@ class TestComputedInsulinSummary:
         coordinator = await _setup_coordinator(hass, data)
 
         assert coordinator.data[TANDEM_SENSOR_KEY_DAILY_CARBS] is UNAVAILABLE
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Tests: Battery event decoders (events 36, 37, 53, 81)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestBatteryEventDecoders:
+    """Test binary decoding of battery-related event types."""
+
+    def _decode_single(self, event_id: int, payload: bytes, seq: int = 1) -> dict:
+        raw = _build_binary_event(event_id, seq, 500000000, payload)
+        b64 = base64.b64encode(raw).decode()
+        events = decode_pump_events(b64)
+        assert len(events) == 1
+        return events[0]
+
+    def test_decode_usb_connected(self):
+        """Event 36 (USBConnected) decodes negotiated current."""
+        payload = struct.pack(">f", 500.0)
+        evt = self._decode_single(36, payload)
+        assert evt["event_name"] == "USBConnected"
+        assert evt["negotiated_current_ma"] == 500.0
+
+    def test_decode_usb_disconnected(self):
+        """Event 37 (USBDisconnected) decodes negotiated current."""
+        payload = struct.pack(">f", 100.0)
+        evt = self._decode_single(37, payload)
+        assert evt["event_name"] == "USBDisconnected"
+        assert evt["negotiated_current_ma"] == 100.0
+
+    def test_decode_usb_connected_zero_current(self):
+        """Event 36 with zero negotiated current."""
+        payload = struct.pack(">f", 0.0)
+        evt = self._decode_single(36, payload)
+        assert evt["negotiated_current_ma"] == 0.0
+
+    def test_decode_shelf_mode(self):
+        """Event 53 (ShelfMode) decodes full battery detail."""
+        payload = (
+            struct.pack(">I", 12345678)  # msec_since_reset
+            + struct.pack(">B", 75)  # lipo_ibc (battery %)
+            + struct.pack(">B", 73)  # lipo_abc (alt battery %)
+            + struct.pack(">h", -120)  # lipo_current (mA, signed — negative = discharging)
+            + struct.pack(">I", 280)  # lipo_rem_cap (mAh)
+            + struct.pack(">I", 3850)  # lipo_mv (mV)
+        )
+        evt = self._decode_single(53, payload)
+        assert evt["event_name"] == "ShelfMode"
+        assert evt["msec_since_reset"] == 12345678
+        assert evt["battery_percent"] == 75
+        assert evt["battery_percent_alt"] == 73
+        assert evt["battery_current_ma"] == -120
+        assert evt["battery_remaining_mah"] == 280
+        assert evt["battery_voltage_mv"] == 3850
+
+    def test_decode_shelf_mode_zero_battery(self):
+        """Event 53 with 0% battery and zero remaining capacity."""
+        payload = (
+            struct.pack(">I", 0)
+            + struct.pack(">B", 0)
+            + struct.pack(">B", 0)
+            + struct.pack(">h", 0)
+            + struct.pack(">I", 0)
+            + struct.pack(">I", 3200)
+        )
+        evt = self._decode_single(53, payload)
+        assert evt["battery_percent"] == 0
+        assert evt["battery_remaining_mah"] == 0
+        assert evt["battery_voltage_mv"] == 3200
+
+    def test_decode_shelf_mode_full_battery(self):
+        """Event 53 with 100% battery."""
+        payload = (
+            struct.pack(">I", 999)
+            + struct.pack(">B", 100)
+            + struct.pack(">B", 100)
+            + struct.pack(">h", 500)  # positive = charging
+            + struct.pack(">I", 450)
+            + struct.pack(">I", 4200)
+        )
+        evt = self._decode_single(53, payload)
+        assert evt["battery_percent"] == 100
+        assert evt["battery_current_ma"] == 500
+        assert evt["battery_remaining_mah"] == 450
+
+    def test_decode_daily_basal(self):
+        """Event 81 (DailyBasal) decodes battery + insulin data."""
+        # Battery formula: min(100, max(0, round((256*(MSB-14)+LSB) / (3*256) * 100, 1)))
+        # MSB=16, LSB=128: (256*(16-14)+128) / 768 * 100 = (512+128)/768*100 = 83.3%
+        payload = (
+            struct.pack(">f", 24.5)  # daily_total_basal
+            + struct.pack(">f", 0.8)  # last_basal_rate
+            + struct.pack(">f", 3.2)  # iob
+            + struct.pack(">B", 16)  # battery_msb_raw
+            + struct.pack(">B", 128)  # battery_lsb_raw
+            + struct.pack(">H", 3900)  # battery_mv
+        )
+        evt = self._decode_single(81, payload)
+        assert evt["event_name"] == "DailyBasal"
+        assert evt["daily_total_basal"] == 24.5
+        assert evt["last_basal_rate"] == 0.8
+        assert evt["iob"] == 3.2
+        assert evt["battery_percent"] == 83.3
+        assert evt["battery_voltage_mv"] == 3900
+
+    def test_daily_basal_battery_formula_zero_percent(self):
+        """Battery formula clamps to 0% for low MSB values."""
+        # MSB=14, LSB=0: (256*(14-14)+0) / 768 * 100 = 0%
+        payload = (
+            struct.pack(">f", 0.0)
+            + struct.pack(">f", 0.0)
+            + struct.pack(">f", 0.0)
+            + struct.pack(">B", 14)
+            + struct.pack(">B", 0)
+            + struct.pack(">H", 3300)
+        )
+        evt = self._decode_single(81, payload)
+        assert evt["battery_percent"] == 0.0
+
+    def test_daily_basal_battery_formula_full(self):
+        """Battery formula clamps to 100% for high MSB values."""
+        # MSB=17, LSB=255: (256*(17-14)+255) / 768 * 100 = 133.2% → clamped to 100
+        payload = (
+            struct.pack(">f", 0.0)
+            + struct.pack(">f", 0.0)
+            + struct.pack(">f", 0.0)
+            + struct.pack(">B", 17)
+            + struct.pack(">B", 255)
+            + struct.pack(">H", 4200)
+        )
+        evt = self._decode_single(81, payload)
+        assert evt["battery_percent"] == 100
+
+    def test_daily_basal_battery_formula_underflow(self):
+        """Battery formula clamps to 0% when MSB < 14."""
+        # MSB=10, LSB=0: (256*(10-14)+0) / 768 * 100 = negative → clamped to 0
+        payload = (
+            struct.pack(">f", 0.0)
+            + struct.pack(">f", 0.0)
+            + struct.pack(">f", 0.0)
+            + struct.pack(">B", 10)
+            + struct.pack(">B", 0)
+            + struct.pack(">H", 3000)
+        )
+        evt = self._decode_single(81, payload)
+        assert evt["battery_percent"] == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Tests: Battery sensor population in coordinator
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _make_daily_basal_event(
+    seq: int,
+    battery_pct_msb: int = 16,
+    battery_pct_lsb: int = 128,
+    battery_mv: int = 3900,
+    minutes_ago: int = 0,
+) -> dict:
+    """Create a pre-decoded DailyBasal event dict (as coordinator receives it)."""
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    battery_pct = min(100, max(0, round((256 * (battery_pct_msb - 14) + battery_pct_lsb) / (3 * 256) * 100, 1)))
+    return {
+        "event_id": 81,
+        "event_name": "DailyBasal",
+        "seq": seq,
+        "timestamp": ts,
+        "daily_total_basal": 20.0,
+        "last_basal_rate": 0.8,
+        "iob": 2.5,
+        "battery_percent": battery_pct,
+        "battery_voltage_mv": battery_mv,
+    }
+
+
+def _make_shelf_mode_event(
+    seq: int,
+    battery_pct: int = 75,
+    battery_mv: int = 3850,
+    battery_mah: int = 280,
+    minutes_ago: int = 0,
+) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 53,
+        "event_name": "ShelfMode",
+        "seq": seq,
+        "timestamp": ts,
+        "msec_since_reset": 12345,
+        "battery_percent": battery_pct,
+        "battery_percent_alt": battery_pct - 2,
+        "battery_current_ma": -50,
+        "battery_remaining_mah": battery_mah,
+        "battery_voltage_mv": battery_mv,
+    }
+
+
+def _make_usb_connected_event(seq: int, minutes_ago: int = 0) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 36,
+        "event_name": "USBConnected",
+        "seq": seq,
+        "timestamp": ts,
+        "negotiated_current_ma": 500.0,
+    }
+
+
+def _make_usb_disconnected_event(seq: int, minutes_ago: int = 0) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 37,
+        "event_name": "USBDisconnected",
+        "seq": seq,
+        "timestamp": ts,
+        "negotiated_current_ma": 0.0,
+    }
+
+
+class TestBatterySensorPopulation:
+    """Test coordinator battery sensor population from events 36, 37, 53, 81."""
+
+    async def test_daily_basal_provides_battery(self, hass: HomeAssistant):
+        """DailyBasal event populates battery % and voltage."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_daily_basal_event(2, battery_pct_msb=16, battery_pct_lsb=128, battery_mv=3900),
+        ]
+        data = _make_pump_events_data(events)
+        coordinator = await _setup_coordinator(hass, data)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 83.3
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3900
+        # mAh only comes from ShelfMode
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] is UNAVAILABLE
+
+    async def test_shelf_mode_provides_full_battery(self, hass: HomeAssistant):
+        """ShelfMode event populates battery %, voltage, and mAh."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_shelf_mode_event(2, battery_pct=75, battery_mv=3850, battery_mah=280),
+        ]
+        data = _make_pump_events_data(events)
+        coordinator = await _setup_coordinator(hass, data)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 75
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3850
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] == 280
+
+    async def test_shelf_mode_newer_overrides_daily_basal(self, hass: HomeAssistant):
+        """When ShelfMode is newer than DailyBasal, ShelfMode values win."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_daily_basal_event(2, battery_pct_msb=16, battery_pct_lsb=128, battery_mv=3900, minutes_ago=30),
+            _make_shelf_mode_event(3, battery_pct=72, battery_mv=3800, battery_mah=260, minutes_ago=5),
+        ]
+        data = _make_pump_events_data(events)
+        coordinator = await _setup_coordinator(hass, data)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 72
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3800
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] == 260
+
+    async def test_daily_basal_newer_keeps_daily_basal(self, hass: HomeAssistant):
+        """When DailyBasal is newer than ShelfMode, DailyBasal % and voltage win, mAh from ShelfMode."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_shelf_mode_event(2, battery_pct=80, battery_mv=3900, battery_mah=300, minutes_ago=60),
+            _make_daily_basal_event(3, battery_pct_msb=16, battery_pct_lsb=128, battery_mv=3850, minutes_ago=5),
+        ]
+        data = _make_pump_events_data(events)
+        coordinator = await _setup_coordinator(hass, data)
+
+        # DailyBasal is newer → its % and voltage used
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 83.3
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3850
+        # mAh still comes from ShelfMode (only source)
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] == 300
+
+    async def test_usb_connected_shows_charging(self, hass: HomeAssistant):
+        """USB connected event sets charging status to 'Charging'."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_usb_connected_event(2),
+        ]
+        data = _make_pump_events_data(events)
+        coordinator = await _setup_coordinator(hass, data)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_CHARGING_STATUS] == "Charging"
+
+    async def test_usb_disconnected_shows_not_charging(self, hass: HomeAssistant):
+        """USB disconnected event sets charging status to 'Not Charging'."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_usb_disconnected_event(2),
+        ]
+        data = _make_pump_events_data(events)
+        coordinator = await _setup_coordinator(hass, data)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_CHARGING_STATUS] == "Not Charging"
+
+    async def test_usb_connect_then_disconnect(self, hass: HomeAssistant):
+        """Latest USB event determines charging status."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_usb_connected_event(2, minutes_ago=10),
+            _make_usb_disconnected_event(3, minutes_ago=5),
+        ]
+        data = _make_pump_events_data(events)
+        coordinator = await _setup_coordinator(hass, data)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_CHARGING_STATUS] == "Not Charging"
+
+    async def test_no_battery_events_all_unavailable(self, hass: HomeAssistant):
+        """No battery events → all battery sensors UNAVAILABLE."""
+        events = [_make_cgm_event(1, 120)]
+        data = _make_pump_events_data(events)
+        coordinator = await _setup_coordinator(hass, data)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_CHARGING_STATUS] is UNAVAILABLE
+
+    async def test_all_battery_events_combined(self, hass: HomeAssistant):
+        """All battery event types present — most recent values used."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_daily_basal_event(2, battery_pct_msb=16, battery_pct_lsb=128, battery_mv=3900, minutes_ago=60),
+            _make_shelf_mode_event(3, battery_pct=70, battery_mv=3800, battery_mah=250, minutes_ago=30),
+            _make_usb_connected_event(4, minutes_ago=10),
+        ]
+        data = _make_pump_events_data(events)
+        coordinator = await _setup_coordinator(hass, data)
+
+        # ShelfMode is newer than DailyBasal
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 70
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3800
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] == 250
+        assert coordinator.data[TANDEM_SENSOR_KEY_CHARGING_STATUS] == "Charging"

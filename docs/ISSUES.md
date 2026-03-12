@@ -7,10 +7,11 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 
 ## Current Priorities
 
-1. **Deploy & verify** — develop has PRs #39 + #40 merged but not yet deployed to HA
-2. **ISS-010** — Architecture Decision Records and documentation gaps
-3. **ISS-005** — tandem_api.py coverage gap
-4. Remaining baseline findings (D-1, L-5, D-2, S-4, S-5)
+1. ~~**Deploy & verify**~~ — ✅ Done 2026-03-13
+2. **ISS-010** — Architecture Decision Records (in progress — docs/adr-initial branch)
+3. **ISS-011** — Review upstream changes (battery/reservoir improvements)
+4. **ISS-005** — tandem_api.py coverage gap
+5. Remaining baseline findings (D-1, L-5, D-2, S-4, S-5)
 
 ---
 
@@ -39,6 +40,21 @@ No formal architecture decision records exist. Design knowledge is scattered acr
 
 **Branch:** `docs/adr-initial` (ADRs), `chore/github-templates` (templates)
 **Reference:** Plan file `peaceful-sauteeing-star.md` has full gap analysis and tooling recommendations
+
+### ISS-011 — Review Upstream Changes (Battery & Reservoir)
+**Type:** Upstream Sync / Feature
+**Priority:** Medium
+**Created:** 2026-03-13
+**Status:** 🔵 Active — flagged, not started
+**Reference:** Session note `review-upstream-changes-wjqgX`
+
+Upstream (noiwid/HAFamilyLink) may have improvements to battery and reservoir sensor handling that are relevant to decision-making in the household (low insulin, low battery alerts). Need to:
+- Review upstream commits since our fork point (`ac6f2a3`)
+- Identify battery/reservoir changes worth backporting
+- Assess impact on existing sensor definitions and alert thresholds
+- Decision: adopt upstream changes, adapt them, or document why our approach differs
+
+**Why important:** Battery level and cartridge insulin are used for time-sensitive alerts (e.g., "insulin reservoir low — need to change cartridge"). Improvements to accuracy or alerting in upstream are high-value.
 
 ---
 

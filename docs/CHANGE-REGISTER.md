@@ -4,10 +4,30 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-004 — Fix Sensor state_class Metadata (S-1, S-3)
+**Date:** 2026-03-12
+**Branch:** `fix/sensor-state-class`
+**Status:** Open
+
+### What Changed
+| Area | Change |
+|------|--------|
+| const.py | Removed `state_class=MEASUREMENT` from 3 discrete event sensors (last bolus, last meal bolus, last cartridge fill) — these are one-time events, not continuous measurements |
+| const.py | Removed `state_class=MEASUREMENT` from 5 daily total sensors — daily-reset accumulators produce meaningless HA long-term statistics with MEASUREMENT |
+
+### Finding Reference
+- S-1 (Medium): Discrete event sensors with MEASUREMENT produce meaningless mean/min/max statistics
+- S-3 (Medium): Daily totals with MEASUREMENT instead of None confuse HA statistics
+
+### Impact
+Existing HA long-term statistics for affected sensors will stop accumulating. No data loss — historical values remain but new entries won't be added. Users who relied on statistics graphs for these sensors will see them stop updating.
+
+---
+
 ## CR-003 — Fix Suspend Reason Lookup Bug (L-1)
 **Date:** 2026-03-12
 **Branch:** `bugfix/l1-suspend-reason`
-**Status:** Open
+**Status:** Merged to `develop`
 
 ### What Changed
 | Area | Change |

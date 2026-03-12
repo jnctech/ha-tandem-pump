@@ -9,6 +9,7 @@ Significant changes to this repository, listed in reverse chronological order.
 **Branch:** `fix/sensor-state-class`
 **PR:** [#40](https://github.com/jnctech/ha-tandem-pump/pull/40)
 **Status:** Merged to `develop`
+**Deployed:** 2026-03-13 — verified on HA (62 entities, no errors)
 
 ### What Changed
 | Area | Change |
@@ -30,6 +31,7 @@ Existing HA long-term statistics for affected sensors will stop accumulating. No
 **Branch:** `bugfix/l1-suspend-reason`
 **PR:** [#39](https://github.com/jnctech/ha-tandem-pump/pull/39)
 **Status:** Merged to `develop`
+**Deployed:** 2026-03-13 — verified on HA (no errors)
 
 ### What Changed
 | Area | Change |

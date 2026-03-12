@@ -98,7 +98,13 @@ jobs:
       - name: Run pip-audit
         run: |
           pip install pip-audit
-          pip-audit -r requirements.txt
+          python -c "
+          import json
+          manifest = json.load(open('custom_components/carelink/manifest.json'))
+          print('\n'.join(manifest.get('requirements', [])))
+          " > /tmp/runtime-requirements.txt
+          cat /tmp/runtime-requirements.txt
+          pip-audit -r /tmp/runtime-requirements.txt
 
   secrets:
     name: Secret scanning - Gitleaks

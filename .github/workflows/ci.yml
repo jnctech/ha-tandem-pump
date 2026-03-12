@@ -136,9 +136,8 @@ jobs:
 
       - name: Run actionlint
         run: |
-          ACTIONLINT_VERSION=1.7.7
           curl -sSfL --proto-redir -all,https \
-            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz \
             | tar -xz actionlint
           ./actionlint -color
 

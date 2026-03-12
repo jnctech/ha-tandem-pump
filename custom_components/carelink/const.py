@@ -535,7 +535,6 @@ TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON = "tandem_pump_suspend_reason"
 
 # ── Lookup maps for event-derived sensor values ───────────────────────
 CGM_STATUS_MAP: dict[int, str] = {0: "Normal", 1: "High", 2: "Low"}
-SUSPEND_REASON_MAP: dict[int, str] = {0: "User", 1: "Alarm", 2: "Malfunction", 3: "Auto-PLGS"}
 
 # ── Shared icon strings (S1192: avoid duplicating literals 3+ times) ──
 ICON_ALERT_CIRCLE_OUTLINE = "mdi:alert-circle-outline"

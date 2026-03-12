@@ -6,7 +6,7 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 
 | ID | Severity | Status | Fixed In | Description |
 |----|----------|--------|----------|-------------|
-| L-1 | Medium | OPEN | — | Suspend reason lookup uses wrong key type |
+| L-1 | Medium | FIXED | bugfix/l1-suspend-reason | Suspend reason lookup uses wrong key type |
 | L-5 | Low | OPEN | — | Profile `idp` matching may silently fail |
 | D-1 | Medium | OPEN | — | No binary event fixture |
 | D-2 | Low | OPEN | — | `partNumber` missing from drift check |

@@ -189,9 +189,9 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
                 0: "User",
                 1: "Alarm",
                 2: "Malfunction",
-                3: "Auto (PLGS)",
+                3: "Auto-PLGS",
             }
-            evt["suspend_reason"] = reason_map.get(suspend_reason, f"Reason_{suspend_reason}")
+            evt["suspend_reason"] = reason_map.get(suspend_reason, f"Unknown ({suspend_reason})")
             evt["suspend_reason_id"] = suspend_reason
             evt["insulin_amount"] = round(insulin_amount, 2)
 

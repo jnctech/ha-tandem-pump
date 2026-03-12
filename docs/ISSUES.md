@@ -7,39 +7,6 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 
 ## Active
 
-### ISS-003 — GitHub Branch Protection: Required Checks Not Yet Added
-**Type:** Infrastructure / Config
-**Priority:** High
-**Created:** 2026-03-12
-**Status:** 🔴 Open
-
-Branch protection rules exist on `master` and `develop` but the status check search box is empty — no checks are enforced yet. Must be done after PR #37 merge (checks need at least one run to appear in search).
-
-**Required checks to add on both branches:**
-- `Python Tests`
-- `SonarCloud Code Analysis`
-- `Secret scanning - Gitleaks`
-- `Security check - Bandit`
-- `Dependency vulnerability check`
-- `Dockerfile lint (hadolint)`
-- `GitHub Actions lint (actionlint)`
-- `Python Code Format Check`
-- `Check hassfest`
-
-**Steps:** GitHub → Settings → Branches → Edit rule → Status checks search
-
----
-
-### ISS-004 — SONAR_TOKEN GitHub Actions Secret Missing
-**Type:** Infrastructure / Config
-**Priority:** High
-**Created:** 2026-03-12
-**Status:** 🔴 Open
-
-SonarCloud job passes in latest run but requires `SONAR_TOKEN` secret to be present. If it's missing the job will silently skip or fail.
-
-**Steps:** GitHub → Settings → Secrets and variables → Actions → New repository secret → `SONAR_TOKEN`
-
 ---
 
 ## Backlog
@@ -85,6 +52,14 @@ Per CLAUDE.md AI review policy, a full 3-review baseline pass across the entire 
 ---
 
 ## Completed
+
+### ISS-003 — GitHub Branch Protection: Required Checks
+**Closed:** 2026-03-12
+All 9 required checks wired to both `master` and `develop` branch protection rules.
+
+### ISS-004 — SONAR_TOKEN GitHub Actions Secret
+**Closed:** 2026-03-12
+`SONAR_TOKEN` added to GitHub Actions secrets. SonarCloud blocking gate confirmed working.
 
 ### ISS-001 — Engineering Controls Gap
 **Closed:** 2026-03-12 (PR #37)

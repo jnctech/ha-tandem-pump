@@ -39,9 +39,9 @@ Full implementation of engineering controls to meet quality gate and security re
 | SonarCloud | PASSED | Blocking ✅ |
 
 ### Post-Deploy Actions
-- Add `SONAR_TOKEN` to GitHub Actions secrets (Settings → Secrets → Actions)
-- Configure GitHub branch protection required checks on `master` and `develop`
-- Pull `develop` on docker host: `git pull github develop`
+- ✅ `SONAR_TOKEN` added to GitHub Actions secrets — 2026-03-12
+- ✅ GitHub branch protection required checks wired on `master` and `develop` — 2026-03-12
+- ✅ `develop` pulled on docker host via `git pull github develop` — 2026-03-12
 
 ---
 

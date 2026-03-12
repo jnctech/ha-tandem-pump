@@ -412,10 +412,10 @@ class TestNewEventDecoders:
         assert evt["delivery_status"] == 1
 
     def test_decode_unknown_suspend_reason(self):
-        """Event 11 with an unrecognised reason code falls back to 'Reason_N'."""
+        """Event 11 with an unrecognised reason code falls back to 'Unknown (N)'."""
         payload = struct.pack(">B", 99) + b"\x00\x00\x00" + struct.pack(">f", 0.0)
         evt = self._decode_single(11, payload)
-        assert evt["suspend_reason"] == "Reason_99"
+        assert evt["suspend_reason"] == "Unknown (99)"
 
     def test_unknown_event_skipped(self):
         """Events we don't handle are skipped."""

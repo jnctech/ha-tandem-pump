@@ -229,9 +229,9 @@ class TestPumpSuspendReason:
         assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Malfunction"
 
     async def test_suspend_reason_auto_plgs(self, hass: HomeAssistant):
-        """Suspend reason 'Auto (PLGS)' passed through from API decoder."""
-        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason="Auto (PLGS)")])
-        assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Auto (PLGS)"
+        """Suspend reason 'Auto-PLGS' passed through from API decoder."""
+        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason="Auto-PLGS")])
+        assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Auto-PLGS"
 
     async def test_resumed_event_reason_is_unavailable(self, hass: HomeAssistant):
         """Last event is a RESUME (event_id=12) — reason not applicable → UNAVAILABLE."""
@@ -241,11 +241,11 @@ class TestPumpSuspendReason:
     async def test_unknown_suspend_reason_passed_through(self, hass: HomeAssistant):
         """Unrecognised suspend reason from API decoder is passed through as-is.
 
-        tandem_api.py produces 'Reason_N' for unknown codes. The coordinator
+        tandem_api.py produces 'Unknown (N)' for unknown codes. The coordinator
         passes it through without re-interpreting.
         """
-        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason="Reason_99")])
-        assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Reason_99"
+        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason="Unknown (99)")])
+        assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Unknown (99)"
 
     async def test_no_suspend_events_is_unavailable(self, hass: HomeAssistant):
         """No suspend/resume events produces UNAVAILABLE for suspend reason."""

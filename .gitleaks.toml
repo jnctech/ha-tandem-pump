@@ -1,0 +1,23 @@
+[extend]
+# Use gitleaks default ruleset as the base
+useDefault = true
+
+[allowlist]
+description = "Project-level allowlist"
+
+# File path allowlists (regex patterns)
+paths = [
+    # Credential template contains placeholder values, not real secrets
+    '''test_credentials\.json\.template''',
+    # Test fixtures contain synthetic/mock data
+    '''tests/''',
+]
+
+# Pattern allowlists — these strings are not secrets
+regexes = [
+    # HA entity IDs are not secrets
+    '''sensor\.tandem_''',
+    # Template placeholder values
+    '''your-tandem-email@example\.com''',
+    '''your-home-assistant-long-lived-token''',
+]

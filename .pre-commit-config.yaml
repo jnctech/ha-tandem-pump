@@ -24,3 +24,8 @@ repos:
       - id: bandit
         args: [-c, bandit.yaml, -r]
         files: ^custom_components/
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks

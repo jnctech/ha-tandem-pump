@@ -4,7 +4,7 @@
   "service": "app",
   "workspaceFolder": "/workspace",
   "remoteUser": "vscode",
-  "postCreateCommand": "pip install --user -r requirements.txt",
+  "postCreateCommand": "pip install --user -r requirements.txt && echo 'postCreate complete'",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -20,7 +20,7 @@
         "[python]": {
           "editor.defaultFormatter": "charliermarsh.ruff"
         },
-        "python.defaultInterpreterPath": "/workspace/.venv/bin/python",
+        "python.defaultInterpreterPath": "/usr/local/bin/python3",
         "ruff.organizeImports": true
       }
     }

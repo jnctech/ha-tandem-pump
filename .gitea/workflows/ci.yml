@@ -1,9 +1,8 @@
 # Tandem Source — Gitea inner-loop CI
 #
 # Runner requirements:
-#   - Docker executor (Gitea Act runner)
-#   - Non-root user inside container
-#   - VLAN-restricted: outbound to Gitea server and PyPI only
+#   - Gitea Act runner (ubuntu-latest label)
+#   - Outbound: Gitea server, PyPI, GitHub (for actions/checkout, setup-python)
 #   - Minimum memory: 2GB
 #
 # Target: completes in < 3 minutes on a warm runner
@@ -22,10 +21,13 @@ jobs:
   ci:
     name: Lint · Format · Test · Security
     runs-on: ubuntu-latest
-    container: python:3.12-slim
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Install dependencies
         run: pip install -r requirements.txt

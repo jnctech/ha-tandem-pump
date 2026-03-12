@@ -1554,13 +1554,20 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE
 
         # ── Pump suspend/resume state ──────────────────────────────────
-        if suspend_resume:
-            last_sr = suspend_resume[-1]
-            is_suspended = last_sr.get("event_id") == 11
-            data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = "Suspended" if is_suspended else "Active"
-            suspend_reason = last_sr.get("suspend_reason") if is_suspended else None
-            data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] = suspend_reason if suspend_reason is not None else UNAVAILABLE
-        else:
+        try:
+            if suspend_resume:
+                last_sr = suspend_resume[-1]
+                is_suspended = last_sr.get("event_id") == 11
+                data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = "Suspended" if is_suspended else "Active"
+                suspend_reason = last_sr.get("suspend_reason") if is_suspended else None
+                data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] = (
+                    suspend_reason if suspend_reason is not None else UNAVAILABLE
+                )
+            else:
+                data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] = UNAVAILABLE
+        except Exception as e:
+            _LOGGER.warning("Error parsing suspend/resume: %s", e, exc_info=True)
             data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] = UNAVAILABLE
 

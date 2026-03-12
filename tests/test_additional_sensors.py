@@ -229,9 +229,9 @@ class TestPumpSuspendReason:
         assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Malfunction"
 
     async def test_suspend_reason_auto_plgs(self, hass: HomeAssistant):
-        """Suspend reason 'Auto-PLGS' passed through from API decoder."""
-        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason="Auto-PLGS")])
-        assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Auto-PLGS"
+        """Suspend reason 'Auto (PLGS)' passed through from API decoder."""
+        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason="Auto (PLGS)")])
+        assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Auto (PLGS)"
 
     async def test_resumed_event_reason_is_unavailable(self, hass: HomeAssistant):
         """Last event is a RESUME (event_id=12) — reason not applicable → UNAVAILABLE."""

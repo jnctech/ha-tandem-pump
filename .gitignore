@@ -196,8 +196,5 @@ VERSION
 .vscode/
 config/
 test_config/
-scripts/
-docker-compose.test.yml
-Dockerfile.test
 carelink-integration-preview.png
 branding/

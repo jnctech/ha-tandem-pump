@@ -1,0 +1,17 @@
+services:
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    volumes:
+      - .:/app:cached
+      - pip-cache:/home/testuser/.cache/pip
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge
+
+volumes:
+  pip-cache:

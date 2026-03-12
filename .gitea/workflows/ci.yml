@@ -39,7 +39,7 @@ jobs:
         run: python -m ruff format --check custom_components/carelink tests
 
       - name: Run tests
-        run: python -m pytest -v --tb=short
+        run: python -m pytest -v --tb=short --cov=custom_components/carelink --cov-report=term-missing
 
       - name: Bandit security scan
         run: |

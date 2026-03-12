@@ -38,6 +38,15 @@ def extract_string_constants(tree: ast.Module) -> dict[str, str]:
     return constants
 
 
+def _sensors_from_assign(node: ast.Assign, constants: dict[str, str]) -> list[dict]:
+    """Extract sensor dicts if node is the TANDEM_SENSORS assignment."""
+    for target in node.targets:
+        if isinstance(target, ast.Name) and target.id == "TANDEM_SENSORS":
+            if isinstance(node.value, ast.Tuple):
+                return [s for elt in node.value.elts if (s := _parse_sensor_description(elt, constants))]
+    return []
+
+
 def extract_sensor_descriptions(const_path: Path) -> list[dict]:
     """Parse TANDEM_SENSORS tuple from const.py using AST."""
     source = const_path.read_text(encoding="utf-8")
@@ -46,15 +55,8 @@ def extract_sensor_descriptions(const_path: Path) -> list[dict]:
 
     sensors: list[dict] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
-            continue
-        for target in node.targets:
-            if isinstance(target, ast.Name) and target.id == "TANDEM_SENSORS":
-                if isinstance(node.value, ast.Tuple):
-                    for elt in node.value.elts:
-                        sensor = _parse_sensor_description(elt, string_constants)
-                        if sensor:
-                            sensors.append(sensor)
+        if isinstance(node, ast.Assign):
+            sensors.extend(_sensors_from_assign(node, string_constants))
     return sensors
 
 
@@ -84,34 +86,23 @@ def _eval_value(node: ast.expr, constants: dict[str, str]) -> str | None:
     return None
 
 
+_CATEGORY_KEYWORDS: list[tuple[tuple[str, ...], str]] = [
+    (("glucose", "_sg_", "cgm", "gmi"), "Glucose / CGM"),
+    (("bolus", "insulin", "iob", "basal"), "Insulin Delivery"),
+    (("carb",), "Nutrition"),
+    (("time_in", "time_below", "time_above", "cgm_usage"), "Statistics"),
+    (("control_iq", "activity_mode", "suspended", "suspend_reason"), "Pump Control"),
+    (("cartridge", "site", "tubing"), "Consumables"),
+    (("upload", "update", "software", "serial", "model"), "Device Info"),
+    (("profile", "weight", "tdi", "max_bolus", "alert", "threshold", "limit"), "Settings"),
+]
+
+
 def _category_from_key(key: str) -> str:
-    if not key:
-        return "Other"
     k = key.lower()
-    if "glucose" in k or "_sg_" in k or "cgm" in k or "gmi" in k:
-        return "Glucose / CGM"
-    if "bolus" in k or "insulin" in k or "iob" in k or "basal" in k:
-        return "Insulin Delivery"
-    if "carb" in k:
-        return "Nutrition"
-    if "time_in" in k or "time_below" in k or "time_above" in k or "cgm_usage" in k:
-        return "Statistics"
-    if "control_iq" in k or "activity_mode" in k or "suspended" in k or "suspend_reason" in k:
-        return "Pump Control"
-    if "cartridge" in k or "site" in k or "tubing" in k:
-        return "Consumables"
-    if "upload" in k or "update" in k or "software" in k or "serial" in k or "model" in k:
-        return "Device Info"
-    if (
-        "profile" in k
-        or "weight" in k
-        or "tdi" in k
-        or "max_bolus" in k
-        or "alert" in k
-        or "threshold" in k
-        or "limit" in k
-    ):
-        return "Settings"
+    for keywords, category in _CATEGORY_KEYWORDS:
+        if any(kw in k for kw in keywords):
+            return category
     return "Other"
 
 

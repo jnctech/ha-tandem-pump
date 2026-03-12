@@ -2,7 +2,7 @@ FROM python:3.12-slim-bookworm
 
 # System deps — single layer, clean up apt cache
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl ca-certificates \
+    git curl ca-certificates gcc build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Gitleaks binary (pinned version)

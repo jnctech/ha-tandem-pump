@@ -52,4 +52,6 @@ jobs:
             | tar -xz -C /usr/local/bin gitleaks
 
       - name: Gitleaks secret scan (HEAD only)
-        run: gitleaks detect --source . --config .gitleaks.toml --log-opts "HEAD~1..HEAD" --redact
+        run: |
+          RANGE=$(git rev-parse --verify HEAD~1 2>/dev/null && echo "HEAD~1..HEAD" || echo "HEAD")
+          gitleaks detect --source . --config .gitleaks.toml --log-opts "$RANGE" --redact

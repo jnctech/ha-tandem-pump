@@ -138,7 +138,6 @@ from .const import (
     TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON,
     # Event-derived lookup maps
     CGM_STATUS_MAP,
-    SUSPEND_REASON_MAP,
     # Computed insulin summary
     TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN,
     TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL,
@@ -1559,11 +1558,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             last_sr = suspend_resume[-1]
             is_suspended = last_sr.get("event_id") == 11
             data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = "Suspended" if is_suspended else "Active"
-            reason = last_sr.get("suspend_reason") if is_suspended else None
-            suspend_reason = SUSPEND_REASON_MAP.get(reason)
-            if suspend_reason is None and reason is not None:
-                _LOGGER.debug("Tandem: Unknown suspend_reason code %r — update SUSPEND_REASON_MAP", reason)
-                suspend_reason = f"Unknown ({reason})"
+            suspend_reason = last_sr.get("suspend_reason") if is_suspended else None
             data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] = suspend_reason if suspend_reason is not None else UNAVAILABLE
         else:
             data[TANDEM_SENSOR_KEY_PUMP_SUSPENDED] = UNAVAILABLE

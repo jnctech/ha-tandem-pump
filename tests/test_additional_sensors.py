@@ -70,9 +70,14 @@ def _cartridge_event(
 def _suspend_event(
     seq: int = 1,
     event_id: int = 11,
-    suspend_reason: int | None = 0,
+    suspend_reason: str | None = "User",
     minutes_ago: int = 0,
 ) -> dict[str, Any]:
+    """Build a suspend/resume event matching tandem_api.py output.
+
+    suspend_reason is a human-readable string (e.g. "User", "Alarm")
+    as produced by tandem_api.py's binary decoder, not the raw int code.
+    """
     evt: dict[str, Any] = {
         "event_id": event_id,
         "event_name": "PumpingSuspended" if event_id == 11 else "PumpingResumed",
@@ -209,23 +214,23 @@ class TestPumpSuspendReason:
     """Tests for TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON from event 11."""
 
     async def test_suspend_reason_user(self, hass: HomeAssistant):
-        """Suspend reason 0 maps to 'User'."""
-        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason=0)])
+        """Suspend reason 'User' passed through from API decoder."""
+        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason="User")])
         assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "User"
 
     async def test_suspend_reason_alarm(self, hass: HomeAssistant):
-        """Suspend reason 1 maps to 'Alarm'."""
-        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason=1)])
+        """Suspend reason 'Alarm' passed through from API decoder."""
+        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason="Alarm")])
         assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Alarm"
 
     async def test_suspend_reason_malfunction(self, hass: HomeAssistant):
-        """Suspend reason 2 maps to 'Malfunction'."""
-        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason=2)])
+        """Suspend reason 'Malfunction' passed through from API decoder."""
+        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason="Malfunction")])
         assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Malfunction"
 
     async def test_suspend_reason_auto_plgs(self, hass: HomeAssistant):
-        """Suspend reason 3 maps to 'Auto-PLGS'."""
-        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason=3)])
+        """Suspend reason 'Auto-PLGS' passed through from API decoder."""
+        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason="Auto-PLGS")])
         assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Auto-PLGS"
 
     async def test_resumed_event_reason_is_unavailable(self, hass: HomeAssistant):
@@ -233,14 +238,14 @@ class TestPumpSuspendReason:
         coordinator = await _make_coordinator(hass, [_suspend_event(event_id=12, suspend_reason=None)])
         assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] is UNAVAILABLE
 
-    async def test_unknown_suspend_reason_returns_unknown_string(self, hass: HomeAssistant):
-        """Unrecognised suspend reason code returns 'Unknown (N)' string, not UNAVAILABLE.
+    async def test_unknown_suspend_reason_passed_through(self, hass: HomeAssistant):
+        """Unrecognised suspend reason from API decoder is passed through as-is.
 
-        This ensures a new firmware reason code is surfaced to the user rather than
-        silently appearing as unavailable (indistinguishable from "no suspend events").
+        tandem_api.py produces 'Reason_N' for unknown codes. The coordinator
+        passes it through without re-interpreting.
         """
-        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason=99)])
-        assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Unknown (99)"
+        coordinator = await _make_coordinator(hass, [_suspend_event(event_id=11, suspend_reason="Reason_99")])
+        assert coordinator.data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] == "Reason_99"
 
     async def test_no_suspend_events_is_unavailable(self, hass: HomeAssistant):
         """No suspend/resume events produces UNAVAILABLE for suspend reason."""

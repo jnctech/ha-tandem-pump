@@ -4,6 +4,23 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-003 — Fix Suspend Reason Lookup Bug (L-1)
+**Date:** 2026-03-12
+**Branch:** `bugfix/l1-suspend-reason`
+**Status:** Open
+
+### What Changed
+| Area | Change |
+|------|--------|
+| Coordinator | Removed redundant `SUSPEND_REASON_MAP` lookup — `suspend_reason` is already decoded to a human-readable string by `tandem_api.py` |
+| const.py | Removed unused `SUSPEND_REASON_MAP` constant |
+| Tests | Updated `_suspend_event` helper to pass string values matching real API output |
+
+### Finding Reference
+Baseline review L-1 (Medium): `SUSPEND_REASON_MAP` has int keys but `suspend_reason` field is a string from the API decoder. Lookup always returned `None`, producing `"Unknown (User)"` instead of `"User"`.
+
+---
+
 ## CR-002 — Engineering Controls Gap Closure
 **Date:** 2026-03-12
 **Branch:** `feature/test-gitea-ci`

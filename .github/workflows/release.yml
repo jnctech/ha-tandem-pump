@@ -31,7 +31,7 @@ jobs:
           output-file: sbom.spdx.json
 
       - name: Upload release asset
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@b98a3b12e86552593f3e4e577ca8a62aa2f3f22b  # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: carelink.zip

@@ -48,7 +48,7 @@ jobs:
 
       - name: Install Gitleaks
         run: |
-          curl -sSf --proto-redir -all,https \
+          curl -sSfL --proto-redir -all,https \
             https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
             | tar -xz -C /usr/local/bin gitleaks
 
@@ -59,7 +59,7 @@ jobs:
 
       - name: Hadolint (Dockerfile lint)
         run: |
-          curl -sSf --proto-redir -all,https \
+          curl -sSfL --proto-redir -all,https \
             https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 \
             -o /usr/local/bin/hadolint
           chmod +x /usr/local/bin/hadolint

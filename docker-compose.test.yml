@@ -6,9 +6,6 @@ services:
     volumes:
       - .:/app:cached
       - pip-cache:/home/testuser/.cache/pip
-    command: >
-      bash -c "pip install --user --quiet -r requirements.txt &&
-               python -m pytest -v --tb=short --cov=custom_components/carelink --cov-report=term-missing"
     networks:
       - test-network
 

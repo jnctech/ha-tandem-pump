@@ -1,0 +1,19 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - .:/workspace:cached
+      # pip cache persists across rebuilds
+      - pip-cache:/home/vscode/.cache/pip
+    networks:
+      - dev-network
+
+networks:
+  # Isolated bridge — no host network, no homelab VLAN
+  dev-network:
+    driver: bridge
+
+volumes:
+  pip-cache:

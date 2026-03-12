@@ -181,6 +181,8 @@ tandem_api_response.json
 carelink_api_response.json
 *_api_response.json
 api_debug_*.json
+# Exception: sanitised test fixtures in tests/ are safe to commit
+!tests/fixtures/*.json
 
 # Local testing files
 local_test_*.py
@@ -196,8 +198,5 @@ VERSION
 .vscode/
 config/
 test_config/
-scripts/
-docker-compose.test.yml
-Dockerfile.test
 carelink-integration-preview.png
 branding/

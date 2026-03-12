@@ -23,11 +23,25 @@ jobs:
       - name: Create release zip
         run: cd custom_components && zip -r ../carelink.zip carelink/
 
+      - name: Generate SBOM
+        uses: anchore/sbom-action@57aae528053a48a3f6235f2d9461b05fbcb7366d  # v0
+        with:
+          path: custom_components/carelink/
+          format: spdx-json
+          output-file: sbom.spdx.json
+
       - name: Upload release asset
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@b98a3b12e86552593f3e4e577ca8a62aa2f3f22b  # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: carelink.zip
           asset_name: carelink-${{ steps.version.outputs.version }}.zip
           tag: ${{ github.ref }}
           overwrite: true
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ steps.version.outputs.version }}
+          path: sbom.spdx.json
+          retention-days: 90

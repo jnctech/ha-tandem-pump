@@ -81,3 +81,79 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: home-assistant/actions/hassfest@master
+
+  dependency-audit:
+    name: Dependency vulnerability check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run pip-audit
+        run: |
+          pip install pip-audit
+          python -c "
+          import json
+          manifest = json.load(open('custom_components/carelink/manifest.json'))
+          print('\n'.join(manifest.get('requirements', [])))
+          " > /tmp/runtime-requirements.txt
+          cat /tmp/runtime-requirements.txt
+          pip-audit -r /tmp/runtime-requirements.txt
+
+  lint-dockerfiles:
+    name: Dockerfile lint (hadolint)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint Dockerfile.test
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf  # v3.1.0
+        with:
+          dockerfile: Dockerfile.test
+          ignore: DL3008  # apt version pinning impractical; we use --no-install-recommends
+
+      - name: Lint .devcontainer/Dockerfile
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf  # v3.1.0
+        with:
+          dockerfile: .devcontainer/Dockerfile
+          ignore: DL3008  # apt version pinning impractical; we use --no-install-recommends
+
+  lint-actions:
+    name: GitHub Actions lint (actionlint)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run actionlint
+        run: |
+          curl -sSfL --proto-redir -all,https \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz \
+            | tar -xz actionlint
+          ./actionlint -color
+
+  secrets:
+    name: Secret scanning - Gitleaks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_ENABLE_COMMENTS: false

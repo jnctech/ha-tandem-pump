@@ -1,0 +1,21 @@
+FROM python:3.12-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential gcc git \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -s /bin/bash testuser
+USER testuser
+
+ENV PATH=/home/testuser/.local/bin:$PATH
+
+WORKDIR /app
+
+# Copy requirements first for layer caching
+COPY --chown=testuser:testuser requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# Copy source (overridden by bind mount in compose)
+COPY --chown=testuser:testuser . .
+
+ENTRYPOINT ["python", "-m", "pytest"]
+CMD ["-v", "--tb=short", "--cov=custom_components/carelink", "--cov-report=term-missing"]

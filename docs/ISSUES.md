@@ -8,8 +8,8 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 ## Current Priorities
 
 1. ~~**Deploy & verify**~~ — ✅ Done 2026-03-13
-2. **ISS-010** — Architecture Decision Records (in progress — docs/adr-initial branch)
-3. **ISS-011** — Review upstream changes (battery/reservoir improvements)
+2. **ISS-010** — ADRs + templates done; tooling + ADR-007/008 remaining
+3. **ISS-011** — Upstream review complete; Phase 1 (battery monitoring) next
 4. **ISS-005** — tandem_api.py coverage gap
 5. Remaining baseline findings (D-1, L-5, D-2, S-4, S-5)
 
@@ -21,40 +21,43 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 **Type:** Documentation / Engineering Practice
 **Priority:** Medium
 **Created:** 2026-03-13
-**Status:** 🔵 Active — planned, not started
+**Status:** 🟢 Active — ADRs + templates done, tooling remaining
 
-No formal architecture decision records exist. Design knowledge is scattered across CLAUDE.md (AI-only), code comments, and baseline review findings.
+**Done:**
+- ✅ ADR-001 through ADR-006 (PR #41, merged)
+- ✅ PR template + issue templates (PR #42, merged)
 
-**Scope:**
-- Create `docs/decisions/` directory with ADR template
-- Write ADR-001 through ADR-006 (content outlined in session plan 2026-03-13):
-  - ADR-001: Two LTS data paths (explicit imports vs sensor state_class)
-  - ADR-002: Sensor state_class strategy
-  - ADR-003: Polling interval and data freshness
-  - ADR-004: Error handling philosophy
-  - ADR-005: Timezone handling strategy
-  - ADR-006: API contract management
-- ADR-007 (test coverage targets) and ADR-008 (unit consistency) need further research
-- Create `.github/pull_request_template.md` and issue templates
-- Additional tooling: CHANGELOG.md, release checklist, pre-push hook
+**Remaining:**
+- ADR-007 (test coverage targets) — needs research
+- ADR-008 (unit consistency: "U" vs "units") — needs research
+- CHANGELOG.md + generator
+- Release checklist action
+- Pre-push hook
+- Commit message validation
+- Dependency pinning
 
-**Branch:** `docs/adr-initial` (ADRs), `chore/github-templates` (templates)
-**Reference:** Plan file `peaceful-sauteeing-star.md` has full gap analysis and tooling recommendations
+**Reference:** Plan file `peaceful-sauteeing-star.md`
 
-### ISS-011 — Review Upstream Changes (Battery & Reservoir)
-**Type:** Upstream Sync / Feature
-**Priority:** Medium
+### ISS-011 — Tandem API Expansion (Battery & Beyond)
+**Type:** Feature / Upstream Sync
+**Priority:** High
 **Created:** 2026-03-13
-**Status:** 🔵 Active — flagged, not started
-**Reference:** Session note `review-upstream-changes-wjqgX`
+**Status:** 🟢 Active — investigation complete, Phase 1 implementation next
 
-Upstream (noiwid/HAFamilyLink) may have improvements to battery and reservoir sensor handling that are relevant to decision-making in the household (low insulin, low battery alerts). Need to:
-- Review upstream commits since our fork point (`ac6f2a3`)
-- Identify battery/reservoir changes worth backporting
-- Assess impact on existing sensor definitions and alert thresholds
-- Decision: adopt upstream changes, adapt them, or document why our approach differs
+Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `ac6f2a3`) found **no new battery/reservoir sensors upstream**. However, investigation revealed battery data IS available in the Tandem Source API via event IDs we don't currently request.
 
-**Why important:** Battery level and cartridge insulin are used for time-sensitive alerts (e.g., "insulin reservoir low — need to change cartridge"). Improvements to accuracy or alerting in upstream are high-value.
+**Key finding:** Event ID 81 (DailyBasal) and 53 (ShelfMode) contain battery %, voltage, and mAh data. The pump uploads these daily — we just need to add them to our event request and decode them.
+
+**6-phase implementation plan** in `docs/plan-tandem-api-expansion.md` (PR #43):
+1. **Phase 1: Battery Monitoring** — events 81, 53, 36, 37 (CRITICAL — next)
+2. Phase 2: Alerts & Alarms — events 4, 5, 6, 26, 28
+3. Phase 3: G7 & Libre 2 CGM — events 399, 372, 313
+4. Phase 4: Bolus Calculator — events 64, 65, 66
+5. Phase 5: PLGS & Daily Status — events 140, 90
+6. Phase 6: Estimated Remaining Insulin — computed from existing events
+
+**Branch:** `claude/review-upstream-changes-wjqgX` (investigation docs — PR #43)
+**Reference:** `docs/upstream-review-2026-03-12.md`, `docs/plan-tandem-api-expansion.md`
 
 ---
 

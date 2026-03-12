@@ -28,6 +28,7 @@ Existing HA long-term statistics for affected sensors will stop accumulating. No
 ## CR-003 — Fix Suspend Reason Lookup Bug (L-1)
 **Date:** 2026-03-12
 **Branch:** `bugfix/l1-suspend-reason`
+**PR:** [#39](https://github.com/jnctech/ha-tandem-pump/pull/39)
 **Status:** Merged to `develop`
 
 ### What Changed

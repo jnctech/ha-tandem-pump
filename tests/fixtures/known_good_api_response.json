@@ -1,0 +1,107 @@
+{
+  "_comment": "Sanitised known-good API response fixture. Real values replaced with typed placeholders. Update this file when a field changes or a new field is added/removed. Run scripts/check_api_drift.py to validate.",
+
+  "pump_event_metadata_response": [
+    {
+      "tconnectDeviceId": 12345,
+      "serialNumber": "SERIALXXX",
+      "modelNumber": "MODEL-1234",
+      "maxDateWithEvents": "2026-01-01T00:00:00",
+      "lastUpload": {
+        "uploadId": "upload-uuid-placeholder",
+        "lastUploadedAt": "2026-01-01T00:00:00",
+        "settings": {
+          "profiles": {
+            "activeIdp": 1,
+            "profile": [
+              {
+                "basalRate": 1.0,
+                "startTime": 0,
+                "isf": 50,
+                "carbRatio": 10000,
+                "targetBg": 100
+              }
+            ]
+          },
+          "controlIQSettings": {
+            "ClosedLoop": true,
+            "Weight": 80.0,
+            "TotalDailyInsulin": 30.0
+          },
+          "pumpSettings": {
+            "maxBolus": 10.0,
+            "basalLimit": 5.0
+          },
+          "cgmSettings": {
+            "highGlucoseAlert": {
+              "mgPerDl": 250
+            },
+            "lowGlucoseAlert": {
+              "mgPerDl": 70
+            }
+          },
+          "alertsAndReminders": {
+            "lowBgThreshold": 65,
+            "highBgThreshold": 300,
+            "lowInsulinThreshold": 10.0
+          }
+        }
+      },
+      "softwareVersion": "1.2.3",
+      "partNumber": "PART-001"
+    }
+  ],
+
+  "pumper_info_response": {
+    "pumperId": "pumper-uuid-placeholder",
+    "accountId": "account-uuid-placeholder"
+  },
+
+  "jwt_claims": {
+    "pumperId": "pumper-uuid-placeholder",
+    "accountId": "account-uuid-placeholder",
+    "sub": "subject-placeholder",
+    "iss": "https://tdcservices.eu.tandemdiabetes.com/accounts/api"
+  },
+
+  "_drift_check": {
+    "_comment": "Canonical field lists used by check_api_drift.py. Fields here must be referenced in source code via .get() or []. Update when the API changes.",
+
+    "pump_event_metadata_fields": [
+      "tconnectDeviceId",
+      "serialNumber",
+      "modelNumber",
+      "maxDateWithEvents",
+      "lastUpload",
+      "softwareVersion"
+    ],
+
+    "last_upload_settings_fields": [
+      "lastUploadedAt",
+      "settings",
+      "profiles",
+      "activeIdp",
+      "profile",
+      "controlIQSettings",
+      "ClosedLoop",
+      "Weight",
+      "TotalDailyInsulin",
+      "pumpSettings",
+      "maxBolus",
+      "basalLimit",
+      "cgmSettings",
+      "highGlucoseAlert",
+      "lowGlucoseAlert",
+      "mgPerDl",
+      "alertsAndReminders",
+      "lowBgThreshold",
+      "highBgThreshold",
+      "lowInsulinThreshold"
+    ],
+
+    "jwt_claim_fields": [
+      "pumperId",
+      "accountId"
+    ]
+  }
+}

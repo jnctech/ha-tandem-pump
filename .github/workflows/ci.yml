@@ -118,11 +118,13 @@ jobs:
         uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf  # v3.1.0
         with:
           dockerfile: Dockerfile.test
+          ignore: DL3008  # apt version pinning impractical; we use --no-install-recommends
 
       - name: Lint .devcontainer/Dockerfile
         uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf  # v3.1.0
         with:
           dockerfile: .devcontainer/Dockerfile
+          ignore: DL3008  # apt version pinning impractical; we use --no-install-recommends
 
   lint-actions:
     name: GitHub Actions lint (actionlint)
@@ -135,7 +137,7 @@ jobs:
       - name: Run actionlint
         run: |
           ACTIONLINT_VERSION=1.7.7
-          curl -sSf --proto-redir -all,https \
+          curl -sSfL --proto-redir -all,https \
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
             | tar -xz actionlint
           ./actionlint -color

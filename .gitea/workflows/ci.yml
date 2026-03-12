@@ -67,7 +67,7 @@ jobs:
 
       - name: Actionlint (workflow lint)
         run: |
-          curl -sSf --proto-redir -all,https \
+          curl -sSfL --proto-redir -all,https \
             https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz \
             | tar -xz actionlint
           ./actionlint -color

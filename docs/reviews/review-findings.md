@@ -10,9 +10,9 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | L-5 | Low | OPEN | — | Profile `idp` matching may silently fail |
 | D-1 | Medium | OPEN | — | No binary event fixture |
 | D-2 | Low | OPEN | — | `partNumber` missing from drift check |
-| S-1 | Medium | OPEN | — | state_class=MEASUREMENT on discrete events |
+| S-1 | Medium | FIXED | fix/sensor-state-class | state_class=MEASUREMENT on discrete events |
 | S-2 | Low | DEFERRED | — | Inconsistent insulin unit strings (next major) |
-| S-3 | Medium | OPEN | — | Daily totals use MEASUREMENT |
+| S-3 | Medium | FIXED | fix/sensor-state-class | Daily totals use MEASUREMENT |
 | S-4 | Low | OPEN | — | Threshold sensors missing BLOOD_GLUCOSE |
 | S-5 | Low | OPEN | — | suggested_display_precision not set |
 

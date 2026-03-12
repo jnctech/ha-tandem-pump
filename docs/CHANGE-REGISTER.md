@@ -4,6 +4,40 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-005 — Battery Monitoring Sensors (ISS-011 Phase 1)
+**Date:** 2026-03-12
+**Branch:** `feat/phase1-battery-monitoring`
+**PR:** [#45](https://github.com/jnctech/ha-tandem-pump/pull/45)
+**Status:** Merged to `develop`
+**Deployed:** Pending — needs scp + ha core restart
+
+### What Changed
+| Area | Change |
+|------|--------|
+| tandem_api.py | Added event constants EVT_USB_CONNECTED (36), EVT_USB_DISCONNECTED (37), EVT_SHELF_MODE (53), EVT_DAILY_BASAL (81); added 4 binary decoders; added event IDs to API request |
+| const.py | Added 4 sensor keys (battery %, voltage mV, remaining mAh, charging status) + SensorEntityDescription entries |
+| __init__.py | Added battery sensor categorisation with DailyBasal/ShelfMode priority logic, USB charging status detection |
+| tests | 20 new tests: 11 decoder tests (TestBatteryEventDecoders) + 9 coordinator tests (TestBatterySensorPopulation) |
+
+### Finding Reference
+- ISS-011 Phase 1 — battery data available in Tandem Source API via event IDs not previously requested
+- Battery % formula from tconnectsync: `min(100, max(0, round((256 * (MSB - 14) + LSB) / (3 * 256) * 100, 1)))`
+
+### Quality Gate Results (at merge)
+| Metric | Value | Gate |
+|--------|-------|------|
+| Coverage | 83%+ | ≥80% ✅ |
+| Tests | 568 passed | — ✅ |
+| Bugs/Vulns/Smells | Grade A | Grade A ✅ |
+
+### Post-Deploy Actions
+- [ ] scp updated files to HA (`tandem_api.py`, `const.py`, `__init__.py`)
+- [ ] `ha core restart`
+- [ ] Verify 4 new battery entities appear (battery %, voltage, remaining mAh, charging status)
+- [ ] Confirm battery % matches pump display (within daily update cadence)
+
+---
+
 ## CR-004 — Fix Sensor state_class Metadata (S-1, S-3)
 **Date:** 2026-03-12
 **Branch:** `fix/sensor-state-class`

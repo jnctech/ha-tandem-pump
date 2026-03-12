@@ -7,9 +7,9 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 
 ## Current Priorities
 
-1. ~~**Deploy & verify**~~ — ✅ Done 2026-03-13
+1. **ISS-011 Phase 1** — ✅ Battery monitoring merged (PR #45); **needs deploy & verify**
 2. **ISS-010** — ADRs + templates done; tooling + ADR-007/008 remaining
-3. **ISS-011** — Upstream review complete; Phase 1 (battery monitoring) next
+3. **ISS-011 Phase 2+** — Alerts, CGM, Bolus Calculator, PLGS, ERI
 4. **ISS-005** — tandem_api.py coverage gap
 5. Remaining baseline findings (D-1, L-5, D-2, S-4, S-5)
 
@@ -42,21 +42,26 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 **Type:** Feature / Upstream Sync
 **Priority:** High
 **Created:** 2026-03-13
-**Status:** 🟢 Active — investigation complete, Phase 1 implementation next
+**Status:** 🟢 Active — Phase 1 complete (PR #45 merged), needs deploy & verify
 
-Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `ac6f2a3`) found **no new battery/reservoir sensors upstream**. However, investigation revealed battery data IS available in the Tandem Source API via event IDs we don't currently request.
+Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `ac6f2a3`) found **no new battery/reservoir sensors upstream**. Battery data IS available in the Tandem Source API via event IDs not previously requested.
 
-**Key finding:** Event ID 81 (DailyBasal) and 53 (ShelfMode) contain battery %, voltage, and mAh data. The pump uploads these daily — we just need to add them to our event request and decode them.
+**Phase 1 (Battery Monitoring) — ✅ Complete:**
+- PR #43: Investigation docs (upstream review + 6-phase plan) — merged
+- PR #44: Housekeeping (ISSUES.md updates) — merged
+- PR #45: Battery monitoring implementation — merged
+- 4 new sensors: battery %, voltage (mV), remaining (mAh), charging status
+- 20 new tests, 568 total passing
+- **Pending:** deploy to HA and verify entities. See CR-005.
 
-**6-phase implementation plan** in `docs/plan-tandem-api-expansion.md` (PR #43):
-1. **Phase 1: Battery Monitoring** — events 81, 53, 36, 37 (CRITICAL — next)
+**Remaining phases:**
+1. ~~Phase 1: Battery Monitoring~~ — ✅ Done
 2. Phase 2: Alerts & Alarms — events 4, 5, 6, 26, 28
 3. Phase 3: G7 & Libre 2 CGM — events 399, 372, 313
 4. Phase 4: Bolus Calculator — events 64, 65, 66
 5. Phase 5: PLGS & Daily Status — events 140, 90
 6. Phase 6: Estimated Remaining Insulin — computed from existing events
 
-**Branch:** `claude/review-upstream-changes-wjqgX` (investigation docs — PR #43)
 **Reference:** `docs/upstream-review-2026-03-12.md`, `docs/plan-tandem-api-expansion.md`
 
 ---

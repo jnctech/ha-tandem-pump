@@ -13,6 +13,8 @@ RUN curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gi
 RUN useradd -m -s /bin/bash vscode
 USER vscode
 
+ENV PATH=/home/vscode/.local/bin:$PATH
+
 WORKDIR /workspace
 
 CMD ["sleep", "infinity"]

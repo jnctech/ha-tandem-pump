@@ -18,6 +18,8 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | R-8 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | Missing insulin_delivered/timestamps silently default to 0/skip — added warnings and debug logs |
 | R-9 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | error→warning at call site for consistency with other event parsers |
 | R-10 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | Negative basal time interval not clamped — could inflate remaining. Added max(0.0, ...) floor |
+| R-11 | Critical | FIXED | feature/estimated-insulin-remaining-phase6 | Partial state mutation before exception corrupts accumulator permanently — refactored to compute-then-commit pattern with local variables |
+| R-12 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | _last_delivery_seq not advanced for zero-delivery events — causes repeated processing. Now always advances |
 | B-2 | Low | OPEN | — | carb_ratio 1000x multiplier from tconnectsync spec — cannot validate without real capture |
 | D-1 | Medium | OPEN | — | No binary event fixture |
 | C-1 | High | FIXED | feature/cgm-g7-libre2-phase3 | Magic event IDs in coordinator — replaced ALL with EVT_* constants from tandem_api |

@@ -2637,42 +2637,48 @@ class TandemCoordinator(DataUpdateCoordinator):
         double-counting (overlapping API windows) and drift (events aging
         out of the 14-day window). A new cartridge fill resets the accumulator.
 
+        All computation uses local variables; self._ state is only committed
+        atomically at the end to prevent partial state corruption on exceptions.
+
         State is lost on HA restart — sensor shows UNAVAILABLE until a
         cartridge fill event appears in the window.
         """
+        # Snapshot coordinator state into locals for atomic update
+        local_fill_seq = self._last_cartridge_fill_seq
+        local_fill_volume = self._last_cartridge_fill_volume
+        local_cumulative = self._cumulative_delivered
+        local_del_seq = self._last_delivery_seq
+        fill_reset = False
+
         # Check for a new cartridge fill — resets the accumulator
         if cartridge_fills:
             latest_fill = cartridge_fills[-1]
             fill_seq = latest_fill.get("seq", 0)
             fill_volume = latest_fill.get("insulin_volume", 0)
-            if fill_seq > self._last_cartridge_fill_seq and fill_volume and fill_volume > 0:
-                self._last_cartridge_fill_seq = fill_seq
-                self._last_cartridge_fill_volume = float(fill_volume)
-                self._cumulative_delivered = 0.0
-                self._last_delivery_seq = fill_seq
-                _LOGGER.debug(
-                    "New cartridge fill: %.1f U (seq=%d), reset accumulator",
-                    fill_volume,
-                    fill_seq,
-                )
+            if fill_seq > local_fill_seq and fill_volume and fill_volume > 0:
+                local_fill_seq = fill_seq
+                local_fill_volume = float(fill_volume)
+                local_cumulative = 0.0
+                local_del_seq = fill_seq
+                fill_reset = True
 
         # No fill volume known — cannot compute
-        if self._last_cartridge_fill_volume <= 0:
+        if local_fill_volume <= 0:
             _LOGGER.debug("No cartridge fill volume known — insulin remaining unavailable")
             data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] = UNAVAILABLE
             return
 
-        # Accumulate only NEW deliveries (seq > _last_delivery_seq)
+        # Accumulate only NEW deliveries (seq > local_del_seq)
         new_bolus = 0.0
         new_basal = 0.0
-        max_new_seq = self._last_delivery_seq
+        max_new_seq = local_del_seq
 
         for b in bolus_completed + bolex_completed:
             seq = b.get("seq")
             if seq is None:
                 _LOGGER.warning("Bolus event missing seq field, skipping")
                 continue
-            if seq > self._last_delivery_seq:
+            if seq > local_del_seq:
                 delivered = b.get("insulin_delivered")
                 if delivered is None:
                     _LOGGER.warning("Bolus seq=%d missing insulin_delivered", seq)
@@ -2680,10 +2686,8 @@ class TandemCoordinator(DataUpdateCoordinator):
                 new_bolus += delivered
                 max_new_seq = max(max_new_seq, seq)
 
-        # Basal: only count new delivery events (seq > last_delivery_seq)
-        new_basal_events = [
-            b for b in basal_delivery if b.get("seq") is not None and b.get("seq") > self._last_delivery_seq
-        ]
+        # Basal: only count new delivery events (seq > local_del_seq)
+        new_basal_events = [b for b in basal_delivery if b.get("seq") is not None and b.get("seq") > local_del_seq]
         if new_basal_events:
             sorted_basal = sorted(new_basal_events, key=lambda e: e.get("seq", 0))
             for i in range(len(sorted_basal) - 1):
@@ -2704,13 +2708,23 @@ class TandemCoordinator(DataUpdateCoordinator):
             new_basal += last_rate * (5.0 / 60.0)
             max_new_seq = max(max_new_seq, sorted_basal[-1].get("seq", 0))
 
-        # Update cumulative state
-        if new_bolus > 0 or new_basal > 0:
-            self._cumulative_delivered += new_bolus + new_basal
-            self._last_delivery_seq = max_new_seq
+        # Compute result
+        local_cumulative += new_bolus + new_basal
+        estimated = max(0.0, local_fill_volume - local_cumulative)
 
-        estimated = max(0.0, self._last_cartridge_fill_volume - self._cumulative_delivered)
+        # Atomic commit — only reached if no exception above
+        self._last_cartridge_fill_seq = local_fill_seq
+        self._last_cartridge_fill_volume = local_fill_volume
+        self._cumulative_delivered = local_cumulative
+        self._last_delivery_seq = max_new_seq
         data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] = round(estimated, 1)
+
+        if fill_reset:
+            _LOGGER.debug(
+                "New cartridge fill: %.1f U (seq=%d), reset accumulator",
+                local_fill_volume,
+                local_fill_seq,
+            )
 
         _LOGGER.debug(
             "Estimated insulin remaining: %.1f U "

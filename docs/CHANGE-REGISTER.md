@@ -85,8 +85,8 @@ Estimated remaining insulin is the most-requested missing sensor — it tracks h
 ### Review Gate Results
 | Gate | Result |
 |------|--------|
-| silent-failure-hunter | 6 findings, all addressed |
-| code-reviewer | 1 critical (drift bug), fixed with cumulative rewrite |
+| silent-failure-hunter | 10 findings (R-1 to R-9), all addressed — missing seq/field guards, logging, error→warning |
+| code-reviewer | 1 finding (R-10): negative basal interval — fixed with max(0.0, ...) clamp |
 
 ### Quality Gate Results (at branch)
 | Metric | Value | Gate |

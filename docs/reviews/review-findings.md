@@ -14,6 +14,10 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | R-4 | Low | FIXED | feature/estimated-insulin-remaining-phase6 | Direct ["timestamp"] access could raise KeyError — changed to .get() with guards |
 | R-5 | Low | FIXED | feature/estimated-insulin-remaining-phase6 | No debug logging on cartridge fill reset — added |
 | R-6 | Low | FIXED | feature/estimated-insulin-remaining-phase6 | No debug logging when fill volume unknown — added |
+| R-7 | High | FIXED | feature/estimated-insulin-remaining-phase6 | Missing seq defaults to 0 — silently excludes deliveries, over-reports remaining (dangerous direction). Added explicit None guards and warnings |
+| R-8 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | Missing insulin_delivered/timestamps silently default to 0/skip — added warnings and debug logs |
+| R-9 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | error→warning at call site for consistency with other event parsers |
+| R-10 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | Negative basal time interval not clamped — could inflate remaining. Added max(0.0, ...) floor |
 | B-2 | Low | OPEN | — | carb_ratio 1000x multiplier from tconnectsync spec — cannot validate without real capture |
 | D-1 | Medium | OPEN | — | No binary event fixture |
 | C-1 | High | FIXED | feature/cgm-g7-libre2-phase3 | Magic event IDs in coordinator — replaced ALL with EVT_* constants from tandem_api |

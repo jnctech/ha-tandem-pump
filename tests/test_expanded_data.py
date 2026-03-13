@@ -844,7 +844,7 @@ class TestBatteryEventDecoders:
         assert evt["last_basal_rate"] == 0.8
         assert evt["iob"] == 3.2
         assert evt["battery_percent"] == 83.3
-        assert evt["battery_voltage_mv"] == 3900
+        assert "battery_voltage_mv" not in evt  # voltage only from ShelfMode
 
     def test_daily_basal_battery_formula_zero_percent(self):
         """Battery formula clamps to 0% for low MSB values."""
@@ -898,10 +898,13 @@ def _make_daily_basal_event(
     seq: int,
     battery_pct_msb: int = 16,
     battery_pct_lsb: int = 128,
-    battery_mv: int = 3900,
     minutes_ago: int = 0,
 ) -> dict:
-    """Create a pre-decoded DailyBasal event dict (as coordinator receives it)."""
+    """Create a pre-decoded DailyBasal event dict (as coordinator receives it).
+
+    DailyBasal no longer includes battery_voltage_mv — the raw value at
+    offset 14 is not actual millivolts.  Voltage comes from ShelfMode only.
+    """
     ts = BASE_TS - timedelta(minutes=minutes_ago)
     battery_pct = min(100, max(0, round((256 * (battery_pct_msb - 14) + battery_pct_lsb) / (3 * 256) * 100, 1)))
     return {
@@ -913,7 +916,6 @@ def _make_daily_basal_event(
         "last_basal_rate": 0.8,
         "iob": 2.5,
         "battery_percent": battery_pct,
-        "battery_voltage_mv": battery_mv,
     }
 
 
@@ -965,16 +967,17 @@ class TestBatterySensorPopulation:
     """Test coordinator battery sensor population from events 36, 37, 53, 81."""
 
     async def test_daily_basal_provides_battery(self, hass: HomeAssistant):
-        """DailyBasal event populates battery % and voltage."""
+        """DailyBasal event populates battery % but not voltage."""
         events = [
             _make_cgm_event(1, 120),
-            _make_daily_basal_event(2, battery_pct_msb=16, battery_pct_lsb=128, battery_mv=3900),
+            _make_daily_basal_event(2, battery_pct_msb=16, battery_pct_lsb=128),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
 
         assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 83.3
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3900
+        # Voltage only comes from ShelfMode (DailyBasal raw value is not mV)
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] is UNAVAILABLE
         # mAh only comes from ShelfMode
         assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] is UNAVAILABLE
 
@@ -995,7 +998,7 @@ class TestBatterySensorPopulation:
         """When ShelfMode is newer than DailyBasal, ShelfMode values win."""
         events = [
             _make_cgm_event(1, 120),
-            _make_daily_basal_event(2, battery_pct_msb=16, battery_pct_lsb=128, battery_mv=3900, minutes_ago=30),
+            _make_daily_basal_event(2, battery_pct_msb=16, battery_pct_lsb=128, minutes_ago=30),
             _make_shelf_mode_event(3, battery_pct=72, battery_mv=3800, battery_mah=260, minutes_ago=5),
         ]
         data = _make_pump_events_data(events)
@@ -1005,19 +1008,20 @@ class TestBatterySensorPopulation:
         assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3800
         assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] == 260
 
-    async def test_daily_basal_newer_keeps_daily_basal(self, hass: HomeAssistant):
-        """When DailyBasal is newer than ShelfMode, DailyBasal % and voltage win, mAh from ShelfMode."""
+    async def test_daily_basal_newer_keeps_daily_basal_pct(self, hass: HomeAssistant):
+        """When DailyBasal is newer than ShelfMode, DailyBasal % wins, voltage from ShelfMode."""
         events = [
             _make_cgm_event(1, 120),
             _make_shelf_mode_event(2, battery_pct=80, battery_mv=3900, battery_mah=300, minutes_ago=60),
-            _make_daily_basal_event(3, battery_pct_msb=16, battery_pct_lsb=128, battery_mv=3850, minutes_ago=5),
+            _make_daily_basal_event(3, battery_pct_msb=16, battery_pct_lsb=128, minutes_ago=5),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
 
-        # DailyBasal is newer → its % and voltage used
+        # DailyBasal is newer → its % used
         assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 83.3
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3850
+        # Voltage always from ShelfMode (DailyBasal raw value is not mV)
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3900
         # mAh still comes from ShelfMode (only source)
         assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] == 300
 
@@ -1070,7 +1074,7 @@ class TestBatterySensorPopulation:
         """All battery event types present — most recent values used."""
         events = [
             _make_cgm_event(1, 120),
-            _make_daily_basal_event(2, battery_pct_msb=16, battery_pct_lsb=128, battery_mv=3900, minutes_ago=60),
+            _make_daily_basal_event(2, battery_pct_msb=16, battery_pct_lsb=128, minutes_ago=60),
             _make_shelf_mode_event(3, battery_pct=70, battery_mv=3800, battery_mah=250, minutes_ago=30),
             _make_usb_connected_event(4, minutes_ago=10),
         ]

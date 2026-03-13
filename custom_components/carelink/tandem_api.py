@@ -316,14 +316,15 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             iob = struct.unpack_from(">f", payload, 8)[0]
             battery_msb_raw = struct.unpack_from(">B", payload, 12)[0]
             battery_lsb_raw = struct.unpack_from(">B", payload, 13)[0]
-            battery_mv = struct.unpack_from(">H", payload, 14)[0]
+            # Bytes 14-15 are NOT millivolts in DailyBasal — raw value is
+            # unreliable (e.g. 25344 vs ShelfMode's 3722 mV). Omit voltage;
+            # ShelfMode provides the accurate reading.
             # Battery % formula from tconnectsync transforms.py
             battery_pct = min(100, max(0, round((256 * (battery_msb_raw - 14) + battery_lsb_raw) / (3 * 256) * 100, 1)))
             evt["daily_total_basal"] = round(daily_total_basal, 2)
             evt["last_basal_rate"] = round(last_basal_rate, 3)
             evt["iob"] = round(iob, 2)
             evt["battery_percent"] = battery_pct
-            evt["battery_voltage_mv"] = battery_mv
 
         else:
             evt["event_name"] = f"Event_{event_id}"

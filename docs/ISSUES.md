@@ -41,7 +41,7 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 **Type:** Feature / Upstream Sync
 **Priority:** High
 **Created:** 2026-03-13
-**Status:** 🟢 Active — Phase 3 merged, Phase 4 next
+**Status:** 🟢 Active — Phase 4 in progress (PR pending)
 
 Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `ac6f2a3`) found **no new battery/reservoir sensors upstream**. Battery data IS available in the Tandem Source API via event IDs not previously requested.
 
@@ -74,11 +74,18 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 - 19 new tests (11 decoder + 8 coordinator), 613 total passing
 - See CR-010
 
+**Phase 4 (Bolus Calculator) — ✅ Code complete, PR pending:**
+- Branch: `feature/bolus-calculator-phase4`
+- 5 new sensors: last_bolus_bg, last_bolus_carbs_entered, last_bolus_correction, last_bolus_food_portion, bolus_calculator_attributes
+- 3-way join by BolusID across events 64/65/66
+- 12 new tests (6 decoder + 6 coordinator), 625 total passing
+- See CR-011
+
 **Remaining phases:**
 1. ~~Phase 1: Battery Monitoring~~ — ✅ Done
 2. ~~Phase 2: Alerts & Alarms~~ — ✅ Done
 3. ~~Phase 3: G7 & Libre 2 CGM~~ — ✅ Merged (PR #50, #51)
-4. Phase 4: Bolus Calculator — events 64, 65, 66
+4. ~~Phase 4: Bolus Calculator~~ — ✅ Code complete (PR pending)
 5. Phase 5: PLGS & Daily Status — events 140, 90
 6. Phase 6: Estimated Remaining Insulin — computed from existing events
 

@@ -7,9 +7,9 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 
 ## Current Priorities
 
-1. **ISS-011 Phase 1** — ✅ Deployed & verified (2026-03-13)
+1. **ISS-011 Phase 2** — ✅ Deployed & verified (2026-03-13)
 2. **ISS-010** — ADRs + templates done; tooling + ADR-007/008 remaining
-3. **ISS-011 Phase 2+** — Alerts, CGM, Bolus Calculator, PLGS, ERI
+3. **ISS-011 Phase 3+** — CGM, Bolus Calculator, PLGS, ERI
 4. **ISS-005** — tandem_api.py coverage gap
 5. Remaining baseline findings (D-1, L-5, D-2, S-4, S-5)
 
@@ -59,8 +59,8 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 - ✅ Deployed & verified 2026-03-13. See CR-005, CR-006.
 - ⚠️ Battery voltage (18944 mV) may be raw ADC — investigate with diagnostics capture
 
-**Phase 2 (Alerts & Alarms) — ✅ Code complete, pre-push gate passed:**
-- Branch: `feature/alerts-alarms-phase2`
+**Phase 2 (Alerts & Alarms) — ✅ Deployed & verified 2026-03-13:**
+- PR #49: merged to develop
 - 3 new sensors: last_alert, last_alarm, active_alerts_count
 - TANDEM_ALERT_MAP (~35 entries) + TANDEM_ALARM_MAP (~29 entries) in const.py
 - Active alert/alarm tracking via dict replay (keyed by alert_id, timestamp order)
@@ -70,7 +70,7 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 
 **Remaining phases:**
 1. ~~Phase 1: Battery Monitoring~~ — ✅ Done
-2. ~~Phase 2: Alerts & Alarms~~ — ✅ Done (PR pending)
+2. ~~Phase 2: Alerts & Alarms~~ — ✅ Deployed & verified
 3. Phase 3: G7 & Libre 2 CGM — events 399, 372, 313
 4. Phase 4: Bolus Calculator — events 64, 65, 66
 5. Phase 5: PLGS & Daily Status — events 140, 90

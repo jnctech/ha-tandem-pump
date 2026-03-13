@@ -4,11 +4,57 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-011 — Bolus Calculator Sensors (Phase 4)
+**Date:** 2026-03-13
+**Branch:** `feature/bolus-calculator-phase4`
+**PR:** pending
+**Status:** Pre-push gate in progress
+
+### What Changed
+| Area | Change |
+|------|--------|
+| tandem_api.py | Added 3 event constants (EVT_BOLUS_REQUESTED_MSG1=64, MSG2=65, MSG3=66) |
+| tandem_api.py | Added 3 decoder cases for bolus calculator messages (BG, carbs, IOB, ISF, food/correction split) |
+| tandem_api.py | Updated get_pump_events() event_ids to include 64, 65, 66 |
+| const.py | Added 5 sensor key constants and SensorEntityDescriptions |
+| __init__.py | Added 3-way join by BolusID across msg1/msg2/msg3 events |
+| __init__.py | Populate 4 primary sensors + 1 diagnostic attributes sensor from latest complete bolus calc record |
+| tests | Added TestBolusCalcDecoder (6 tests) + TestBolusCalcCoordinator (6 tests); 625 total passing |
+
+### Sensors Added
+| Key | Name | Value |
+|-----|------|-------|
+| tandem_last_bolus_bg | Last bolus BG | mg/dL at time of bolus request |
+| tandem_last_bolus_carbs_entered | Last bolus carbs entered | grams entered into calculator |
+| tandem_last_bolus_correction | Last bolus correction | units (correction portion) |
+| tandem_last_bolus_food_portion | Last bolus food portion | units (food portion) |
+| tandem_bolus_calculator_attributes | Bolus calculator details | Full joined record (IOB, ISF, target BG, carb ratio, etc.) |
+
+### Review Gate Results
+| Gate | Result |
+|------|--------|
+| Logic Review 1 (Opus) | No bugs; 2 low-severity notes (B-1, B-2) |
+| API Drift Review 2 (Opus) | No drift (binary events not in JSON fixture) |
+| Sensor Review 3 (Sonnet) | All correct |
+| silent-failure-hunter | No new findings (pre-existing C-4 noted) |
+| code-reviewer | No issues |
+
+### Quality Gate Results (at branch)
+| Metric | Value | Gate |
+|--------|-------|------|
+| Tests | 625 passed | ✅ |
+| Ruff format | Clean | ✅ |
+| Ruff lint | Clean | ✅ |
+| API drift | None | ✅ |
+| Bandit | Clean | ✅ |
+
+---
+
 ## CR-010 — G7, Libre 2 CGM Support & Sensor Type Detection (Phase 3)
 **Date:** 2026-03-13
 **Branch:** `feature/cgm-g7-libre2-phase3`
-**PR:** pending
-**Status:** Pre-push gate in progress
+**PR:** #50, #51
+**Status:** Merged & deployed
 
 ### What Changed
 | Area | Change |

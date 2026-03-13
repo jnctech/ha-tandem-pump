@@ -542,6 +542,13 @@ TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT = "tandem_active_alerts_count"
 # ── CGM sensor type key (Phase 3 — from event 313) ────────────────────
 TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE = "tandem_cgm_sensor_type"
 
+# ── Bolus Calculator keys (Phase 4 — from events 64, 65, 66) ─────────
+TANDEM_SENSOR_KEY_LAST_BOLUS_BG = "tandem_last_bolus_bg"
+TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS = "tandem_last_bolus_carbs_entered"
+TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION = "tandem_last_bolus_correction"
+TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD = "tandem_last_bolus_food_portion"
+TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS = "tandem_bolus_calculator_attributes"
+
 # ── Battery monitoring keys (Phase 1 — from events 81, 53, 36, 37) ────
 TANDEM_SENSOR_KEY_BATTERY_PERCENT = "tandem_battery_percent"
 TANDEM_SENSOR_KEY_BATTERY_VOLTAGE = "tandem_battery_voltage"
@@ -1294,6 +1301,54 @@ TANDEM_SENSORS = (
         state_class=None,
         device_class=None,
         icon="mdi:chip",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # ── Phase 4: Bolus Calculator (from events 64, 65, 66) ────────
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_BOLUS_BG,
+        name="Last bolus BG",
+        native_unit_of_measurement=MGDL,
+        state_class=None,
+        device_class=_BLOOD_GLUCOSE,
+        icon="mdi:water",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS,
+        name="Last bolus carbs entered",
+        native_unit_of_measurement="g",
+        state_class=None,
+        device_class=None,
+        icon="mdi:food-apple",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION,
+        name="Last bolus correction",
+        native_unit_of_measurement="U",
+        state_class=None,
+        device_class=None,
+        icon="mdi:needle",
+        entity_category=None,
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD,
+        name="Last bolus food portion",
+        native_unit_of_measurement="U",
+        state_class=None,
+        device_class=None,
+        icon="mdi:needle",
+        entity_category=None,
+        suggested_display_precision=2,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS,
+        name="Bolus calculator details",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:calculator",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )

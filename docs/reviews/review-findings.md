@@ -12,7 +12,7 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | C-2 | High | FIXED | feature/cgm-g7-libre2-phase3 | Daily status `except Exception` + `warning` — narrowed to `(KeyError, TypeError, IndexError)` + `error` + event count |
 | C-3 | Medium | FIXED | feature/cgm-g7-libre2-phase3 | Unknown sensor type fallback silent — added `_LOGGER.info` when sensor_type starts with "Unknown" |
 | C-4 | Medium | DEFERRED | — | No per-event struct error isolation in decoder (pre-existing, all phases) |
-| C-5 | Medium | DEFERRED | — | Duplicate decode logic: event 399 is copy of 256 — could share code but clarity > DRY for binary decoders |
+| C-5 | Medium | FIXED | PR #51 | Duplicate decode logic: event 399 is copy of 256 — extracted `_decode_cgm_gxb_layout` shared helper |
 | A-1 | Low | FIXED | feature/alerts-alarms-phase2 | payload invariant undocumented — comment added; EVENT_LEN guard makes struct.error impossible in practice |
 | A-2 | High | FIXED | feature/alerts-alarms-phase2 | alarm parse catch used `warning` not `error`; no event counts in log — changed to `error` + added counts |
 | A-3 | Important | FIXED | feature/alerts-alarms-phase2 | active_alerts_count: MEASUREMENT + UNAVAILABLE fallback causes LTS gaps — changed to state_class=None |
@@ -47,14 +47,17 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | D-4 | OK | pumper_info minimal by design |
 | D-5 | OK | ControlIQ returns 404 |
 
-## File Checksums (updated: 2026-03-13, post feature/cgm-g7-libre2-phase3)
+| B-1 | Low | OPEN | — | Missing test: msg1+msg3 without msg2 — join works but msg2 fields are None in attrs |
+| B-2 | Low | OPEN | — | carb_ratio 1000x multiplier from tconnectsync spec — cannot validate without real capture |
+
+## File Checksums (updated: 2026-03-13, post feature/bolus-calculator-phase4)
 
 Compare before reading files. Skip unchanged files.
 
 ```
-6b5c28bd __init__.py
-6ffff29e tandem_api.py
-fc9402e5 const.py
+66998ade __init__.py
+7f1a5d40 tandem_api.py
+86911888 const.py
 d0a63142 sensor.py
 ```
 

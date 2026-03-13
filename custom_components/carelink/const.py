@@ -1142,7 +1142,7 @@ TANDEM_SENSORS = (
         device_class=SensorDeviceClass.BATTERY,
         icon="mdi:battery",
         entity_category=EntityCategory.DIAGNOSTIC,
-        suggested_display_precision=0,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_BATTERY_VOLTAGE,

@@ -9,7 +9,7 @@ Significant changes to this repository, listed in reverse chronological order.
 **Branch:** `fix/sensor-audit-diagnostics`
 **PR:** [#46](https://github.com/jnctech/ha-tandem-pump/pull/46)
 **Status:** Merged to `develop`
-**Deployed:** Pending — deploy with CR-005
+**Deployed:** 2026-03-13 — verified on HA (4 battery entities + diagnostics service)
 
 ### What Changed
 | Area | Change |
@@ -45,7 +45,7 @@ Significant changes to this repository, listed in reverse chronological order.
 **Branch:** `feat/phase1-battery-monitoring`
 **PR:** [#45](https://github.com/jnctech/ha-tandem-pump/pull/45)
 **Status:** Merged to `develop`
-**Deployed:** Pending — needs scp + ha core restart
+**Deployed:** 2026-03-13 — verified on HA (battery %, voltage, remaining, charging status)
 
 ### What Changed
 | Area | Change |

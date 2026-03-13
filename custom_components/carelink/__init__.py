@@ -174,7 +174,11 @@ SERVICE_IMPORT_HISTORY = "import_history"
 SERVICE_CAPTURE_DIAGNOSTICS = "capture_diagnostics"
 
 
-# Fields containing personally identifiable information that should be redacted from logs
+# Fields containing personally identifiable information that should be redacted.
+# Note: "name" is intentionally broad — it catches pumper_info.name (full name)
+# and profile[].name (often the patient's first name). This over-redacts
+# non-PII profile names like "Sick" or "Active", but PII protection takes
+# priority.  Profile idp index is sufficient for debugging.
 PII_FIELDS = {
     "firstName",
     "lastName",

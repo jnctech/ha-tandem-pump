@@ -1854,6 +1854,27 @@ class TestBolusCalcCoordinator:
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] == 20
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] == 2.0
 
+    async def test_zero_bg_shadows_older_valid_bg(self, hass: HomeAssistant):
+        """Newer bolus with bg=0 shadows older bolus with valid BG.
+
+        This is intentional: the latest bolus calculator context is what
+        matters, even if BG was not entered for that bolus.
+        """
+        events = [
+            # Older bolus with valid BG
+            _make_bolus_req_msg1(1, 10, bg=150, iob=1.0, carbs=30, minutes_ago=30),
+            _make_bolus_req_msg3(2, 10, food=3.0, correction=0.5, total=3.5, minutes_ago=30),
+            # Newer bolus without BG entry (bg=0)
+            _make_bolus_req_msg1(3, 20, bg=0, iob=2.0, carbs=50, minutes_ago=5),
+            _make_bolus_req_msg3(4, 20, food=5.0, correction=0.0, total=5.0, minutes_ago=5),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        # Latest bolus (id=20) is selected; its bg=0 → BG sensor UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] is UNAVAILABLE
+        # But carbs/food from the latest bolus are populated
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] == 50
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] == 5.0
+
     async def test_declined_correction_in_attrs(self, hass: HomeAssistant):
         """Declined correction flag surfaces in attributes."""
         events = [

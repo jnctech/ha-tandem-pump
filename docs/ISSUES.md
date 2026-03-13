@@ -34,6 +34,7 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 - Pre-push hook
 - Commit message validation
 - Dependency pinning
+- ~~**Devcontainer build fix**~~ — ✅ Fixed in CR-014 (`bugfix/devcontainer-gitleaks-download`): added `--retry 3`, `-L` flag, dropped redundant `--proto-redir`
 
 **Reference:** Plan file `peaceful-sauteeing-star.md`
 
@@ -98,6 +99,15 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 4. ~~Phase 4: Bolus Calculator~~ — ✅ Deployed & verified (PR #52, #53)
 5. ~~Phase 5: PLGS & Daily Status~~ — ✅ Deployed & verified (PR #55)
 6. Phase 6: Estimated Remaining Insulin — computed from existing events
+
+**Phase 7 (OpenSSF Security Baseline + Dependabot):**
+- `.github/dependabot.yml` — Python deps + GitHub Actions (weekly, targets `develop`)
+- `SECURITY.md` — vulnerability disclosure policy (GitHub private advisory)
+- `ossf/scorecard-action` workflow — publishes to GitHub Security tab
+- `actions/dependency-review-action` — blocks PRs introducing CVE-affected deps
+- SHA-pin all action refs in `.github/workflows/*.yml`
+- Opus compliance review → `docs/reviews/review-openssf-YYYY-MM-DD.md`
+- **Schedule:** After Phase 6, before HACS submission
 
 **Investigation items:**
 - CGM sensor change tracking (Dexcom G6 10-day cycle) — check if any undecoded event ID corresponds to sensor insertion/removal. Phase 3 CGM events (399, 372, 313) may include this.

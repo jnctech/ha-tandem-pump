@@ -828,7 +828,7 @@ class TandemSourceClient:
             tz = ZoneInfo("UTC")
 
         now_pump = datetime.now(tz)
-        yesterday_pump = now_pump - timedelta(days=1)
+        week_ago_pump = now_pump - timedelta(days=7)
 
         data: dict = {
             "pump_metadata": None,
@@ -861,7 +861,7 @@ class TandemSourceClient:
             device_id = data["pump_metadata"].get("tconnectDeviceId")
 
         if device_id:
-            start_iso = yesterday_pump.strftime("%Y-%m-%d")
+            start_iso = week_ago_pump.strftime("%Y-%m-%d")
             end_iso = now_pump.strftime("%Y-%m-%d")
             try:
                 data["pump_events"] = await self.get_pump_events(device_id, start_iso, end_iso)
@@ -899,7 +899,7 @@ class TandemSourceClient:
 
         # ── Phase 3: ControlIQ fallback (parallel) ───────────────────
         if not data["pump_events"]:
-            start_mm = yesterday_pump.strftime("%m-%d-%Y")
+            start_mm = week_ago_pump.strftime("%m-%d-%Y")
             end_mm = now_pump.strftime("%m-%d-%Y")
 
             _LOGGER.debug(

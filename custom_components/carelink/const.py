@@ -152,7 +152,7 @@ SENSORS = (
     SensorEntityDescription(
         key=SENSOR_KEY_SG_DELTA,
         name="Last glucose delta",
-        native_unit_of_measurement=None,
+        native_unit_of_measurement=MGDL,
         state_class=SensorStateClass.MEASUREMENT,
         device_class=None,
         icon="mdi:plus-minus-variant",
@@ -637,7 +637,7 @@ TANDEM_SENSORS = (
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_SG_DELTA,
         name="Last glucose delta",
-        native_unit_of_measurement=None,
+        native_unit_of_measurement=MGDL,
         state_class=SensorStateClass.MEASUREMENT,
         device_class=None,
         icon="mdi:plus-minus-variant",

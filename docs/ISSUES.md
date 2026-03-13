@@ -7,7 +7,7 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 
 ## Current Priorities
 
-1. **ISS-011 Phase 1** — ✅ Battery monitoring merged (PR #45); **needs deploy & verify**
+1. **ISS-011 Phase 1** — ✅ Deployed & verified (2026-03-13)
 2. **ISS-010** — ADRs + templates done; tooling + ADR-007/008 remaining
 3. **ISS-011 Phase 2+** — Alerts, CGM, Bolus Calculator, PLGS, ERI
 4. **ISS-005** — tandem_api.py coverage gap
@@ -42,7 +42,7 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 **Type:** Feature / Upstream Sync
 **Priority:** High
 **Created:** 2026-03-13
-**Status:** 🟢 Active — Phase 1 complete (PR #45 merged), needs deploy & verify
+**Status:** 🟢 Active — Phase 1 deployed & verified (2026-03-13)
 
 Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `ac6f2a3`) found **no new battery/reservoir sensors upstream**. Battery data IS available in the Tandem Source API via event IDs not previously requested.
 
@@ -50,9 +50,14 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 - PR #43: Investigation docs (upstream review + 6-phase plan) — merged
 - PR #44: Housekeeping (ISSUES.md updates) — merged
 - PR #45: Battery monitoring implementation — merged
+- PR #46: Sensor audit + diagnostics service — merged
 - 4 new sensors: battery %, voltage (mV), remaining (mAh), charging status
-- 20 new tests, 568 total passing
-- **Pending:** deploy to HA and verify entities. See CR-005.
+- `capture_diagnostics` service for API schema discovery
+- Widened event fetch window (1→14 days) for reliable battery data
+- Fixed glucose delta unit (None → mg/dL)
+- 28 new tests (20 battery + 8 diagnostics), 576 total passing
+- ✅ Deployed & verified 2026-03-13. See CR-005, CR-006.
+- ⚠️ Battery voltage (18944 mV) may be raw ADC — investigate with diagnostics capture
 
 **Remaining phases:**
 1. ~~Phase 1: Battery Monitoring~~ — ✅ Done

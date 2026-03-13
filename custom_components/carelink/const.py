@@ -12,6 +12,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
 )
 
+from homeassistant.const import UnitOfElectricPotential, UnitOfMass, UnitOfTime
 from homeassistant.helpers.entity import EntityCategory
 
 # BLOOD_GLUCOSE_CONCENTRATION was added in HA 2024.11.
@@ -99,8 +100,8 @@ MMOL = "mmol/L"
 MGDL = "mg/dL"
 DATETIME = "date/time"
 PERCENT = "%"
-DURATION_HOUR = "h"
-DURATION_MINUTE = "m"
+DURATION_HOUR = UnitOfTime.HOURS
+DURATION_MINUTE = UnitOfTime.MINUTES
 UNITS = "units"
 
 SENSORS = (
@@ -172,7 +173,7 @@ SENSORS = (
         name="Conduit battery level",
         native_unit_of_measurement=PERCENT,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=None,
+        device_class=SensorDeviceClass.BATTERY,
         icon="mdi:battery",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -181,7 +182,7 @@ SENSORS = (
         name="Sensor battery level",
         native_unit_of_measurement=PERCENT,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=None,
+        device_class=SensorDeviceClass.BATTERY,
         icon="mdi:battery",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
@@ -190,7 +191,7 @@ SENSORS = (
         name="Sensor duration hours",
         native_unit_of_measurement=DURATION_HOUR,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=None,
+        device_class=SensorDeviceClass.DURATION,
         icon="mdi:clock",
         entity_category=None,
     ),
@@ -199,7 +200,7 @@ SENSORS = (
         name="Sensor time to next calibration hours",
         native_unit_of_measurement=DURATION_HOUR,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=None,
+        device_class=SensorDeviceClass.DURATION,
         icon="mdi:clock",
         entity_category=None,
     ),
@@ -208,7 +209,7 @@ SENSORS = (
         name="Sensor duration minutes",
         native_unit_of_measurement=DURATION_MINUTE,
         state_class=SensorStateClass.MEASUREMENT,
-        device_class=None,
+        device_class=SensorDeviceClass.DURATION,
         icon="mdi:clock",
         entity_category=None,
     ),
@@ -233,7 +234,7 @@ SENSORS = (
     SensorEntityDescription(
         key=SENSOR_KEY_RESERVOIR_AMOUNT,
         name="Reservoir amount",
-        native_unit_of_measurement=None,
+        native_unit_of_measurement=UNITS,
         state_class=SensorStateClass.MEASUREMENT,
         device_class=None,
         icon="mdi:medication",
@@ -242,7 +243,7 @@ SENSORS = (
     SensorEntityDescription(
         key=SENSOR_KEY_ACTIVE_INSULIN,
         name="Active insulin",
-        native_unit_of_measurement=None,
+        native_unit_of_measurement=UNITS,
         state_class=SensorStateClass.MEASUREMENT,
         device_class=None,
         icon="mdi:water-alert",
@@ -314,7 +315,7 @@ SENSORS = (
     SensorEntityDescription(
         key=SENSOR_KEY_MAX_AUTO_BASAL_RATE,
         name="Max auto basal rate",
-        native_unit_of_measurement=None,
+        native_unit_of_measurement=UNITS,
         state_class=SensorStateClass.MEASUREMENT,
         device_class=None,
         icon=None,
@@ -323,8 +324,8 @@ SENSORS = (
     SensorEntityDescription(
         key=SENSOR_KEY_SG_BELOW_LIMIT,
         name="Glucose below limit",
-        native_unit_of_measurement=None,
-        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=MGDL,
+        state_class=None,
         device_class=None,
         icon=None,
         entity_category=None,
@@ -399,7 +400,7 @@ SENSORS = (
         native_unit_of_measurement=None,
         state_class=None,
         icon="mdi:application",
-        entity_category=None,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key=SENSOR_KEY_MEDICAL_DEVICE_MANUFACTURER,
@@ -408,7 +409,7 @@ SENSORS = (
         native_unit_of_measurement=None,
         state_class=None,
         icon="mdi:factory",
-        entity_category=None,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key=SENSOR_KEY_MEDICAL_DEVICE_MODEL_NUMBER,
@@ -417,7 +418,7 @@ SENSORS = (
         native_unit_of_measurement=None,
         state_class=None,
         icon="mdi:code-tags",
-        entity_category=None,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key=SENSOR_KEY_MEDICAL_DEVICE_HARDWARE_REVISION,
@@ -426,7 +427,7 @@ SENSORS = (
         native_unit_of_measurement=None,
         state_class=None,
         icon="mdi:code-tags",
-        entity_category=None,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key=SENSOR_KEY_MEDICAL_DEVICE_FIRMWARE_REVISION,
@@ -435,7 +436,7 @@ SENSORS = (
         native_unit_of_measurement=None,
         state_class=None,
         icon="mdi:code-tags",
-        entity_category=None,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key=SENSOR_KEY_MEDICAL_DEVICE_SYSTEM_ID,
@@ -444,7 +445,7 @@ SENSORS = (
         native_unit_of_measurement=None,
         state_class=None,
         icon="mdi:code-tags",
-        entity_category=None,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )
 
@@ -1028,7 +1029,7 @@ TANDEM_SENSORS = (
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_CONTROL_IQ_WEIGHT,
         name="Control-IQ weight",
-        native_unit_of_measurement="kg",
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
         state_class=None,
         device_class=SensorDeviceClass.WEIGHT,
         icon="mdi:weight-kilogram",
@@ -1037,7 +1038,7 @@ TANDEM_SENSORS = (
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_CONTROL_IQ_TDI,
         name="Control-IQ total daily insulin",
-        native_unit_of_measurement="U",
+        native_unit_of_measurement=UNITS,
         state_class=None,
         device_class=None,
         icon="mdi:needle",
@@ -1046,7 +1047,7 @@ TANDEM_SENSORS = (
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_MAX_BOLUS,
         name="Max bolus setting",
-        native_unit_of_measurement="U",
+        native_unit_of_measurement=UNITS,
         state_class=None,
         device_class=None,
         icon="mdi:needle",
@@ -1100,7 +1101,7 @@ TANDEM_SENSORS = (
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT,
         name="Low insulin alert threshold",
-        native_unit_of_measurement="U",
+        native_unit_of_measurement=UNITS,
         state_class=None,
         device_class=None,
         icon="mdi:battery-alert",
@@ -1119,7 +1120,7 @@ TANDEM_SENSORS = (
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_BATTERY_VOLTAGE,
         name="Pump battery voltage",
-        native_unit_of_measurement="mV",
+        native_unit_of_measurement=UnitOfElectricPotential.MILLIVOLT,
         state_class=SensorStateClass.MEASUREMENT,
         device_class=SensorDeviceClass.VOLTAGE,
         icon="mdi:flash",

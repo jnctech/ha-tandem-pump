@@ -174,10 +174,16 @@ SERVICE_IMPORT_HISTORY = "import_history"
 SERVICE_CAPTURE_DIAGNOSTICS = "capture_diagnostics"
 
 
-# Fields containing personally identifiable information that should be redacted from logs
+# Fields containing personally identifiable information that should be redacted.
+# Note: "name" is intentionally broad — it catches pumper_info.name (full name)
+# and profile[].name (often the patient's first name). This over-redacts
+# non-PII profile names like "Sick" or "Active", but PII protection takes
+# priority.  Profile idp index is sufficient for debugging.
 PII_FIELDS = {
     "firstName",
     "lastName",
+    "name",
+    "birthdate",
     "username",
     "patientId",
     "conduitSerialNumber",
@@ -1809,32 +1815,31 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         # ── Battery monitoring (Phase 1) ─────────────────────────────────
         # Battery data comes from two event types:
-        # - Event 81 (DailyBasal): battery %, voltage (emitted daily)
+        # - Event 81 (DailyBasal): battery % only (emitted daily)
         # - Event 53 (ShelfMode): battery %, voltage, mAh, current (periodic)
-        # We prefer the most recent of either source for % and voltage,
-        # and only ShelfMode provides mAh.
+        # We prefer the most recent of either source for %,
+        # and only ShelfMode provides voltage and mAh.
         try:
             battery_pct = UNAVAILABLE
             battery_mv = UNAVAILABLE
             battery_mah = UNAVAILABLE
 
-            # DailyBasal provides battery % and voltage
+            # DailyBasal provides battery % (voltage only from ShelfMode)
             if daily_basal_events:
                 latest_db = daily_basal_events[-1]
                 battery_pct = latest_db.get("battery_percent", UNAVAILABLE)
-                battery_mv = latest_db.get("battery_voltage_mv", UNAVAILABLE)
 
-            # ShelfMode provides more detail — use if newer
+            # ShelfMode provides voltage and mAh (always used when available)
+            # and battery % (used if newer than DailyBasal)
             if shelf_mode_events:
                 latest_sm = shelf_mode_events[-1]
                 sm_pct = latest_sm.get("battery_percent", UNAVAILABLE)
-                sm_mv = latest_sm.get("battery_voltage_mv", UNAVAILABLE)
+                battery_mv = latest_sm.get("battery_voltage_mv", UNAVAILABLE)
                 battery_mah = latest_sm.get("battery_remaining_mah", UNAVAILABLE)
 
-                # Use ShelfMode values if no DailyBasal or if ShelfMode is newer
+                # Use ShelfMode % if no DailyBasal or if ShelfMode is newer
                 if not daily_basal_events or latest_sm["timestamp"] > daily_basal_events[-1]["timestamp"]:
                     battery_pct = sm_pct
-                    battery_mv = sm_mv
 
             data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] = battery_pct
             data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] = battery_mv

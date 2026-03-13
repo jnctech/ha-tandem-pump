@@ -69,6 +69,8 @@ class TestSanitizeForLogging:
         data = {
             "firstName": "John",
             "lastName": "Doe",
+            "name": "John Doe",
+            "birthdate": "1990-01-01",
             "username": "johndoe",
             "patientId": "12345",
             "conduitSerialNumber": "ABC123",
@@ -90,10 +92,10 @@ class TestSanitizeForLogging:
 
     def test_sanitize_non_dict_values(self):
         """Test sanitizing preserves non-dict values."""
-        data = {"name": "test", "count": 42, "active": True, "rate": 1.5}
+        data = {"label": "test", "count": 42, "active": True, "rate": 1.5}
         result = sanitize_for_logging(data)
 
-        assert result["name"] == "test"
+        assert result["label"] == "test"
         assert result["count"] == 42
         assert result["active"] is True
         assert result["rate"] == 1.5

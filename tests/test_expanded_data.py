@@ -2260,3 +2260,19 @@ class TestEstimatedRemainingInsulin:
         # Cumulative: 5.0 (poll 1) + 3.0 (poll 2) = 8.0 delivered
         # 200 - 8.0 = 192.0
         assert remaining == 192.0
+
+    async def test_basal_negative_interval_clamped(self, hass: HomeAssistant):
+        """Non-monotonic timestamps (clock correction) don't inflate remaining."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_cartridge_event(10, volume=200.0, minutes_ago=180),
+            # seq 20 at T-120, seq 21 at T-150 (earlier timestamp, later seq)
+            _make_basal_delivery(20, rate=1.0, minutes_ago=120),
+            _make_basal_delivery(21, rate=1.0, minutes_ago=150),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        remaining = coordinator.data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING]
+        # Negative interval clamped to 0, only the last-segment 5min estimate applies
+        # 200 - (0.0 + 1.0 * 5/60) = 199.9 (rounded to 1dp)
+        expected = round(200.0 - (1.0 * 5 / 60), 1)
+        assert remaining == expected

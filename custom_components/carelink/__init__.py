@@ -2683,7 +2683,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                 ts_b = sorted_basal[i + 1].get("timestamp")
                 if ts_a and ts_b:
                     dt_hours = (ts_b - ts_a).total_seconds() / 3600.0
-                    dt_hours = min(dt_hours, 1.0)
+                    dt_hours = max(0.0, min(dt_hours, 1.0))
                     new_basal += rate * dt_hours
             # Last segment: assume 5 min
             last_rate = sorted_basal[-1].get("commanded_rate", 0) or 0

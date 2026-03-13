@@ -21,3 +21,11 @@ import_history:
       example: "2026-03-06"
       selector:
         date:
+
+capture_diagnostics:
+  name: Capture Diagnostics
+  description: >
+    Capture a diagnostic snapshot of the current API response and sensor state.
+    Writes a sanitised JSON file to /config/carelink_diagnostics_<timestamp>.json.
+    Use this to document API schema, troubleshoot missing sensors, or report bugs.
+    PII fields (names, dates of birth) are automatically redacted.

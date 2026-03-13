@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import json
 import logging
 import math
 import os
@@ -170,6 +171,7 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.N
 _LOGGER = logging.getLogger(__name__)
 
 SERVICE_IMPORT_HISTORY = "import_history"
+SERVICE_CAPTURE_DIAGNOSTICS = "capture_diagnostics"
 
 
 # Fields containing personally identifiable information that should be redacted from logs
@@ -389,6 +391,124 @@ async def _handle_import_history(hass: HomeAssistant, entry_id: str, call: Servi
         )
 
 
+async def _handle_capture_diagnostics(hass: HomeAssistant, entry_id: str, call: ServiceCall) -> None:
+    """Handle the carelink.capture_diagnostics service call.
+
+    Fetches raw API responses and writes a sanitised diagnostic snapshot to
+    /config/carelink_diagnostics_<timestamp>.json for schema documentation
+    and troubleshooting.
+    """
+    coordinator = hass.data[DOMAIN][entry_id][COORDINATOR]
+
+    try:
+        await coordinator.client.login()
+    except Exception as err:
+        _LOGGER.error("[Tandem] capture_diagnostics: authentication failed: %s", err)
+        return
+
+    snapshot: dict = {"captured_at": datetime.now(timezone.utc).isoformat()}
+
+    # 1. Raw pump metadata (contains schema fields we need to document)
+    try:
+        metadata_list = await coordinator.client.get_pump_event_metadata()
+        snapshot["pump_event_metadata"] = sanitize_for_logging(metadata_list)
+    except Exception as err:
+        snapshot["pump_event_metadata_error"] = str(err)
+
+    # 2. Pumper info
+    try:
+        pumper_info = await coordinator.client.get_pumper_info()
+        snapshot["pumper_info"] = sanitize_for_logging(pumper_info)
+    except Exception as err:
+        snapshot["pumper_info_error"] = str(err)
+
+    # 3. Pump events — decode and summarise (full events too large)
+    device_id = None
+    if snapshot.get("pump_event_metadata"):
+        meta = snapshot["pump_event_metadata"]
+        if isinstance(meta, list) and meta:
+            device_id = meta[0].get("tconnectDeviceId")
+        elif isinstance(meta, dict):
+            device_id = meta.get("tconnectDeviceId")
+
+    if device_id:
+        from zoneinfo import ZoneInfo
+
+        tz_name = coordinator.timezone or "UTC"
+        try:
+            tz = ZoneInfo(tz_name)
+        except (KeyError, TypeError):
+            tz = ZoneInfo("UTC")
+
+        now_pump = datetime.now(tz)
+        start = (now_pump - timedelta(days=7)).strftime("%Y-%m-%d")
+        end = now_pump.strftime("%Y-%m-%d")
+
+        try:
+            events = await coordinator.client.get_pump_events(device_id, start, end)
+            if events:
+                # Event ID distribution
+                id_counts: dict[str, int] = {}
+                for evt in events:
+                    name = evt.get("event_name", f"Event_{evt.get('event_id')}")
+                    id_counts[name] = id_counts.get(name, 0) + 1
+                snapshot["pump_events_summary"] = {
+                    "date_range": f"{start} to {end}",
+                    "total_events": len(events),
+                    "event_counts": dict(sorted(id_counts.items())),
+                }
+                # Include sample of each event type (first occurrence)
+                seen_types: set[str] = set()
+                samples: list[dict] = []
+                for evt in events:
+                    name = evt.get("event_name", "unknown")
+                    if name not in seen_types:
+                        seen_types.add(name)
+                        sample = dict(evt)
+                        # Convert datetime to string for JSON
+                        if "timestamp" in sample:
+                            sample["timestamp"] = str(sample["timestamp"])
+                        samples.append(sample)
+                snapshot["pump_events_samples"] = samples
+            else:
+                snapshot["pump_events_summary"] = {"total_events": 0}
+        except Exception as err:
+            snapshot["pump_events_error"] = str(err)
+
+    # 4. Current sensor state (keys and their types/values)
+    if coordinator.data:
+        sensor_state: dict = {}
+        for k, v in coordinator.data.items():
+            if v is None:
+                sensor_state[k] = "UNAVAILABLE"
+            elif hasattr(v, "isoformat"):
+                sensor_state[k] = v.isoformat()
+            else:
+                sensor_state[k] = v
+        snapshot["current_sensor_state"] = sanitize_for_logging(sensor_state)
+
+    # Write to HA config directory
+    ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = hass.config.path(f"carelink_diagnostics_{ts_str}.json")
+
+    try:
+        import aiofiles
+
+        async with aiofiles.open(out_path, "w") as f:
+            await f.write(json.dumps(snapshot, indent=2, default=str))
+        _LOGGER.info("[Tandem] Diagnostic snapshot written to %s", out_path)
+    except ImportError:
+        # aiofiles not available — fall back to sync write in executor
+        import asyncio
+
+        def _write():
+            with open(out_path, "w") as f:
+                json.dump(snapshot, f, indent=2, default=str)
+
+        await asyncio.get_running_loop().run_in_executor(None, _write)
+        _LOGGER.info("[Tandem] Diagnostic snapshot written to %s", out_path)
+
+
 async def _async_setup_tandem_entry(hass: HomeAssistant, entry: ConfigEntry, config: dict) -> bool:
     """Set up a Tandem t:slim Source config entry."""
     _LOGGER.info("Setting up Tandem entry: %s", entry.entry_id)
@@ -416,12 +536,18 @@ async def _async_setup_tandem_entry(hass: HomeAssistant, entry: ConfigEntry, con
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # ── Register import_history service action (Tandem platform only) ────
+    # ── Register service actions (Tandem platform only) ────────────────
     if not hass.services.has_service(DOMAIN, SERVICE_IMPORT_HISTORY):
         hass.services.async_register(
             DOMAIN,
             SERVICE_IMPORT_HISTORY,
             functools.partial(_handle_import_history, hass, entry.entry_id),
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_CAPTURE_DIAGNOSTICS):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_CAPTURE_DIAGNOSTICS,
+            functools.partial(_handle_capture_diagnostics, hass, entry.entry_id),
         )
 
     _LOGGER.info("Tandem entry setup completed")
@@ -941,6 +1067,13 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         if metadata:
             _LOGGER.debug("Tandem metadata keys: %s", list(metadata.keys()))
+            _LOGGER.debug(
+                "Tandem metadata values: serialNumber=%s, modelNumber=%s, softwareVersion=%s, partNumber=%s",
+                metadata.get("serialNumber"),
+                metadata.get("modelNumber"),
+                metadata.get("softwareVersion"),
+                metadata.get("partNumber"),
+            )
             data[DEVICE_PUMP_SERIAL] = metadata.get("serialNumber", "unknown")
             data[DEVICE_PUMP_MODEL] = metadata.get("modelNumber", "t:slim X2")
             data[DEVICE_PUMP_NAME] = metadata.get("patientName", "Tandem Pump")
@@ -1567,6 +1700,11 @@ class TandemCoordinator(DataUpdateCoordinator):
                         commanded_source, f"Source_{commanded_source}"
                     )
                 elif change_type is not None:
+                    _LOGGER.debug(
+                        "Tandem: BasalRateChange change_type=%d has no commanded_source — "
+                        "raw value used as Control-IQ status (add to source_map if known)",
+                        change_type,
+                    )
                     data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = str(change_type)
                 else:
                     data[TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS] = UNAVAILABLE

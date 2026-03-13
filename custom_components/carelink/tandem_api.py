@@ -81,6 +81,9 @@ EVT_AA_PCM_CHANGE = 230
 EVT_CGM_DATA_GXB = 256
 EVT_BASAL_DELIVERY = 279
 EVT_BOLUS_DELIVERY = 280
+EVT_BOLUS_REQUESTED_MSG1 = 64
+EVT_BOLUS_REQUESTED_MSG2 = 65
+EVT_BOLUS_REQUESTED_MSG3 = 66
 EVT_AA_DAILY_STATUS = 313
 EVT_CGM_DATA_FSL2 = 372
 EVT_CGM_DATA_G7 = 399
@@ -388,6 +391,52 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             evt["sensor_type_id"] = sensor_type
             evt["user_mode"] = user_mode
             evt["pump_control_state"] = pump_control_state
+
+        elif event_id == EVT_BOLUS_REQUESTED_MSG1:
+            evt["event_name"] = "BolusRequestedMsg1"
+            correction_included = struct.unpack_from(">B", payload, 0)[0]
+            bolus_type = struct.unpack_from(">B", payload, 1)[0]
+            bolus_id = struct.unpack_from(">H", payload, 2)[0]
+            bg = struct.unpack_from(">H", payload, 4)[0]
+            iob = struct.unpack_from(">f", payload, 6)[0]
+            carb_amount = struct.unpack_from(">H", payload, 10)[0]
+            carb_ratio_raw = struct.unpack_from(">I", payload, 12)[0]
+            evt["correction_included"] = bool(correction_included)
+            evt["bolus_type"] = bolus_type
+            evt["bolus_id"] = bolus_id
+            evt["bg_mgdl"] = bg
+            evt["iob"] = round(iob, 2)
+            evt["carb_amount"] = carb_amount
+            # Carb ratio is stored as fixed-point g/u * 1000
+            evt["carb_ratio"] = round(carb_ratio_raw / 1000.0, 1)
+
+        elif event_id == EVT_BOLUS_REQUESTED_MSG2:
+            evt["event_name"] = "BolusRequestedMsg2"
+            standard_percent = struct.unpack_from(">B", payload, 0)[0]
+            bolus_id = struct.unpack_from(">H", payload, 2)[0]
+            target_bg = struct.unpack_from(">H", payload, 4)[0]
+            isf = struct.unpack_from(">H", payload, 6)[0]
+            duration = struct.unpack_from(">H", payload, 8)[0]
+            declined_correction = struct.unpack_from(">B", payload, 10)[0]
+            user_override = struct.unpack_from(">B", payload, 11)[0]
+            evt["standard_percent"] = standard_percent
+            evt["bolus_id"] = bolus_id
+            evt["target_bg"] = target_bg
+            evt["isf"] = isf
+            evt["duration_minutes"] = duration
+            evt["declined_correction"] = bool(declined_correction)
+            evt["user_override"] = bool(user_override)
+
+        elif event_id == EVT_BOLUS_REQUESTED_MSG3:
+            evt["event_name"] = "BolusRequestedMsg3"
+            bolus_id = struct.unpack_from(">H", payload, 0)[0]
+            food_bolus = struct.unpack_from(">f", payload, 2)[0]
+            correction_bolus = struct.unpack_from(">f", payload, 6)[0]
+            total_bolus = struct.unpack_from(">f", payload, 10)[0]
+            evt["bolus_id"] = bolus_id
+            evt["food_bolus_size"] = round(food_bolus, 2)
+            evt["correction_bolus_size"] = round(correction_bolus, 2)
+            evt["total_bolus_size"] = round(total_bolus, 2)
 
         else:
             evt["event_name"] = f"Event_{event_id}"
@@ -800,6 +849,9 @@ class TandemSourceClient:
                 "37,"  # USB_DISCONNECTED
                 "48,"  # CARBS_ENTERED
                 "53,"  # SHELF_MODE (battery detail)
+                "64,"  # BOLUS_REQUESTED_MSG1 (bolus calculator: BG, carbs, IOB)
+                "65,"  # BOLUS_REQUESTED_MSG2 (bolus calculator: target BG, ISF)
+                "66,"  # BOLUS_REQUESTED_MSG3 (bolus calculator: food/correction/total)
                 "61,"  # CANNULA_FILLED (site change)
                 "63,"  # TUBING_FILLED
                 "81,"  # DAILY_BASAL (battery %, voltage, daily totals)

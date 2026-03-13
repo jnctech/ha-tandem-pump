@@ -56,6 +56,12 @@ from custom_components.carelink.const import (
     TANDEM_ALARM_MAP,
     # CGM sensor type (Phase 3)
     TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE,
+    # Bolus Calculator (Phase 4)
+    TANDEM_SENSOR_KEY_LAST_BOLUS_BG,
+    TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS,
+    TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION,
+    TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD,
+    TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS,
 )
 
 from custom_components.carelink.tandem_api import decode_pump_events
@@ -1583,3 +1589,279 @@ class TestCGMPhase3Coordinator:
         coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
         # Average of 120..129 = 124.5, int() truncates to 124
         assert coordinator.data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] == 124
+
+
+# ── Phase 4: Bolus Calculator decoder tests ──────────────────────────────
+
+
+def _make_bolus_req_msg1(
+    seq: int,
+    bolus_id: int,
+    bg: int,
+    iob: float,
+    carbs: int,
+    carb_ratio: float = 10.0,
+    bolus_type: int = 0,
+    correction_included: int = 1,
+    minutes_ago: int = 0,
+) -> dict:
+    """Create a BolusRequestedMsg1 event dict (as returned by decoder)."""
+    ts = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 64,
+        "event_name": "BolusRequestedMsg1",
+        "timestamp": ts,
+        "seq": seq,
+        "correction_included": bool(correction_included),
+        "bolus_type": bolus_type,
+        "bolus_id": bolus_id,
+        "bg_mgdl": bg,
+        "iob": round(iob, 2),
+        "carb_amount": carbs,
+        "carb_ratio": carb_ratio,
+    }
+
+
+def _make_bolus_req_msg2(
+    seq: int,
+    bolus_id: int,
+    target_bg: int = 110,
+    isf: int = 50,
+    declined_correction: bool = False,
+    user_override: bool = False,
+    minutes_ago: int = 0,
+) -> dict:
+    """Create a BolusRequestedMsg2 event dict."""
+    ts = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 65,
+        "event_name": "BolusRequestedMsg2",
+        "timestamp": ts,
+        "seq": seq,
+        "standard_percent": 100,
+        "bolus_id": bolus_id,
+        "target_bg": target_bg,
+        "isf": isf,
+        "duration_minutes": 0,
+        "declined_correction": declined_correction,
+        "user_override": user_override,
+    }
+
+
+def _make_bolus_req_msg3(
+    seq: int,
+    bolus_id: int,
+    food: float,
+    correction: float,
+    total: float,
+    minutes_ago: int = 0,
+) -> dict:
+    """Create a BolusRequestedMsg3 event dict."""
+    ts = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 66,
+        "event_name": "BolusRequestedMsg3",
+        "timestamp": ts,
+        "seq": seq,
+        "bolus_id": bolus_id,
+        "food_bolus_size": round(food, 2),
+        "correction_bolus_size": round(correction, 2),
+        "total_bolus_size": round(total, 2),
+    }
+
+
+class TestBolusCalcDecoder:
+    """Binary decoder tests for events 64, 65, 66 (BolusRequested Msg1/Msg2/Msg3)."""
+
+    @staticmethod
+    def _decode_single(event_id: int, payload: bytes, seq: int = 1) -> dict:
+        raw = _build_binary_event(event_id, seq, 500000000, payload)
+        b64 = base64.b64encode(raw).decode()
+        events = decode_pump_events(b64)
+        assert len(events) == 1
+        return events[0]
+
+    def test_decode_msg1_basic(self):
+        """Event 64 decodes BG, IOB, carbs, carb_ratio, bolus_type."""
+        # correction_included=1, bolus_type=0, bolus_id=42, bg=180, iob=2.5, carbs=45, ratio=12000 (=12.0)
+        payload = struct.pack(">B", 1)  # correction_included
+        payload += struct.pack(">B", 0)  # bolus_type
+        payload += struct.pack(">H", 42)  # bolus_id
+        payload += struct.pack(">H", 180)  # bg
+        payload += struct.pack(">f", 2.5)  # iob
+        payload += struct.pack(">H", 45)  # carb_amount
+        payload += struct.pack(">I", 12000)  # carb_ratio * 1000
+        evt = self._decode_single(64, payload)
+        assert evt["event_name"] == "BolusRequestedMsg1"
+        assert evt["correction_included"] is True
+        assert evt["bolus_type"] == 0
+        assert evt["bolus_id"] == 42
+        assert evt["bg_mgdl"] == 180
+        assert evt["iob"] == 2.5
+        assert evt["carb_amount"] == 45
+        assert evt["carb_ratio"] == 12.0
+
+    def test_decode_msg1_no_correction(self):
+        """Event 64 with correction_included=0."""
+        payload = struct.pack(">B", 0)
+        payload += struct.pack(">B", 1)  # bolus_type=1
+        payload += struct.pack(">H", 7)
+        payload += struct.pack(">H", 95)
+        payload += struct.pack(">f", 0.0)
+        payload += struct.pack(">H", 0)
+        payload += struct.pack(">I", 15000)
+        evt = self._decode_single(64, payload)
+        assert evt["correction_included"] is False
+        assert evt["bolus_type"] == 1
+        assert evt["bg_mgdl"] == 95
+        assert evt["iob"] == 0.0
+        assert evt["carb_amount"] == 0
+        assert evt["carb_ratio"] == 15.0
+
+    def test_decode_msg2_basic(self):
+        """Event 65 decodes target_bg, ISF, declined/override flags."""
+        payload = struct.pack(">B", 100)  # standard_percent
+        payload += b"\x00"  # pad
+        payload += struct.pack(">H", 88)  # bolus_id
+        payload += struct.pack(">H", 110)  # target_bg
+        payload += struct.pack(">H", 50)  # isf
+        payload += struct.pack(">H", 0)  # duration
+        payload += struct.pack(">B", 0)  # declined_correction
+        payload += struct.pack(">B", 1)  # user_override
+        evt = self._decode_single(65, payload)
+        assert evt["event_name"] == "BolusRequestedMsg2"
+        assert evt["standard_percent"] == 100
+        assert evt["bolus_id"] == 88
+        assert evt["target_bg"] == 110
+        assert evt["isf"] == 50
+        assert evt["duration_minutes"] == 0
+        assert evt["declined_correction"] is False
+        assert evt["user_override"] is True
+
+    def test_decode_msg2_declined_correction(self):
+        """Event 65 with declined_correction=1."""
+        payload = struct.pack(">B", 100)
+        payload += b"\x00"
+        payload += struct.pack(">H", 99)
+        payload += struct.pack(">H", 120)
+        payload += struct.pack(">H", 40)
+        payload += struct.pack(">H", 120)  # duration=120 minutes (extended)
+        payload += struct.pack(">B", 1)  # declined
+        payload += struct.pack(">B", 0)
+        evt = self._decode_single(65, payload)
+        assert evt["declined_correction"] is True
+        assert evt["user_override"] is False
+        assert evt["duration_minutes"] == 120
+
+    def test_decode_msg3_basic(self):
+        """Event 66 decodes food_bolus, correction_bolus, total_bolus."""
+        payload = struct.pack(">H", 42)  # bolus_id
+        payload += struct.pack(">f", 3.25)  # food_bolus_size
+        payload += struct.pack(">f", 1.5)  # correction_bolus_size
+        payload += struct.pack(">f", 4.75)  # total_bolus_size
+        evt = self._decode_single(66, payload)
+        assert evt["event_name"] == "BolusRequestedMsg3"
+        assert evt["bolus_id"] == 42
+        assert evt["food_bolus_size"] == 3.25
+        assert evt["correction_bolus_size"] == 1.5
+        assert evt["total_bolus_size"] == 4.75
+
+    def test_decode_msg3_zero_correction(self):
+        """Event 66 with no correction (food only)."""
+        payload = struct.pack(">H", 10)
+        payload += struct.pack(">f", 5.0)
+        payload += struct.pack(">f", 0.0)
+        payload += struct.pack(">f", 5.0)
+        evt = self._decode_single(66, payload)
+        assert evt["food_bolus_size"] == 5.0
+        assert evt["correction_bolus_size"] == 0.0
+        assert evt["total_bolus_size"] == 5.0
+
+
+# ── Phase 4: Bolus Calculator coordinator tests ─────────────────────────
+
+
+class TestBolusCalcCoordinator:
+    """Test coordinator 3-way join and sensor population for bolus calculator."""
+
+    async def test_complete_bolus_calc_record(self, hass: HomeAssistant):
+        """All 3 messages join correctly and populate sensors."""
+        events = [
+            _make_bolus_req_msg1(1, 42, bg=180, iob=2.5, carbs=45, carb_ratio=10.0),
+            _make_bolus_req_msg2(2, 42, target_bg=110, isf=50),
+            _make_bolus_req_msg3(3, 42, food=4.5, correction=1.4, total=5.9),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] == 180
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] == 45
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION] == 1.4
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] == 4.5
+        attrs = coordinator.data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS]
+        assert attrs["bolus_id"] == 42
+        assert attrs["total_bolus"] == 5.9
+        assert attrs["iob_at_request"] == 2.5
+        assert attrs["carb_ratio"] == 10.0
+        assert attrs["target_bg"] == 110
+        assert attrs["isf"] == 50
+        assert attrs["correction_included"] is True
+        assert "timestamp" in attrs
+
+    async def test_latest_bolus_selected(self, hass: HomeAssistant):
+        """With multiple bolus records, the most recent (by msg3 timestamp) is used."""
+        events = [
+            # Older bolus (bolus_id=10)
+            _make_bolus_req_msg1(1, 10, bg=150, iob=1.0, carbs=30, minutes_ago=30),
+            _make_bolus_req_msg3(2, 10, food=3.0, correction=0.5, total=3.5, minutes_ago=30),
+            # Newer bolus (bolus_id=20)
+            _make_bolus_req_msg1(3, 20, bg=200, iob=3.0, carbs=60, minutes_ago=5),
+            _make_bolus_req_msg3(4, 20, food=6.0, correction=2.0, total=8.0, minutes_ago=5),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] == 200
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] == 60
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] == 6.0
+
+    async def test_msg3_only_no_msg1_still_populates_partial(self, hass: HomeAssistant):
+        """msg3 without matching msg1 → bg is None so record is incomplete, sensors stay UNAVAILABLE."""
+        events = [
+            _make_bolus_req_msg3(1, 99, food=2.0, correction=0.0, total=2.0),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        # No msg1 → bg is None → not "complete" → sensors stay at default
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] is UNAVAILABLE
+
+    async def test_no_bolus_calc_events(self, hass: HomeAssistant):
+        """No events 64/65/66 → all bolus calc sensors are UNAVAILABLE."""
+        events = [_make_cgm_event(1, 100)]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS] == {}
+
+    async def test_zero_bg_excluded(self, hass: HomeAssistant):
+        """BG value of 0 means 'not entered' — sensor stays UNAVAILABLE."""
+        events = [
+            _make_bolus_req_msg1(1, 50, bg=0, iob=1.0, carbs=20),
+            _make_bolus_req_msg3(2, 50, food=2.0, correction=0.0, total=2.0),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        # bg=0 is treated as "not entered" → passes completeness check (bg is not None,
+        # it's 0) but BG sensor stays UNAVAILABLE because bg <= 0
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] is UNAVAILABLE
+        # But carbs/food/correction should still populate
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] == 20
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] == 2.0
+
+    async def test_declined_correction_in_attrs(self, hass: HomeAssistant):
+        """Declined correction flag surfaces in attributes."""
+        events = [
+            _make_bolus_req_msg1(1, 77, bg=140, iob=0.5, carbs=30),
+            _make_bolus_req_msg2(2, 77, declined_correction=True, user_override=True),
+            _make_bolus_req_msg3(3, 77, food=3.0, correction=0.0, total=3.0),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        attrs = coordinator.data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS]
+        assert attrs["declined_correction"] is True
+        assert attrs["user_override"] is True

@@ -54,6 +54,9 @@ from .tandem_api import (
     EVT_ALARM_ACTIVATED,
     EVT_MALFUNCTION_ACTIVATED,
     EVT_ALARM_CLEARED,
+    EVT_BOLUS_REQUESTED_MSG1,
+    EVT_BOLUS_REQUESTED_MSG2,
+    EVT_BOLUS_REQUESTED_MSG3,
 )
 from .nightscout_uploader import NightscoutUploader
 from .helpers import is_data_stale
@@ -204,6 +207,12 @@ from .const import (
     TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT,
     # CGM sensor type (Phase 3)
     TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE,
+    # Bolus Calculator (Phase 4)
+    TANDEM_SENSOR_KEY_LAST_BOLUS_BG,
+    TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS,
+    TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION,
+    TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD,
+    TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS,
 )
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER]
@@ -1246,6 +1255,11 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[TANDEM_SENSOR_KEY_LAST_ALARM] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS] = {}
 
         if not timeline:
             data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
@@ -1457,6 +1471,9 @@ class TandemCoordinator(DataUpdateCoordinator):
         alert_events: list[dict] = []
         alarm_events: list[dict] = []
         daily_status_events: list[dict] = []
+        bolus_req_msg1: list[dict] = []
+        bolus_req_msg2: list[dict] = []
+        bolus_req_msg3: list[dict] = []
 
         for evt in pump_events:
             eid = evt.get("event_id")
@@ -1500,6 +1517,12 @@ class TandemCoordinator(DataUpdateCoordinator):
                 alarm_events.append(evt)
             elif eid == EVT_AA_DAILY_STATUS:
                 daily_status_events.append(evt)
+            elif eid == EVT_BOLUS_REQUESTED_MSG1:
+                bolus_req_msg1.append(evt)
+            elif eid == EVT_BOLUS_REQUESTED_MSG2:
+                bolus_req_msg2.append(evt)
+            elif eid == EVT_BOLUS_REQUESTED_MSG3:
+                bolus_req_msg3.append(evt)
 
         _LOGGER.debug(
             "Tandem: Events - CGM: %d, BolusCompleted: %d, BolexCompleted: %d, "
@@ -1507,7 +1530,8 @@ class TandemCoordinator(DataUpdateCoordinator):
             "Suspend/Resume: %d, BG: %d, Cartridge: %d, Carbs: %d, "
             "Cannula: %d, Tubing: %d, UserMode: %d, PCM: %d, "
             "DailyBasal: %d, ShelfMode: %d, USB: %d, "
-            "Alert: %d, Alarm: %d, DailyStatus: %d",
+            "Alert: %d, Alarm: %d, DailyStatus: %d, "
+            "BolusReqMsg1: %d, BolusReqMsg2: %d, BolusReqMsg3: %d",
             len(cgm_readings),
             len(bolus_completed),
             len(bolex_completed),
@@ -1528,6 +1552,9 @@ class TandemCoordinator(DataUpdateCoordinator):
             len(alert_events),
             len(alarm_events),
             len(daily_status_events),
+            len(bolus_req_msg1),
+            len(bolus_req_msg2),
+            len(bolus_req_msg3),
         )
 
         # Update the last-seen sequence number for statistics deduplication
@@ -1557,6 +1584,9 @@ class TandemCoordinator(DataUpdateCoordinator):
         alert_events.sort(key=lambda e: e["timestamp"])
         alarm_events.sort(key=lambda e: e["timestamp"])
         daily_status_events.sort(key=lambda e: e["timestamp"])
+        bolus_req_msg1.sort(key=lambda e: e["timestamp"])
+        bolus_req_msg2.sort(key=lambda e: e["timestamp"])
+        bolus_req_msg3.sort(key=lambda e: e["timestamp"])
 
         # ── Populate current sensor values from latest events ────────
 
@@ -1958,6 +1988,91 @@ class TandemCoordinator(DataUpdateCoordinator):
                 exc_info=True,
             )
             data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] = UNAVAILABLE
+
+        # ── Bolus Calculator (3-way join on BolusID) ─────────────────────
+        data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS] = {}
+        try:
+            if bolus_req_msg3:
+                tz = ZoneInfo(self.timezone)
+                # Build joined records keyed by bolus_id
+                bolus_calc: dict[int, dict] = {}
+                for msg in bolus_req_msg1:
+                    bid = msg.get("bolus_id")
+                    if bid is not None:
+                        bolus_calc.setdefault(bid, {}).update(
+                            {
+                                "bg": msg.get("bg_mgdl"),
+                                "carbs": msg.get("carb_amount"),
+                                "iob_at_request": msg.get("iob"),
+                                "bolus_type": msg.get("bolus_type"),
+                                "correction_included": msg.get("correction_included"),
+                                "carb_ratio": msg.get("carb_ratio"),
+                            }
+                        )
+                for msg in bolus_req_msg2:
+                    bid = msg.get("bolus_id")
+                    if bid is not None:
+                        bolus_calc.setdefault(bid, {}).update(
+                            {
+                                "target_bg": msg.get("target_bg"),
+                                "isf": msg.get("isf"),
+                                "declined_correction": msg.get("declined_correction"),
+                                "user_override": msg.get("user_override"),
+                                "standard_percent": msg.get("standard_percent"),
+                                "duration_minutes": msg.get("duration_minutes"),
+                            }
+                        )
+                for msg in bolus_req_msg3:
+                    bid = msg.get("bolus_id")
+                    if bid is not None:
+                        bolus_calc.setdefault(bid, {}).update(
+                            {
+                                "food_bolus": msg.get("food_bolus_size"),
+                                "correction_bolus": msg.get("correction_bolus_size"),
+                                "total_bolus": msg.get("total_bolus_size"),
+                                "timestamp": msg.get("timestamp"),
+                            }
+                        )
+
+                # Find latest complete record (has msg3 timestamp and msg1 data)
+                complete = [
+                    (rec["timestamp"], bid, rec)
+                    for bid, rec in bolus_calc.items()
+                    if rec.get("timestamp") and rec.get("bg") is not None
+                ]
+                if complete:
+                    complete.sort(key=lambda x: x[0])
+                    _, latest_bid, latest = complete[-1]
+
+                    bg = latest.get("bg")
+                    if bg is not None and isinstance(bg, (int, float)) and bg > 0:
+                        data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] = int(bg)
+                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] = latest.get("carbs", 0)
+                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION] = round(float(latest.get("correction_bolus", 0)), 2)
+                    data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] = round(float(latest.get("food_bolus", 0)), 2)
+                    data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS] = {
+                        "bolus_id": latest_bid,
+                        "total_bolus": latest.get("total_bolus"),
+                        "iob_at_request": latest.get("iob_at_request"),
+                        "carb_ratio": latest.get("carb_ratio"),
+                        "target_bg": latest.get("target_bg"),
+                        "isf": latest.get("isf"),
+                        "correction_included": latest.get("correction_included"),
+                        "declined_correction": latest.get("declined_correction"),
+                        "user_override": latest.get("user_override"),
+                        "timestamp": latest["timestamp"].replace(tzinfo=tz).isoformat(),
+                    }
+        except (KeyError, TypeError, IndexError) as e:
+            _LOGGER.error(
+                "Tandem: Error parsing %d bolus calculator event(s): %s",
+                len(bolus_req_msg3),
+                e,
+                exc_info=True,
+            )
 
         # ── Computed summaries ─────────────────────────────────────────
         try:

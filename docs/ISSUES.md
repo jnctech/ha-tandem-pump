@@ -42,7 +42,7 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 **Type:** Feature / Upstream Sync
 **Priority:** High
 **Created:** 2026-03-13
-**Status:** 🟢 Active — Phase 1 deployed & verified (2026-03-13)
+**Status:** 🟢 Active — Phase 2 complete, awaiting PR
 
 Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `ac6f2a3`) found **no new battery/reservoir sensors upstream**. Battery data IS available in the Tandem Source API via event IDs not previously requested.
 
@@ -59,9 +59,18 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 - ✅ Deployed & verified 2026-03-13. See CR-005, CR-006.
 - ⚠️ Battery voltage (18944 mV) may be raw ADC — investigate with diagnostics capture
 
+**Phase 2 (Alerts & Alarms) — ✅ Code complete, pre-push gate passed:**
+- Branch: `feature/alerts-alarms-phase2`
+- 3 new sensors: last_alert, last_alarm, active_alerts_count
+- TANDEM_ALERT_MAP (~35 entries) + TANDEM_ALARM_MAP (~29 entries) in const.py
+- Active alert/alarm tracking via dict replay (keyed by alert_id, timestamp order)
+- AlarmCleared (28) clears both AlarmActivated and MalfunctionActivated
+- 20 new tests (7 decoder + 13 coordinator), 596 total passing
+- See CR-009
+
 **Remaining phases:**
 1. ~~Phase 1: Battery Monitoring~~ — ✅ Done
-2. Phase 2: Alerts & Alarms — events 4, 5, 6, 26, 28
+2. ~~Phase 2: Alerts & Alarms~~ — ✅ Done (PR pending)
 3. Phase 3: G7 & Libre 2 CGM — events 399, 372, 313
 4. Phase 4: Bolus Calculator — events 64, 65, 66
 5. Phase 5: PLGS & Daily Status — events 140, 90

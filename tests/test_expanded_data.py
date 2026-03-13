@@ -48,6 +48,12 @@ from custom_components.carelink.const import (
     TANDEM_SENSOR_KEY_BATTERY_VOLTAGE,
     TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH,
     TANDEM_SENSOR_KEY_CHARGING_STATUS,
+    # Alert & Alarm sensors (Phase 2)
+    TANDEM_SENSOR_KEY_LAST_ALERT,
+    TANDEM_SENSOR_KEY_LAST_ALARM,
+    TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT,
+    TANDEM_ALERT_MAP,
+    TANDEM_ALARM_MAP,
 )
 
 from custom_components.carelink.tandem_api import decode_pump_events
@@ -1085,3 +1091,283 @@ class TestBatterySensorPopulation:
         assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3800
         assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] == 250
         assert coordinator.data[TANDEM_SENSOR_KEY_CHARGING_STATUS] == "Charging"
+
+
+# ── Alert / Alarm helpers ─────────────────────────────────────────────────
+
+
+def _make_alert_activated(seq: int, alert_id: int, minutes_ago: int = 0) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 4,
+        "event_name": "AlertActivated",
+        "seq": seq,
+        "timestamp": ts,
+        "alert_id": alert_id,
+        "fault_locator": 0,
+        "param1": 0,
+        "param2": 0.0,
+    }
+
+
+def _make_alert_cleared(seq: int, alert_id: int, minutes_ago: int = 0) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 26,
+        "event_name": "AlertCleared",
+        "seq": seq,
+        "timestamp": ts,
+        "alert_id": alert_id,
+    }
+
+
+def _make_alarm_activated(seq: int, alarm_id: int, minutes_ago: int = 0) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 5,
+        "event_name": "AlarmActivated",
+        "seq": seq,
+        "timestamp": ts,
+        "alert_id": alarm_id,
+        "fault_locator": 0,
+        "param1": 0,
+        "param2": 0.0,
+    }
+
+
+def _make_alarm_cleared(seq: int, alarm_id: int, minutes_ago: int = 0) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 28,
+        "event_name": "AlarmCleared",
+        "seq": seq,
+        "timestamp": ts,
+        "alert_id": alarm_id,
+    }
+
+
+def _make_malfunction_activated(seq: int, malfunction_id: int, minutes_ago: int = 0) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 6,
+        "event_name": "MalfunctionActivated",
+        "seq": seq,
+        "timestamp": ts,
+        "alert_id": malfunction_id,
+        "fault_locator": 1,
+        "param1": 0,
+        "param2": 0.0,
+    }
+
+
+# ── Decoder tests: events 4, 5, 6, 26, 28 ────────────────────────────────
+
+
+class TestAlertAlarmDecoders:
+    """Test binary decoding of alert and alarm event types."""
+
+    def _decode_single(self, event_id: int, payload: bytes, seq: int = 1) -> dict:
+        raw = _build_binary_event(event_id, seq, 500000000, payload)
+        b64 = base64.b64encode(raw).decode()
+        events = decode_pump_events(b64)
+        assert len(events) == 1
+        return events[0]
+
+    def _alert_payload(self, alert_id: int, fault: int = 0, p1: int = 0, p2: float = 0.0) -> bytes:
+        return struct.pack(">I", alert_id) + struct.pack(">I", fault) + struct.pack(">I", p1) + struct.pack(">f", p2)
+
+    def test_decode_alert_activated(self):
+        """Event 4 (AlertActivated) decodes alert_id and params."""
+        payload = self._alert_payload(alert_id=0, fault=5, p1=10, p2=1.5)
+        evt = self._decode_single(4, payload)
+        assert evt["event_name"] == "AlertActivated"
+        assert evt["alert_id"] == 0
+        assert evt["fault_locator"] == 5
+        assert evt["param1"] == 10
+        assert abs(evt["param2"] - 1.5) < 0.001
+
+    def test_decode_alarm_activated(self):
+        """Event 5 (AlarmActivated) decodes alarm_id."""
+        payload = self._alert_payload(alert_id=2)
+        evt = self._decode_single(5, payload)
+        assert evt["event_name"] == "AlarmActivated"
+        assert evt["alert_id"] == 2
+
+    def test_decode_malfunction_activated(self):
+        """Event 6 (MalfunctionActivated) decodes malfunction_id."""
+        payload = self._alert_payload(alert_id=14, fault=99)
+        evt = self._decode_single(6, payload)
+        assert evt["event_name"] == "MalfunctionActivated"
+        assert evt["alert_id"] == 14
+        assert evt["fault_locator"] == 99
+
+    def test_decode_alert_cleared(self):
+        """Event 26 (AlertCleared) decodes only alert_id."""
+        payload = struct.pack(">I", 0) + bytes(12)
+        evt = self._decode_single(26, payload)
+        assert evt["event_name"] == "AlertCleared"
+        assert evt["alert_id"] == 0
+
+    def test_decode_alarm_cleared(self):
+        """Event 28 (AlarmCleared) decodes only alarm_id."""
+        payload = struct.pack(">I", 8) + bytes(12)
+        evt = self._decode_single(28, payload)
+        assert evt["event_name"] == "AlarmCleared"
+        assert evt["alert_id"] == 8
+
+    def test_decode_alert_activated_known_id(self):
+        """AlertActivated with a known ID resolves to name in TANDEM_ALERT_MAP."""
+        payload = self._alert_payload(alert_id=0)
+        evt = self._decode_single(4, payload)
+        assert TANDEM_ALERT_MAP.get(evt["alert_id"]) == "Low Insulin"
+
+    def test_decode_alarm_activated_known_id(self):
+        """AlarmActivated with a known ID resolves to name in TANDEM_ALARM_MAP."""
+        payload = self._alert_payload(alert_id=2)
+        evt = self._decode_single(5, payload)
+        assert TANDEM_ALARM_MAP.get(evt["alert_id"]) == "Occlusion"
+
+
+# ── Coordinator tests: alert/alarm sensor population ─────────────────────
+
+
+class TestAlertAlarmCoordinator:
+    """Test coordinator alert/alarm sensor population from events 4, 5, 6, 26, 28."""
+
+    async def test_no_events_all_unavailable(self, hass: HomeAssistant):
+        """No alert/alarm events → sensors are UNAVAILABLE."""
+        data = _make_pump_events_data([_make_cgm_event(1, 100)])
+        coordinator = await _setup_coordinator(hass, data)
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALERT] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALARM] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] == 0
+
+    async def test_single_alert_activated(self, hass: HomeAssistant):
+        """Single AlertActivated → last_alert = known name, count = 1."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_alert_activated(2, alert_id=0),  # "Low Insulin"
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALERT] == "Low Insulin"
+        assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] == 1
+
+    async def test_alert_activated_unknown_id(self, hass: HomeAssistant):
+        """AlertActivated with unknown ID → fallback 'Alert <id>'."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_alert_activated(2, alert_id=999),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALERT] == "Alert 999"
+
+    async def test_alert_cleared_reduces_count(self, hass: HomeAssistant):
+        """AlertActivated then AlertCleared → count = 0, last_alert still set."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_alert_activated(2, alert_id=0, minutes_ago=10),
+            _make_alert_cleared(3, alert_id=0, minutes_ago=5),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALERT] == "Low Insulin"
+        assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] == 0
+        # Attributes reflect cleared=True
+        attrs = coordinator.data.get(f"{TANDEM_SENSOR_KEY_LAST_ALERT}_attributes", {})
+        assert attrs["cleared"] is True
+
+    async def test_alert_attributes_structure(self, hass: HomeAssistant):
+        """last_alert attributes contain expected keys."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_alert_activated(2, alert_id=0),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        attrs = coordinator.data.get(f"{TANDEM_SENSOR_KEY_LAST_ALERT}_attributes", {})
+        assert "alert_id" in attrs
+        assert "cleared" in attrs
+        assert "timestamp" in attrs
+        assert "recent" in attrs
+        assert isinstance(attrs["recent"], list)
+
+    async def test_recent_list_capped_at_10(self, hass: HomeAssistant):
+        """recent list in attributes is capped at 10 entries."""
+        events = [_make_cgm_event(1, 100)] + [
+            _make_alert_activated(i + 2, alert_id=i % 5, minutes_ago=100 - i) for i in range(15)
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        attrs = coordinator.data.get(f"{TANDEM_SENSOR_KEY_LAST_ALERT}_attributes", {})
+        assert len(attrs["recent"]) <= 10
+
+    async def test_single_alarm_activated(self, hass: HomeAssistant):
+        """Single AlarmActivated → last_alarm = known name."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_alarm_activated(2, alarm_id=2),  # "Occlusion"
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALARM] == "Occlusion"
+        assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] == 1
+
+    async def test_malfunction_activates_alarm_sensor(self, hass: HomeAssistant):
+        """MalfunctionActivated (event 6) populates last_alarm sensor with resolved name."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_malfunction_activated(2, malfunction_id=14),  # 14 = "Software Error"
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALARM] == "Software Error"
+        assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] == 1
+
+    async def test_malfunction_cleared_by_alarm_cleared(self, hass: HomeAssistant):
+        """MalfunctionActivated then AlarmCleared (same ID) → count = 0."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_malfunction_activated(2, malfunction_id=14, minutes_ago=10),
+            _make_alarm_cleared(3, alarm_id=14, minutes_ago=5),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALARM] == "Software Error"
+        assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] == 0
+
+    async def test_alarm_cleared_reduces_count(self, hass: HomeAssistant):
+        """AlarmActivated then AlarmCleared → count = 0."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_alarm_activated(2, alarm_id=2, minutes_ago=10),
+            _make_alarm_cleared(3, alarm_id=2, minutes_ago=5),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALARM] == "Occlusion"
+        assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] == 0
+
+    async def test_mixed_alerts_and_alarms_count(self, hass: HomeAssistant):
+        """Two active alerts + one active alarm → count = 3."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_alert_activated(2, alert_id=0),  # Low Insulin — active
+            _make_alert_activated(3, alert_id=2),  # Low Power — active
+            _make_alarm_activated(4, alarm_id=2),  # Occlusion — active
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] == 3
+
+    async def test_partial_clears_reduce_count(self, hass: HomeAssistant):
+        """Two alerts activated, one cleared → count = 1."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_alert_activated(2, alert_id=0, minutes_ago=20),
+            _make_alert_activated(3, alert_id=2, minutes_ago=15),
+            _make_alert_cleared(4, alert_id=0, minutes_ago=5),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] == 1
+
+    async def test_no_alerts_alarm_only(self, hass: HomeAssistant):
+        """No alert events but alarm present → last_alert UNAVAILABLE, last_alarm set."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_alarm_activated(2, alarm_id=8),  # "Empty Cartridge"
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALERT] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALARM] == "Empty Cartridge"

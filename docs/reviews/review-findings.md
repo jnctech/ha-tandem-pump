@@ -8,6 +8,13 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 |----|----------|--------|----------|-------------|
 | L-5 | Low | OPEN | — | Profile `idp` matching may silently fail |
 | D-1 | Medium | OPEN | — | No binary event fixture |
+| A-1 | Low | FIXED | feature/alerts-alarms-phase2 | payload invariant undocumented — comment added; EVENT_LEN guard makes struct.error impossible in practice |
+| A-2 | High | FIXED | feature/alerts-alarms-phase2 | alarm parse catch used `warning` not `error`; no event counts in log — changed to `error` + added counts |
+| A-3 | Important | FIXED | feature/alerts-alarms-phase2 | active_alerts_count: MEASUREMENT + UNAVAILABLE fallback causes LTS gaps — changed to state_class=None |
+| A-4 | Low | FIXED | feature/alerts-alarms-phase2 | MalfunctionActivated clearing assumption undocumented — comment added |
+| A-5 | Low | FIXED | feature/alerts-alarms-phase2 | `recent` list repeat-activation semantics undocumented — comment added |
+| A-6 | Low | FIXED | feature/alerts-alarms-phase2 | malfunction test asserted `is not UNAVAILABLE` not name — strengthened to `== "Software Error"` |
+| A-7 | Low | FIXED | feature/alerts-alarms-phase2 | missing test: MalfunctionActivated + AlarmCleared → count=0 — test added |
 | D-2 | Low | FIXED | PR #48 | `partNumber` missing from drift check — added to fixture _drift_check |
 | S-2 | Low | FIXED | PR #47 | Inconsistent insulin unit strings — "U" → UNITS constant, "mV" → UnitOfElectricPotential, "kg" → UnitOfMass |
 | S-4 | Low | ACCEPTED | — | Threshold sensors: no HA BLOOD_GLUCOSE device class exists; device_class=None is correct |
@@ -35,15 +42,15 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | D-4 | OK | pumper_info minimal by design |
 | D-5 | OK | ControlIQ returns 404 |
 
-## File Checksums (updated: 2026-03-13, post PR #48)
+## File Checksums (updated: 2026-03-13, post feature/alerts-alarms-phase2)
 
 Compare before reading files. Skip unchanged files.
 
 ```
-2eb0d3ee __init__.py
-320a4b85 tandem_api.py
-a252e7c1 const.py
-85c251a2 sensor.py
+9458df6c __init__.py
+b3ccfc67 tandem_api.py
+d335e5fe const.py
+f76927b6 sensor.py
 ```
 
 **Status values:** OPEN, ACCEPTED, FIXED, DEFERRED, OK

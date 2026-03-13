@@ -67,9 +67,14 @@ EVT_CARTRIDGE_FILLED = 33
 EVT_CARBS_ENTERED = 48
 EVT_CANNULA_FILLED = 61
 EVT_TUBING_FILLED = 63
+EVT_ALERT_ACTIVATED = 4
+EVT_ALARM_ACTIVATED = 5
+EVT_MALFUNCTION_ACTIVATED = 6
 EVT_USB_CONNECTED = 36
 EVT_USB_DISCONNECTED = 37
 EVT_SHELF_MODE = 53
+EVT_ALERT_CLEARED = 26
+EVT_ALARM_CLEARED = 28
 EVT_DAILY_BASAL = 81
 EVT_AA_USER_MODE_CHANGE = 229
 EVT_AA_PCM_CHANGE = 230
@@ -307,6 +312,36 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             evt["battery_current_ma"] = lipo_current
             evt["battery_remaining_mah"] = lipo_rem_cap
             evt["battery_voltage_mv"] = lipo_mv
+
+        elif event_id in (EVT_ALERT_ACTIVATED, EVT_ALARM_ACTIVATED, EVT_MALFUNCTION_ACTIVATED):
+            # payload is always 16 bytes (chunk[10:26], guaranteed by EVENT_LEN guard above).
+            # Struct reads at offsets 0/4/8/12 are fully within bounds.
+            name_map = {
+                EVT_ALERT_ACTIVATED: "AlertActivated",
+                EVT_ALARM_ACTIVATED: "AlarmActivated",
+                EVT_MALFUNCTION_ACTIVATED: "MalfunctionActivated",
+            }
+            evt["event_name"] = name_map[event_id]
+            alert_id = struct.unpack_from(">I", payload, 0)[0]
+            fault_locator = struct.unpack_from(">I", payload, 4)[0]
+            param1 = struct.unpack_from(">I", payload, 8)[0]
+            param2 = struct.unpack_from(">f", payload, 12)[0]
+            evt["alert_id"] = alert_id
+            evt["fault_locator"] = fault_locator
+            evt["param1"] = param1
+            evt["param2"] = round(param2, 3)
+
+        elif event_id == EVT_ALERT_CLEARED:
+            evt["event_name"] = "AlertCleared"
+            alert_id = struct.unpack_from(">I", payload, 0)[0]
+            evt["alert_id"] = alert_id
+
+        elif event_id == EVT_ALARM_CLEARED:
+            # Event 28 clears both AlarmActivated (5) and MalfunctionActivated (6) events.
+            # The pump does not emit a separate MalfunctionCleared event.
+            evt["event_name"] = "AlarmCleared"
+            alert_id = struct.unpack_from(">I", payload, 0)[0]
+            evt["alert_id"] = alert_id
 
         elif event_id == EVT_DAILY_BASAL:
             evt["event_name"] = "DailyBasal"
@@ -722,15 +757,16 @@ class TandemSourceClient:
 
             # Request event types we need for sensor data
             event_ids = (
-                "256,"  # CGM_DATA_GXB (glucose readings)
-                "20,"  # BOLUS_COMPLETED (IOB, delivered, requested)
-                "21,"  # BOLEX_COMPLETED (extended bolus completion)
-                "280,"  # BOLUS_DELIVERY (bolus details)
-                "3,"  # BASAL_RATE_CHANGE (basal rates)
-                "279,"  # BASAL_DELIVERY (commanded rates)
+                "4,"  # ALERT_ACTIVATED
+                "5,"  # ALARM_ACTIVATED
+                "6,"  # MALFUNCTION_ACTIVATED
                 "11,"  # PUMPING_SUSPENDED
                 "12,"  # PUMPING_RESUMED
                 "16,"  # BG_READING_TAKEN (manual BG)
+                "20,"  # BOLUS_COMPLETED (IOB, delivered, requested)
+                "21,"  # BOLEX_COMPLETED (extended bolus completion)
+                "26,"  # ALERT_CLEARED
+                "28,"  # ALARM_CLEARED
                 "33,"  # CARTRIDGE_FILLED
                 "36,"  # USB_CONNECTED (charging)
                 "37,"  # USB_DISCONNECTED
@@ -740,7 +776,10 @@ class TandemSourceClient:
                 "63,"  # TUBING_FILLED
                 "81,"  # DAILY_BASAL (battery %, voltage, daily totals)
                 "229,"  # AA_USER_MODE_CHANGE (sleep/exercise)
-                "230"  # AA_PCM_CHANGE (Control-IQ mode)
+                "230,"  # AA_PCM_CHANGE (Control-IQ mode)
+                "256,"  # CGM_DATA_GXB (glucose readings)
+                "279,"  # BASAL_DELIVERY (commanded rates)
+                "280"  # BOLUS_DELIVERY (bolus details)
             )
 
             url = (

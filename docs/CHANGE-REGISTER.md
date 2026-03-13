@@ -4,6 +4,47 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-009 — Alerts & Alarms Sensors (Phase 2)
+**Date:** 2026-03-13
+**Branch:** `feature/alerts-alarms-phase2`
+**PR:** pending
+**Status:** Pre-push gate complete, awaiting PR
+
+### What Changed
+| Area | Change |
+|------|--------|
+| tandem_api.py | Added 5 event constants (EVT_ALERT_ACTIVATED=4, EVT_ALARM_ACTIVATED=5, EVT_MALFUNCTION_ACTIVATED=6, EVT_ALERT_CLEARED=26, EVT_ALARM_CLEARED=28) |
+| tandem_api.py | Added 3 decoder cases; updated get_pump_events() event_ids to include 4, 5, 6, 26, 28 |
+| const.py | Added 3 sensor key constants, TANDEM_ALERT_MAP (~35 entries), TANDEM_ALARM_MAP (~29 entries), 3 SensorEntityDescription entries |
+| __init__.py | Added UNAVAILABLE defaults; updated _parse_pump_events() categorisation; added _parse_alert_alarm_events() |
+| tests | Added TestAlertAlarmDecoders (7 tests) + TestAlertAlarmCoordinator (13 tests); 596 total passing |
+
+### Sensors Added
+| Key | Name | Value |
+|-----|------|-------|
+| tandem_last_alert | Last pump alert | Human-readable alert name (TANDEM_ALERT_MAP) |
+| tandem_last_alarm | Last pump alarm | Human-readable alarm name (TANDEM_ALARM_MAP) |
+| tandem_active_alerts_count | Active pump alerts | Count of uncleared alerts + alarms |
+
+### Review Gate Results
+| Gate | Result |
+|------|--------|
+| silent-failure-hunter | 5 findings; all addressed (comments, error→warning, state_class fix) |
+| code-reviewer | 2 findings; both addressed (state_class=None, malfunction comment) |
+| Logic Review 1 (Opus) | 2 test gaps; both addressed (name assert + malfunction-cleared test) |
+| Sensor Review 3 (Sonnet) | No errors found |
+
+### Quality Gate Results (at branch)
+| Metric | Value | Gate |
+|--------|-------|------|
+| Tests | 596 passed | ✅ |
+| Ruff format | Clean | ✅ |
+| Ruff lint | Clean | ✅ |
+| API drift | None | ✅ |
+| Bandit | Clean | ✅ |
+
+---
+
 ## CR-008 — Display Precision & Fixture Update
 **Date:** 2026-03-13
 **Branch:** `fix/sensor-display-precision`

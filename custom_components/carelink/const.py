@@ -534,6 +534,11 @@ TANDEM_SENSOR_KEY_CGM_STATUS = "tandem_cgm_status"
 TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL = "tandem_last_cartridge_fill_amount"
 TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON = "tandem_pump_suspend_reason"
 
+# ── Alerts & Alarms keys (Phase 2 — from events 4, 5, 6, 26, 28) ──────
+TANDEM_SENSOR_KEY_LAST_ALERT = "tandem_last_alert"
+TANDEM_SENSOR_KEY_LAST_ALARM = "tandem_last_alarm"
+TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT = "tandem_active_alerts_count"
+
 # ── Battery monitoring keys (Phase 1 — from events 81, 53, 36, 37) ────
 TANDEM_SENSOR_KEY_BATTERY_PERCENT = "tandem_battery_percent"
 TANDEM_SENSOR_KEY_BATTERY_VOLTAGE = "tandem_battery_voltage"
@@ -542,6 +547,81 @@ TANDEM_SENSOR_KEY_CHARGING_STATUS = "tandem_charging_status"
 
 # ── Lookup maps for event-derived sensor values ───────────────────────
 CGM_STATUS_MAP: dict[int, str] = {0: "Normal", 1: "High", 2: "Low"}
+
+# Alert and alarm ID → human-readable name maps.
+# Sourced from tconnectsync static_dicts.py (jwoglom/tconnectsync).
+TANDEM_ALERT_MAP: dict[int, str] = {
+    0: "Low Insulin",
+    1: "USB Connection",
+    2: "Low Power",
+    3: "Low Power (Critical)",
+    5: "Auto Off",
+    7: "Power Source",
+    11: "Incomplete Bolus",
+    12: "Incomplete Temp Rate",
+    13: "Incomplete Cartridge Change",
+    17: "Low Insulin (2nd)",
+    19: "Low Transmitter",
+    22: "Sensor Expiring",
+    23: "Sensor Expired",
+    24: "Sensor Failed",
+    25: "Sensor Warmup",
+    26: "Sensor Out Of Range",
+    27: "Sensor High",
+    28: "Sensor Low",
+    29: "CGM Calibration",
+    30: "CGM Cal Due",
+    31: "CGM Cal Error",
+    32: "CGM Trend",
+    33: "CGM Rise",
+    34: "CGM Fall",
+    36: "Sensor Change",
+    38: "Transmitter Low Battery",
+    39: "Transmitter End of Life",
+    40: "Pump Bluetooth Error",
+    42: "CGM High Alert",
+    43: "CGM Low Alert",
+    44: "CGM Urgent Low Alert",
+    45: "CGM Very High Alert",
+    46: "Predicted High Alert",
+    47: "Predicted Low Alert",
+    48: "CGM Unavailable",
+    50: "Feature Activation",
+    52: "Suspend Before Low",
+    53: "Suspend On Low",
+    54: "Resume From Suspend",
+}
+
+TANDEM_ALARM_MAP: dict[int, str] = {
+    0: "Cartridge Alarm",
+    2: "Occlusion",
+    3: "Pump Reset",
+    4: "Motor Error",
+    5: "Infusion Complete",
+    6: "Basal Rate Not Set",
+    7: "Auto Off",
+    8: "Empty Cartridge",
+    9: "Delivery Error",
+    10: "Temperature",
+    11: "Hardware Error",
+    12: "Battery Shutdown",
+    13: "Low Battery",
+    14: "Software Error",
+    15: "Memory Error",
+    16: "Clock Error",
+    17: "Calibration Error",
+    18: "Resume Pump",
+    19: "Cartridge Error",
+    20: "Pressure Error",
+    21: "Altitude",
+    22: "Insulin Expired",
+    23: "Max Daily Insulin",
+    24: "Max Bolus",
+    25: "Cartridge Removed",
+    26: "Priming Error",
+    27: "Plunger Error",
+    28: "Fill Timeout",
+}
 
 # ── Shared icon strings (S1192: avoid duplicating literals 3+ times) ──
 ICON_ALERT_CIRCLE_OUTLINE = "mdi:alert-circle-outline"
@@ -1132,6 +1212,35 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:battery-alert",
         entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # ── Alerts & Alarms sensors (Phase 2) ───────────────────────────────
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_ALERT,
+        name="Last pump alert",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon=ICON_ALERT_CIRCLE_OUTLINE,
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_LAST_ALARM,
+        name="Last pump alarm",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:alarm-light",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT,
+        name="Active pump alerts",
+        native_unit_of_measurement=None,
+        state_class=None,  # UNAVAILABLE in fallback paths — MEASUREMENT + None causes LTS gaps
+        device_class=None,
+        icon=ICON_ALERT_CIRCLE_OUTLINE,
+        entity_category=None,
+        suggested_display_precision=0,
     ),
     # ── Battery monitoring sensors (Phase 1) ────────────────────────────
     SensorEntityDescription(

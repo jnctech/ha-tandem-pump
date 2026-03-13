@@ -645,6 +645,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:plus-minus-variant",
         entity_category=None,
+        suggested_display_precision=0,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE,

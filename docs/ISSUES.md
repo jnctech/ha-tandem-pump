@@ -7,11 +7,10 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 
 ## Current Priorities
 
-1. **ISS-011 Phase 3** — G7 & Libre 2 CGM (PR pending)
-2. **ISS-011 Phase 4+** — Bolus Calculator, PLGS, ERI
-3. **ISS-010** — ADRs + templates done; tooling + ADR-007/008 remaining
-4. **ISS-005** — tandem_api.py coverage gap
-5. Remaining baseline findings (D-1, L-5, S-4)
+1. **ISS-011 Phase 4+** — Bolus Calculator, PLGS, ERI
+2. **ISS-010** — ADRs + templates done; tooling + ADR-007/008 remaining
+3. **ISS-005** — tandem_api.py coverage gap
+4. Remaining baseline findings (D-1, L-5, S-4)
 
 ---
 
@@ -42,7 +41,7 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 **Type:** Feature / Upstream Sync
 **Priority:** High
 **Created:** 2026-03-13
-**Status:** 🟢 Active — Phase 3 in progress (PR pending)
+**Status:** 🟢 Active — Phase 3 merged, Phase 4 next
 
 Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `ac6f2a3`) found **no new battery/reservoir sensors upstream**. Battery data IS available in the Tandem Source API via event IDs not previously requested.
 
@@ -66,18 +65,19 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 - 20 new tests (7 decoder + 13 coordinator), 596 total passing
 - See CR-009
 
-**Phase 3 (G7 & Libre 2 CGM) — ✅ Code complete, pre-push gate in progress:**
-- Branch: `feature/cgm-g7-libre2-phase3`
+**Phase 3 (G7 & Libre 2 CGM) — ✅ Deployed & verified:**
+- PR #50 + PR #51 (SonarCloud S1871 fix) — merged to develop, deployed 2026-03-13
 - 1 new sensor: cgm_sensor_type (diagnostic, from AA_DAILY_STATUS event 313)
 - G7 (event 399) and Libre 2 (event 372) CGM readings routed into existing cgm_readings pipeline
 - Replaced all magic event IDs in coordinator with EVT_* constants
+- Extracted `_decode_cgm_gxb_layout` shared decoder to eliminate duplication
 - 19 new tests (11 decoder + 8 coordinator), 613 total passing
 - See CR-010
 
 **Remaining phases:**
 1. ~~Phase 1: Battery Monitoring~~ — ✅ Done
 2. ~~Phase 2: Alerts & Alarms~~ — ✅ Done
-3. ~~Phase 3: G7 & Libre 2 CGM~~ — ✅ Done (PR pending)
+3. ~~Phase 3: G7 & Libre 2 CGM~~ — ✅ Merged (PR #50, #51)
 4. Phase 4: Bolus Calculator — events 64, 65, 66
 5. Phase 5: PLGS & Daily Status — events 140, 90
 6. Phase 6: Estimated Remaining Insulin — computed from existing events

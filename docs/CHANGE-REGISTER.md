@@ -7,7 +7,7 @@ Significant changes to this repository, listed in reverse chronological order.
 ## CR-014 — Devcontainer Gitleaks Download Fix
 **Date:** 2026-03-14
 **Branch:** `bugfix/devcontainer-gitleaks-download`
-**PR:** TBD
+**PR:** [#57](https://github.com/jnctech/ha-tandem-pump/pull/57)
 **Status:** In review
 
 ### What Changed
@@ -16,9 +16,10 @@ Significant changes to this repository, listed in reverse chronological order.
 | .devcontainer/Dockerfile | Added `--retry 3 --retry-delay 5` to gitleaks curl download |
 | .devcontainer/Dockerfile | Added `-L` to explicitly follow HTTP redirects |
 | .devcontainer/Dockerfile | Removed `--proto-redir -all,https` (redundant — GitHub redirect chain is HTTPS only) |
+| .devcontainer/Dockerfile | Added SHA256 checksum verification (`sha256sum -c`) — resolves SonarCloud Security Hotspot |
 
 ### Why
-Devcontainer build was failing intermittently with `gzip: stdin: unexpected end of file` — the gitleaks tarball download was completing partially due to transient network interruption. The `--proto-redir` flag was also potentially suppressing the redirect follow-through in some curl versions. Added retry logic and explicit `-L` to make the download resilient.
+Devcontainer build was failing intermittently with `gzip: stdin: unexpected end of file` — the gitleaks tarball download was completing partially due to transient network interruption. The `--proto-redir` flag was also potentially suppressing the redirect follow-through in some curl versions. Added retry logic, explicit `-L`, and SHA256 integrity verification to make the download resilient and satisfy SonarCloud's security analysis.
 
 ### Quality Gate Results
 | Metric | Value | Gate |

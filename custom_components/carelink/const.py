@@ -547,7 +547,7 @@ TANDEM_SENSOR_KEY_LAST_BOLUS_BG = "tandem_last_bolus_bg"
 TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS = "tandem_last_bolus_carbs_entered"
 TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION = "tandem_last_bolus_correction"
 TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD = "tandem_last_bolus_food_portion"
-TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS = "tandem_bolus_calculator_attributes"
+TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS = "tandem_last_bolus_bg_attributes"
 
 # ── Battery monitoring keys (Phase 1 — from events 81, 53, 36, 37) ────
 TANDEM_SENSOR_KEY_BATTERY_PERCENT = "tandem_battery_percent"
@@ -1341,15 +1341,6 @@ TANDEM_SENSORS = (
         icon="mdi:needle",
         entity_category=None,
         suggested_display_precision=2,
-    ),
-    SensorEntityDescription(
-        key=TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS,
-        name="Bolus calculator details",
-        native_unit_of_measurement=None,
-        state_class=None,
-        device_class=None,
-        icon="mdi:calculator",
-        entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )
 

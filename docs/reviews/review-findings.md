@@ -8,6 +8,18 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 |----|----------|--------|----------|-------------|
 | L-5 | Low | OPEN | — | Profile `idp` matching may silently fail |
 | B-1 | Low | OPEN | — | Missing test: msg1+msg3 without msg2 — join works but msg2 fields are None in attrs |
+| R-1 | High | FIXED | feature/estimated-insulin-remaining-phase6 | Insulin remaining drift: recomputing from event window each poll caused upward drift when events aged out — fixed with cumulative seq-based tracking |
+| R-2 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | Exception handling too narrow: missing ValueError, AttributeError — added to catch tuple |
+| R-3 | Low | FIXED | feature/estimated-insulin-remaining-phase6 | Missing exc_info=True on error log — added for stack trace visibility |
+| R-4 | Low | FIXED | feature/estimated-insulin-remaining-phase6 | Direct ["timestamp"] access could raise KeyError — changed to .get() with guards |
+| R-5 | Low | FIXED | feature/estimated-insulin-remaining-phase6 | No debug logging on cartridge fill reset — added |
+| R-6 | Low | FIXED | feature/estimated-insulin-remaining-phase6 | No debug logging when fill volume unknown — added |
+| R-7 | High | FIXED | feature/estimated-insulin-remaining-phase6 | Missing seq defaults to 0 — silently excludes deliveries, over-reports remaining (dangerous direction). Added explicit None guards and warnings |
+| R-8 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | Missing insulin_delivered/timestamps silently default to 0/skip — added warnings and debug logs |
+| R-9 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | error→warning at call site for consistency with other event parsers |
+| R-10 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | Negative basal time interval not clamped — could inflate remaining. Added max(0.0, ...) floor |
+| R-11 | Critical | FIXED | feature/estimated-insulin-remaining-phase6 | Partial state mutation before exception corrupts accumulator permanently — refactored to compute-then-commit pattern with local variables |
+| R-12 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | _last_delivery_seq not advanced for zero-delivery events — causes repeated processing. Now always advances |
 | B-2 | Low | OPEN | — | carb_ratio 1000x multiplier from tconnectsync spec — cannot validate without real capture |
 | D-1 | Medium | OPEN | — | No binary event fixture |
 | C-1 | High | FIXED | feature/cgm-g7-libre2-phase3 | Magic event IDs in coordinator — replaced ALL with EVT_* constants from tandem_api |
@@ -49,15 +61,15 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | D-4 | OK | pumper_info minimal by design |
 | D-5 | OK | ControlIQ returns 404 |
 
-## File Checksums (updated: 2026-03-13, post Phase 5 feature/plgs-daily-status-phase5)
+## File Checksums (updated: 2026-03-13, Phase 6 feature/estimated-insulin-remaining-phase6)
 
 Compare before reading files. Skip unchanged files.
 
 ```
-9c9fd4b9 __init__.py
-3beaa647 tandem_api.py
-d47ab1a7 const.py
-d0a63142 sensor.py
+6147e84f __init__.py
+04d65054 tandem_api.py
+7c145558 const.py
+85c251a2 sensor.py
 ```
 
 **Status values:** OPEN, ACCEPTED, FIXED, DEFERRED, OK

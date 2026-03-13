@@ -217,6 +217,8 @@ from .const import (
     TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS,
     # PLGS & Daily Status (Phase 5)
     TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE,
+    # Estimated Remaining Insulin (Phase 6)
+    TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING,
 )
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER]
@@ -1046,6 +1048,17 @@ class TandemCoordinator(DataUpdateCoordinator):
         self._last_max_date: str | None = None  # maxDateWithEvents from metadata
         self._last_event_seq: int = 0  # Last processed event sequence number
 
+        # Phase 6: Estimated Remaining Insulin — cumulative tracking.
+        # Accumulates delivered insulin incrementally using seq numbers to
+        # avoid double-counting. Persists across polls so we can compute
+        # remaining even when events age out of the 14-day API window.
+        # State is lost on HA restart — sensor shows UNAVAILABLE until
+        # a new cartridge fill event appears in the window.
+        self._last_cartridge_fill_seq: int = 0
+        self._last_cartridge_fill_volume: float = 0.0
+        self._cumulative_delivered: float = 0.0
+        self._last_delivery_seq: int = 0
+
         if UPLOADER in hass.data[DOMAIN][entry.entry_id]:
             self.uploader = hass.data[DOMAIN][entry.entry_id][UPLOADER]
 
@@ -1265,6 +1278,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS] = {}
         data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] = UNAVAILABLE
 
         if not timeline:
             data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
@@ -1602,8 +1616,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         bolus_req_msg2.sort(key=lambda e: e["timestamp"])
         bolus_req_msg3.sort(key=lambda e: e["timestamp"])
         plgs_events.sort(key=lambda e: e["timestamp"])
-        # NewDay events decoded for diagnostics logging only (Phase 5).
-        # Sensor population planned for Phase 6 — see docs/plan-tandem-api-expansion.md.
+        # NewDay events decoded for diagnostics logging (Phase 5).
         new_day_events.sort(key=lambda e: e["timestamp"])
 
         # ── Populate current sensor values from latest events ────────
@@ -1902,6 +1915,17 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL] = UNAVAILABLE
+
+        # ── Estimated remaining insulin (Phase 6) ──────────────────────
+        # Accumulates delivered insulin incrementally using seq-based dedup.
+        # State persists across polls; lost on HA restart.
+        try:
+            self._compute_estimated_remaining_insulin(
+                cartridge_fills, bolus_completed, bolex_completed, basal_delivery, data
+            )
+        except (KeyError, TypeError, IndexError, ValueError, AttributeError) as e:
+            _LOGGER.warning("Error computing estimated remaining insulin: %s", e, exc_info=True)
+            data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] = UNAVAILABLE
 
         # ── Site change ───────────────────────────────────────────────
         # The Tandem Source API does not return CANNULA_FILLED (event 61)
@@ -2597,6 +2621,120 @@ class TandemCoordinator(DataUpdateCoordinator):
             basal_total,
             data.get(TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT) or 0,
             data.get(TANDEM_SENSOR_KEY_DAILY_CARBS, "N/A"),
+        )
+
+    def _compute_estimated_remaining_insulin(
+        self,
+        cartridge_fills: list[dict],
+        bolus_completed: list[dict],
+        bolex_completed: list[dict],
+        basal_delivery: list[dict],
+        data: dict,
+    ) -> None:
+        """Estimate remaining insulin from fill volume minus cumulative deliveries.
+
+        Uses incremental accumulation with seq-based dedup to avoid both
+        double-counting (overlapping API windows) and drift (events aging
+        out of the 14-day window). A new cartridge fill resets the accumulator.
+
+        All computation uses local variables; self._ state is only committed
+        atomically at the end to prevent partial state corruption on exceptions.
+
+        State is lost on HA restart — sensor shows UNAVAILABLE until a
+        cartridge fill event appears in the window.
+        """
+        # Snapshot coordinator state into locals for atomic update
+        local_fill_seq = self._last_cartridge_fill_seq
+        local_fill_volume = self._last_cartridge_fill_volume
+        local_cumulative = self._cumulative_delivered
+        local_del_seq = self._last_delivery_seq
+        fill_reset = False
+
+        # Check for a new cartridge fill — resets the accumulator
+        if cartridge_fills:
+            latest_fill = cartridge_fills[-1]
+            fill_seq = latest_fill.get("seq", 0)
+            fill_volume = latest_fill.get("insulin_volume", 0)
+            if fill_seq > local_fill_seq and fill_volume and fill_volume > 0:
+                local_fill_seq = fill_seq
+                local_fill_volume = float(fill_volume)
+                local_cumulative = 0.0
+                local_del_seq = fill_seq
+                fill_reset = True
+
+        # No fill volume known — cannot compute
+        if local_fill_volume <= 0:
+            _LOGGER.debug("No cartridge fill volume known — insulin remaining unavailable")
+            data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] = UNAVAILABLE
+            return
+
+        # Accumulate only NEW deliveries (seq > local_del_seq)
+        new_bolus = 0.0
+        new_basal = 0.0
+        max_new_seq = local_del_seq
+
+        for b in bolus_completed + bolex_completed:
+            seq = b.get("seq")
+            if seq is None:
+                _LOGGER.warning("Bolus event missing seq field, skipping")
+                continue
+            if seq > local_del_seq:
+                delivered = b.get("insulin_delivered")
+                if delivered is None:
+                    _LOGGER.warning("Bolus seq=%d missing insulin_delivered", seq)
+                    delivered = 0
+                new_bolus += delivered
+                max_new_seq = max(max_new_seq, seq)
+
+        # Basal: only count new delivery events (seq > local_del_seq)
+        new_basal_events = [b for b in basal_delivery if b.get("seq") is not None and b.get("seq") > local_del_seq]
+        if new_basal_events:
+            sorted_basal = sorted(new_basal_events, key=lambda e: e.get("seq", 0))
+            for i in range(len(sorted_basal) - 1):
+                rate = sorted_basal[i].get("commanded_rate", 0) or 0
+                ts_a = sorted_basal[i].get("timestamp")
+                ts_b = sorted_basal[i + 1].get("timestamp")
+                if ts_a and ts_b:
+                    dt_hours = (ts_b - ts_a).total_seconds() / 3600.0
+                    dt_hours = max(0.0, min(dt_hours, 1.0))
+                    new_basal += rate * dt_hours
+                else:
+                    _LOGGER.debug(
+                        "Basal event seq=%s missing timestamp, skipping interval",
+                        sorted_basal[i].get("seq"),
+                    )
+            # Last segment: assume 5 min
+            last_rate = sorted_basal[-1].get("commanded_rate", 0) or 0
+            new_basal += last_rate * (5.0 / 60.0)
+            max_new_seq = max(max_new_seq, sorted_basal[-1].get("seq", 0))
+
+        # Compute result
+        local_cumulative += new_bolus + new_basal
+        estimated = max(0.0, local_fill_volume - local_cumulative)
+
+        # Atomic commit — only reached if no exception above
+        self._last_cartridge_fill_seq = local_fill_seq
+        self._last_cartridge_fill_volume = local_fill_volume
+        self._cumulative_delivered = local_cumulative
+        self._last_delivery_seq = max_new_seq
+        data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] = round(estimated, 1)
+
+        if fill_reset:
+            _LOGGER.debug(
+                "New cartridge fill: %.1f U (seq=%d), reset accumulator",
+                local_fill_volume,
+                local_fill_seq,
+            )
+
+        _LOGGER.debug(
+            "Estimated insulin remaining: %.1f U "
+            "(fill=%.1f, cumulative=%.2f, new_bolus=%.2f, new_basal=%.2f, last_seq=%d)",
+            estimated,
+            self._last_cartridge_fill_volume,
+            self._cumulative_delivered,
+            new_bolus,
+            new_basal,
+            self._last_delivery_seq,
         )
 
     # ── Long-term statistics import ──────────────────────────────────

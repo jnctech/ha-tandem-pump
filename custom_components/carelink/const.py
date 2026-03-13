@@ -552,6 +552,9 @@ TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS = "tandem_last_bolus_bg_attributes"
 # ── PLGS & Daily Status keys (Phase 5 — from events 140, 90) ──────────
 TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE = "tandem_predicted_glucose"
 
+# ── Estimated Remaining Insulin key (Phase 6 — computed) ──────────────
+TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING = "tandem_estimated_insulin_remaining"
+
 # ── Battery monitoring keys (Phase 1 — from events 81, 53, 36, 37) ────
 TANDEM_SENSOR_KEY_BATTERY_PERCENT = "tandem_battery_percent"
 TANDEM_SENSOR_KEY_BATTERY_VOLTAGE = "tandem_battery_voltage"
@@ -1355,6 +1358,17 @@ TANDEM_SENSORS = (
         icon="mdi:crystal-ball",
         entity_category=None,
         suggested_display_precision=0,
+    ),
+    # ── Estimated Remaining Insulin (Phase 6) ─────────────────────────
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING,
+        name="Estimated insulin remaining",
+        native_unit_of_measurement=UNITS,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:needle",
+        entity_category=None,
+        suggested_display_precision=1,
     ),
 )
 

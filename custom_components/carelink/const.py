@@ -549,6 +549,9 @@ TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION = "tandem_last_bolus_correction"
 TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD = "tandem_last_bolus_food_portion"
 TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS = "tandem_last_bolus_bg_attributes"
 
+# ── PLGS & Daily Status keys (Phase 5 — from events 140, 90) ──────────
+TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE = "tandem_predicted_glucose"
+
 # ── Battery monitoring keys (Phase 1 — from events 81, 53, 36, 37) ────
 TANDEM_SENSOR_KEY_BATTERY_PERCENT = "tandem_battery_percent"
 TANDEM_SENSOR_KEY_BATTERY_VOLTAGE = "tandem_battery_voltage"
@@ -1341,6 +1344,17 @@ TANDEM_SENSORS = (
         icon="mdi:needle",
         entity_category=None,
         suggested_display_precision=2,
+    ),
+    # ── PLGS & Daily Status (Phase 5) ─────────────────────────────────
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE,
+        name="Predicted glucose",
+        native_unit_of_measurement=MGDL,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=_BLOOD_GLUCOSE,
+        icon="mdi:crystal-ball",
+        entity_category=None,
+        suggested_display_precision=0,
     ),
 )
 

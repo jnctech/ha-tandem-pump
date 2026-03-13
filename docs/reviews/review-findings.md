@@ -49,14 +49,14 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | D-4 | OK | pumper_info minimal by design |
 | D-5 | OK | ControlIQ returns 404 |
 
-## File Checksums (updated: 2026-03-13, post PR #53 bugfix/bolus-calc-attrs-not-sensor)
+## File Checksums (updated: 2026-03-13, post Phase 5 feature/plgs-daily-status-phase5)
 
 Compare before reading files. Skip unchanged files.
 
 ```
-ec093426 __init__.py
-7f1a5d40 tandem_api.py
-022f7643 const.py
+9c9fd4b9 __init__.py
+3beaa647 tandem_api.py
+d47ab1a7 const.py
 d0a63142 sensor.py
 ```
 

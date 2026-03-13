@@ -57,6 +57,8 @@ from .tandem_api import (
     EVT_BOLUS_REQUESTED_MSG1,
     EVT_BOLUS_REQUESTED_MSG2,
     EVT_BOLUS_REQUESTED_MSG3,
+    EVT_NEW_DAY,
+    EVT_PLGS_PERIODIC,
 )
 from .nightscout_uploader import NightscoutUploader
 from .helpers import is_data_stale
@@ -213,6 +215,8 @@ from .const import (
     TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION,
     TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD,
     TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS,
+    # PLGS & Daily Status (Phase 5)
+    TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE,
 )
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER]
@@ -1260,6 +1264,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS] = {}
+        data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] = UNAVAILABLE
 
         if not timeline:
             data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
@@ -1474,6 +1479,8 @@ class TandemCoordinator(DataUpdateCoordinator):
         bolus_req_msg1: list[dict] = []
         bolus_req_msg2: list[dict] = []
         bolus_req_msg3: list[dict] = []
+        plgs_events: list[dict] = []
+        new_day_events: list[dict] = []
 
         for evt in pump_events:
             eid = evt.get("event_id")
@@ -1523,6 +1530,10 @@ class TandemCoordinator(DataUpdateCoordinator):
                 bolus_req_msg2.append(evt)
             elif eid == EVT_BOLUS_REQUESTED_MSG3:
                 bolus_req_msg3.append(evt)
+            elif eid == EVT_PLGS_PERIODIC:
+                plgs_events.append(evt)
+            elif eid == EVT_NEW_DAY:
+                new_day_events.append(evt)
 
         _LOGGER.debug(
             "Tandem: Events - CGM: %d, BolusCompleted: %d, BolexCompleted: %d, "
@@ -1531,7 +1542,8 @@ class TandemCoordinator(DataUpdateCoordinator):
             "Cannula: %d, Tubing: %d, UserMode: %d, PCM: %d, "
             "DailyBasal: %d, ShelfMode: %d, USB: %d, "
             "Alert: %d, Alarm: %d, DailyStatus: %d, "
-            "BolusReqMsg1: %d, BolusReqMsg2: %d, BolusReqMsg3: %d",
+            "BolusReqMsg1: %d, BolusReqMsg2: %d, BolusReqMsg3: %d, "
+            "PLGS: %d, NewDay: %d",
             len(cgm_readings),
             len(bolus_completed),
             len(bolex_completed),
@@ -1555,6 +1567,8 @@ class TandemCoordinator(DataUpdateCoordinator):
             len(bolus_req_msg1),
             len(bolus_req_msg2),
             len(bolus_req_msg3),
+            len(plgs_events),
+            len(new_day_events),
         )
 
         # Update the last-seen sequence number for statistics deduplication
@@ -1587,6 +1601,10 @@ class TandemCoordinator(DataUpdateCoordinator):
         bolus_req_msg1.sort(key=lambda e: e["timestamp"])
         bolus_req_msg2.sort(key=lambda e: e["timestamp"])
         bolus_req_msg3.sort(key=lambda e: e["timestamp"])
+        plgs_events.sort(key=lambda e: e["timestamp"])
+        # NewDay events decoded for diagnostics logging only (Phase 5).
+        # Sensor population planned for Phase 6 — see docs/plan-tandem-api-expansion.md.
+        new_day_events.sort(key=lambda e: e["timestamp"])
 
         # ── Populate current sensor values from latest events ────────
 
@@ -2078,6 +2096,26 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS] = {}
+
+        # ── PLGS Predicted Glucose (Phase 5) ───────────────────────────
+        try:
+            if plgs_events:
+                latest_plgs = plgs_events[-1]
+                pgv = latest_plgs.get("predicted_glucose_mgdl")
+                if pgv is not None and isinstance(pgv, (int, float)) and pgv > 0:
+                    data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] = int(pgv)
+                else:
+                    data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] = UNAVAILABLE
+            else:
+                data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] = UNAVAILABLE
+        except (KeyError, TypeError, IndexError, ValueError) as e:
+            _LOGGER.error(
+                "Tandem: Error parsing %d PLGS event(s): %s",
+                len(plgs_events),
+                e,
+                exc_info=True,
+            )
+            data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] = UNAVAILABLE
 
         # ── Computed summaries ─────────────────────────────────────────
         try:

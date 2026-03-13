@@ -83,12 +83,19 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 - Sensors show "unknown" until bolus calculator wizard is used (quick boluses are event 17, not 64/65/66)
 - See CR-011, CR-012
 
+**Phase 5 (PLGS & Daily Status) — 🟡 In review:**
+- Branch: `feature/plgs-daily-status-phase5`
+- 1 new sensor: predicted_glucose (from PLGS algorithm PGV, event 140)
+- Event 90 (NewDay) decoded for diagnostics logging; sensor deferred to Phase 6
+- 15 new tests (8 decoder + 7 coordinator), 641 total passing
+- See CR-013
+
 **Remaining phases:**
 1. ~~Phase 1: Battery Monitoring~~ — ✅ Done
 2. ~~Phase 2: Alerts & Alarms~~ — ✅ Done
 3. ~~Phase 3: G7 & Libre 2 CGM~~ — ✅ Merged (PR #50, #51)
 4. ~~Phase 4: Bolus Calculator~~ — ✅ Deployed & verified (PR #52, #53)
-5. Phase 5: PLGS & Daily Status — events 140, 90
+5. ~~Phase 5: PLGS & Daily Status~~ — 🟡 In review (CR-013)
 6. Phase 6: Estimated Remaining Insulin — computed from existing events
 
 **Investigation items:**

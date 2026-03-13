@@ -4,6 +4,42 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-006 — Sensor Audit & Diagnostics Service (ISS-011 Support)
+**Date:** 2026-03-13
+**Branch:** `fix/sensor-audit-diagnostics`
+**PR:** [#46](https://github.com/jnctech/ha-tandem-pump/pull/46)
+**Status:** Merged to `develop`
+**Deployed:** Pending — deploy with CR-005
+
+### What Changed
+| Area | Change |
+|------|--------|
+| __init__.py | Added `capture_diagnostics` service handler — dumps full API response to `/config/carelink_diagnostics_*.json` for field discovery |
+| __init__.py | Widened event fetch window from 1 day to 14 days — ensures battery/daily events are captured even with infrequent uploads |
+| const.py | Fixed glucose delta sensor: changed unit from `None` to `mg/dL` |
+| tandem_api.py | Minor formatting cleanup |
+| services.yaml | Added `capture_diagnostics` service definition |
+| tests | 8 new tests for `capture_diagnostics` service handler (file write, error handling, service registration) |
+
+### Finding Reference
+- Glucose delta unit fix addresses sensor metadata gap found during baseline review
+- Diagnostics service enables API schema discovery for future ISS-011 phases
+- Event window widening ensures battery sensors (daily cadence) reliably populate
+
+### Quality Gate Results (at merge)
+| Metric | Value | Gate |
+|--------|-------|------|
+| Coverage | 83%+ | ≥80% ✅ |
+| Tests | 576 passed | — ✅ |
+| Bugs/Vulns/Smells | Grade A | Grade A ✅ |
+
+### Post-Deploy Actions
+- [ ] Deploy with CR-005 (same scp + restart)
+- [ ] Verify `capture_diagnostics` service appears in Developer Tools → Actions
+- [ ] Run service, retrieve diagnostics JSON for fixture update
+
+---
+
 ## CR-005 — Battery Monitoring Sensors (ISS-011 Phase 1)
 **Date:** 2026-03-12
 **Branch:** `feat/phase1-battery-monitoring`

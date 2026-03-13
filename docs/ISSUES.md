@@ -50,9 +50,13 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 - PR #43: Investigation docs (upstream review + 6-phase plan) — merged
 - PR #44: Housekeeping (ISSUES.md updates) — merged
 - PR #45: Battery monitoring implementation — merged
+- PR #46: Sensor audit + diagnostics service — merged
 - 4 new sensors: battery %, voltage (mV), remaining (mAh), charging status
-- 20 new tests, 568 total passing
-- **Pending:** deploy to HA and verify entities. See CR-005.
+- `capture_diagnostics` service for API schema discovery
+- Widened event fetch window (1→14 days) for reliable battery data
+- Fixed glucose delta unit (None → mg/dL)
+- 28 new tests (20 battery + 8 diagnostics), 576 total passing
+- **Pending:** deploy to HA and verify entities. See CR-005, CR-006.
 
 **Remaining phases:**
 1. ~~Phase 1: Battery Monitoring~~ — ✅ Done

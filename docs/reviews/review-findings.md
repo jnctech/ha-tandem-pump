@@ -28,15 +28,15 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | D-4 | OK | pumper_info minimal by design |
 | D-5 | OK | ControlIQ returns 404 |
 
-## File Checksums (baseline: 2026-03-12)
+## File Checksums (updated: 2026-03-13, post PR #46)
 
 Compare before reading files. Skip unchanged files.
 
 ```
-e0c1096e __init__.py
-48767598 tandem_api.py
-634ac28a const.py
-d0a63142 sensor.py
+76aaa7aa __init__.py
+b6fe32de tandem_api.py
+a38419d6 const.py
+85c251a2 sensor.py
 ```
 
 **Status values:** OPEN, ACCEPTED, FIXED, DEFERRED, OK

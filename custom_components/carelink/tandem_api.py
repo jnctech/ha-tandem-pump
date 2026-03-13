@@ -86,6 +86,15 @@ EVT_CGM_DATA_FSL2 = 372
 EVT_CGM_DATA_G7 = 399
 
 
+def _decode_cgm_gxb_layout(evt: dict, payload: bytes) -> None:
+    """Decode GXB-style CGM payload (shared by events 256 and 399)."""
+    evt["event_name"] = "CGM"
+    evt["glucose_mgdl"] = struct.unpack_from(">H", payload, 4)[0]
+    rate_raw = struct.unpack_from(">b", payload, 0)[0]
+    evt["rate_of_change"] = round(rate_raw * 0.1, 1)
+    evt["status"] = struct.unpack_from(">H", payload, 2)[0]
+
+
 def decode_pump_events(raw_b64: str) -> list[dict]:
     """Decode base64-encoded binary pump events into a list of dicts.
 
@@ -133,15 +142,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
 
         # Parse event-specific payload fields
         if event_id == EVT_CGM_DATA_GXB:
-            evt["event_name"] = "CGM"
-            # uint16 at payload offset 4 = glucose in mg/dL
-            glucose = struct.unpack_from(">H", payload, 4)[0]
-            # int8 at payload offset 0 = rate of change (* 0.1 mg/dL/min)
-            rate_raw = struct.unpack_from(">b", payload, 0)[0]
-            status = struct.unpack_from(">H", payload, 2)[0]
-            evt["glucose_mgdl"] = glucose
-            evt["rate_of_change"] = round(rate_raw * 0.1, 1)
-            evt["status"] = status  # 0=normal, 1=high, 2=low
+            _decode_cgm_gxb_layout(evt, payload)
 
         elif event_id == EVT_BOLUS_COMPLETED:
             evt["event_name"] = "BolusCompleted"
@@ -365,14 +366,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             evt["battery_percent"] = battery_pct
 
         elif event_id == EVT_CGM_DATA_G7:
-            # Same binary layout as GXB (event 256)
-            evt["event_name"] = "CGM"
-            glucose = struct.unpack_from(">H", payload, 4)[0]
-            rate_raw = struct.unpack_from(">b", payload, 0)[0]
-            status = struct.unpack_from(">H", payload, 2)[0]
-            evt["glucose_mgdl"] = glucose
-            evt["rate_of_change"] = round(rate_raw * 0.1, 1)
-            evt["status"] = status
+            _decode_cgm_gxb_layout(evt, payload)
 
         elif event_id == EVT_CGM_DATA_FSL2:
             # Libre 2: int16 rate (not int8), uint8 status (not uint16)

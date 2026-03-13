@@ -8,8 +8,8 @@ Significant changes to this repository, listed in reverse chronological order.
 **Date:** 2026-03-13
 **Branch:** `fix/sensor-display-precision`
 **PR:** [#48](https://github.com/jnctech/ha-tandem-pump/pull/48)
-**Status:** PR pending
-**Deployed:** Pending
+**Status:** Merged to `develop`
+**Deployed:** 2026-03-13 — verified on HA (IOB 2dp, basal 3dp, battery 1dp, percentages 1dp)
 
 ### What Changed
 | Area | Change |
@@ -39,8 +39,8 @@ Significant changes to this repository, listed in reverse chronological order.
 **Date:** 2026-03-13
 **Branch:** `fix/sensor-metadata-audit`
 **PR:** [#47](https://github.com/jnctech/ha-tandem-pump/pull/47)
-**Status:** PR pending
-**Deployed:** Pending
+**Status:** Merged to `develop`
+**Deployed:** 2026-03-13 — verified on HA (voltage from ShelfMode, duration formatting, diagnostic categories)
 
 ### What Changed
 | Area | Change |

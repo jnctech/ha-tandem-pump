@@ -4,6 +4,48 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-007 — Sensor Metadata Audit & Battery Voltage Fix
+**Date:** 2026-03-13
+**Branch:** `fix/sensor-metadata-audit`
+**PR:** [#47](https://github.com/jnctech/ha-tandem-pump/pull/47)
+**Status:** PR pending
+**Deployed:** Pending
+
+### What Changed
+| Area | Change |
+|------|--------|
+| const.py | Duration sensors: bare "h"/"m" → UnitOfTime.HOURS/MINUTES + SensorDeviceClass.DURATION |
+| const.py | Battery sensors (conduit, CGM sensor): added SensorDeviceClass.BATTERY |
+| const.py | Device info sensors (6 Carelink): added EntityCategory.DIAGNOSTIC |
+| const.py | Active insulin, reservoir, max basal: added missing unit_of_measurement |
+| const.py | sgBelowLimit: corrected from PERCENT to MGDL (glucose threshold, not percentage) |
+| const.py | Tandem sensors: "U"→UNITS, "mV"→UnitOfElectricPotential.MILLIVOLT, "kg"→UnitOfMass.KILOGRAMS |
+| tandem_api.py | Removed unreliable DailyBasal voltage (raw ADC, not millivolts) |
+| __init__.py | Coordinator: voltage now exclusively from ShelfMode; expanded PII redaction |
+| tests | Updated battery decoder/coordinator tests; expanded PII test coverage |
+
+### Finding Reference
+- 8 new review findings (S-6 through S-11, P-1) tracked in review-findings.md
+- DailyBasal voltage 25344 confirmed as raw ADC via diagnostics capture
+- ShelfMode voltage 3722 mV confirmed as accurate
+
+### Quality Gate Results (at branch)
+| Metric | Value | Gate |
+|--------|-------|------|
+| Coverage | 83%+ | ≥80% ✅ |
+| Tests | 576 passed | — ✅ |
+| Ruff format | Clean | ✅ |
+| Ruff lint | Clean | ✅ |
+| API drift | None | ✅ |
+
+### Post-Deploy Actions
+- [ ] scp updated files to HA
+- [ ] `ha core restart`
+- [ ] Verify battery voltage shows realistic mV (from ShelfMode) or UNAVAILABLE
+- [ ] Verify duration sensors show proper HA duration formatting
+
+---
+
 ## CR-006 — Sensor Audit & Diagnostics Service (ISS-011 Support)
 **Date:** 2026-03-13
 **Branch:** `fix/sensor-audit-diagnostics`

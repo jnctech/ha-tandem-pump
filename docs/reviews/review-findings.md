@@ -9,9 +9,16 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | L-5 | Low | OPEN | — | Profile `idp` matching may silently fail |
 | D-1 | Medium | OPEN | — | No binary event fixture |
 | D-2 | Low | OPEN | — | `partNumber` missing from drift check |
-| S-2 | Low | DEFERRED | — | Inconsistent insulin unit strings (next major) |
-| S-4 | Low | OPEN | — | Threshold sensors missing BLOOD_GLUCOSE |
-| S-5 | Low | OPEN | — | suggested_display_precision not set |
+| S-2 | Low | FIXED | PR #47 | Inconsistent insulin unit strings — "U" → UNITS constant, "mV" → UnitOfElectricPotential, "kg" → UnitOfMass |
+| S-4 | Low | OPEN | — | Threshold sensors missing BLOOD_GLUCOSE (CGM alert thresholds) |
+| S-5 | Low | OPEN | — | suggested_display_precision not set (requires sensor.py plumbing) |
+| S-6 | Medium | FIXED | PR #47 | Duration sensors: bare "h"/"m" → UnitOfTime, added DURATION device class |
+| S-7 | Medium | FIXED | PR #47 | Battery sensors (conduit, CGM): missing SensorDeviceClass.BATTERY |
+| S-8 | Medium | FIXED | PR #47 | Device info sensors (6 Carelink): missing EntityCategory.DIAGNOSTIC |
+| S-9 | Medium | FIXED | PR #47 | Active insulin, reservoir, max basal: MEASUREMENT with no unit → added units |
+| S-10 | High | FIXED | PR #47 | sgBelowLimit: was unitless, incorrectly assigned PERCENT → fixed to MGDL |
+| S-11 | Medium | FIXED | PR #47 | DailyBasal voltage: raw ADC (25344) not millivolts → removed, ShelfMode only |
+| P-1 | Medium | FIXED | PR #47 | PII: "name" and "birthdate" missing from redaction fields |
 
 ## Accepted / Closed
 
@@ -28,14 +35,14 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | D-4 | OK | pumper_info minimal by design |
 | D-5 | OK | ControlIQ returns 404 |
 
-## File Checksums (updated: 2026-03-13, post PR #46)
+## File Checksums (updated: 2026-03-13, post PR #47)
 
 Compare before reading files. Skip unchanged files.
 
 ```
-76aaa7aa __init__.py
-b6fe32de tandem_api.py
-a38419d6 const.py
+2eb0d3ee __init__.py
+320a4b85 tandem_api.py
+a82a1c9a const.py
 85c251a2 sensor.py
 ```
 

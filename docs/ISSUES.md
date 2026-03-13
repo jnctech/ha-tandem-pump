@@ -7,7 +7,7 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 
 ## Current Priorities
 
-1. **ISS-011 Phase 6** — Estimated Remaining Insulin
+1. **ISS-011 Phase 7** — OpenSSF Security Baseline + Dependabot (before HACS submission)
 2. **ISS-010** — ADRs + templates done; tooling + ADR-007/008 remaining
 3. **ISS-005** — tandem_api.py coverage gap
 4. Remaining baseline findings (D-1, L-5, S-4)
@@ -42,7 +42,7 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 **Type:** Feature / Upstream Sync
 **Priority:** High
 **Created:** 2026-03-13
-**Status:** 🟢 Active — Phase 6 in review
+**Status:** 🟢 Active — Phase 6 deployed & verified, Phase 7 next
 
 Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `ac6f2a3`) found **no new battery/reservoir sensors upstream**. Battery data IS available in the Tandem Source API via event IDs not previously requested.
 
@@ -92,13 +92,21 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 - Sensor shows "unknown" until a PLGS event occurs (expected — PLGS only activates on predicted low)
 - See CR-013
 
-**Remaining phases:**
+**Phase 6 (Estimated Remaining Insulin) — ✅ Deployed & verified:**
+- PR #58 — merged to develop, deployed 2026-03-14
+- 1 new sensor: estimated_insulin_remaining (cumulative seq-based tracking)
+- Compute-then-commit pattern prevents state corruption on exceptions
+- 11 new tests, 652 total passing
+- Sensor shows "unknown" until cartridge fill event appears in 14-day window (expected)
+- See CR-015
+
+**All 6 implementation phases complete.** Remaining:
 1. ~~Phase 1: Battery Monitoring~~ — ✅ Done
 2. ~~Phase 2: Alerts & Alarms~~ — ✅ Done
-3. ~~Phase 3: G7 & Libre 2 CGM~~ — ✅ Merged (PR #50, #51)
-4. ~~Phase 4: Bolus Calculator~~ — ✅ Deployed & verified (PR #52, #53)
-5. ~~Phase 5: PLGS & Daily Status~~ — ✅ Deployed & verified (PR #55)
-6. Phase 6: Estimated Remaining Insulin — in review (CR-015)
+3. ~~Phase 3: G7 & Libre 2 CGM~~ — ✅ Done
+4. ~~Phase 4: Bolus Calculator~~ — ✅ Done
+5. ~~Phase 5: PLGS & Daily Status~~ — ✅ Done
+6. ~~Phase 6: Estimated Remaining Insulin~~ — ✅ Done
 
 **Phase 7 (OpenSSF Security Baseline + Dependabot):**
 - `.github/dependabot.yml` — Python deps + GitHub Actions (weekly, targets `develop`)

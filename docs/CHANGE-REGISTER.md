@@ -34,8 +34,8 @@ Devcontainer build was failing intermittently with `gzip: stdin: unexpected end 
 ## CR-013 — PLGS & Daily Status Sensors (Phase 5)
 **Date:** 2026-03-13
 **Branch:** `feature/plgs-daily-status-phase5`
-**PR:** TBD
-**Status:** In review
+**PR:** [#55](https://github.com/jnctech/ha-tandem-pump/pull/55)
+**Status:** Merged & deployed
 
 ### What Changed
 | Area | Change |

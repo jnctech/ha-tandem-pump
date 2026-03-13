@@ -7,7 +7,7 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 
 ## Current Priorities
 
-1. **ISS-011 Phase 5+** — PLGS & Daily Status, ERI
+1. **ISS-011 Phase 6** — Estimated Remaining Insulin
 2. **ISS-010** — ADRs + templates done; tooling + ADR-007/008 remaining
 3. **ISS-005** — tandem_api.py coverage gap
 4. Remaining baseline findings (D-1, L-5, S-4)
@@ -42,7 +42,7 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 **Type:** Feature / Upstream Sync
 **Priority:** High
 **Created:** 2026-03-13
-**Status:** 🟢 Active — Phase 4 deployed, Phase 5 next
+**Status:** 🟢 Active — Phase 5 deployed, Phase 6 next
 
 Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `ac6f2a3`) found **no new battery/reservoir sensors upstream**. Battery data IS available in the Tandem Source API via event IDs not previously requested.
 
@@ -84,11 +84,12 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 - Sensors show "unknown" until bolus calculator wizard is used (quick boluses are event 17, not 64/65/66)
 - See CR-011, CR-012
 
-**Phase 5 (PLGS & Daily Status) — 🟡 In review:**
-- Branch: `feature/plgs-daily-status-phase5`
+**Phase 5 (PLGS & Daily Status) — ✅ Deployed & verified:**
+- PR #55 — merged to develop, deployed 2026-03-14
 - 1 new sensor: predicted_glucose (from PLGS algorithm PGV, event 140)
 - Event 90 (NewDay) decoded for diagnostics logging; sensor deferred to Phase 6
 - 15 new tests (8 decoder + 7 coordinator), 641 total passing
+- Sensor shows "unknown" until a PLGS event occurs (expected — PLGS only activates on predicted low)
 - See CR-013
 
 **Remaining phases:**
@@ -96,7 +97,7 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 2. ~~Phase 2: Alerts & Alarms~~ — ✅ Done
 3. ~~Phase 3: G7 & Libre 2 CGM~~ — ✅ Merged (PR #50, #51)
 4. ~~Phase 4: Bolus Calculator~~ — ✅ Deployed & verified (PR #52, #53)
-5. ~~Phase 5: PLGS & Daily Status~~ — 🟡 In review (CR-013)
+5. ~~Phase 5: PLGS & Daily Status~~ — ✅ Deployed & verified (PR #55)
 6. Phase 6: Estimated Remaining Insulin — computed from existing events
 
 **Phase 7 (OpenSSF Security Baseline + Dependabot):**

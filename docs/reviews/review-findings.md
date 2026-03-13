@@ -8,6 +8,11 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 |----|----------|--------|----------|-------------|
 | L-5 | Low | OPEN | — | Profile `idp` matching may silently fail |
 | D-1 | Medium | OPEN | — | No binary event fixture |
+| C-1 | High | FIXED | feature/cgm-g7-libre2-phase3 | Magic event IDs in coordinator — replaced ALL with EVT_* constants from tandem_api |
+| C-2 | High | FIXED | feature/cgm-g7-libre2-phase3 | Daily status `except Exception` + `warning` — narrowed to `(KeyError, TypeError, IndexError)` + `error` + event count |
+| C-3 | Medium | FIXED | feature/cgm-g7-libre2-phase3 | Unknown sensor type fallback silent — added `_LOGGER.info` when sensor_type starts with "Unknown" |
+| C-4 | Medium | DEFERRED | — | No per-event struct error isolation in decoder (pre-existing, all phases) |
+| C-5 | Medium | DEFERRED | — | Duplicate decode logic: event 399 is copy of 256 — could share code but clarity > DRY for binary decoders |
 | A-1 | Low | FIXED | feature/alerts-alarms-phase2 | payload invariant undocumented — comment added; EVENT_LEN guard makes struct.error impossible in practice |
 | A-2 | High | FIXED | feature/alerts-alarms-phase2 | alarm parse catch used `warning` not `error`; no event counts in log — changed to `error` + added counts |
 | A-3 | Important | FIXED | feature/alerts-alarms-phase2 | active_alerts_count: MEASUREMENT + UNAVAILABLE fallback causes LTS gaps — changed to state_class=None |
@@ -42,15 +47,15 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | D-4 | OK | pumper_info minimal by design |
 | D-5 | OK | ControlIQ returns 404 |
 
-## File Checksums (updated: 2026-03-13, post feature/alerts-alarms-phase2)
+## File Checksums (updated: 2026-03-13, post feature/cgm-g7-libre2-phase3)
 
 Compare before reading files. Skip unchanged files.
 
 ```
-9458df6c __init__.py
-b3ccfc67 tandem_api.py
-d335e5fe const.py
-f76927b6 sensor.py
+6b5c28bd __init__.py
+6ffff29e tandem_api.py
+fc9402e5 const.py
+d0a63142 sensor.py
 ```
 
 **Status values:** OPEN, ACCEPTED, FIXED, DEFERRED, OK

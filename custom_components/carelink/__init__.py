@@ -2066,13 +2066,18 @@ class TandemCoordinator(DataUpdateCoordinator):
                         "user_override": latest.get("user_override"),
                         "timestamp": latest["timestamp"].replace(tzinfo=tz).isoformat(),
                     }
-        except (KeyError, TypeError, IndexError) as e:
+        except (KeyError, TypeError, IndexError, ValueError) as e:
             _LOGGER.error(
                 "Tandem: Error parsing %d bolus calculator event(s): %s",
                 len(bolus_req_msg3),
                 e,
                 exc_info=True,
             )
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS] = {}
 
         # ── Computed summaries ─────────────────────────────────────────
         try:

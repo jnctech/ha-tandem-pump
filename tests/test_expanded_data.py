@@ -1886,3 +1886,19 @@ class TestBolusCalcCoordinator:
         attrs = coordinator.data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS]
         assert attrs["declined_correction"] is True
         assert attrs["user_override"] is True
+
+    async def test_corrupted_bolus_event_resets_all_sensors(self, hass: HomeAssistant):
+        """Corrupted timestamp in msg3 triggers catch block, resets all sensors."""
+        events = [
+            _make_bolus_req_msg1(1, 42, bg=180, iob=2.5, carbs=45),
+            _make_bolus_req_msg3(2, 42, food=4.5, correction=1.4, total=5.9),
+        ]
+        # Corrupt the msg3 timestamp to trigger an error in the join logic
+        events[1]["timestamp"] = "not-a-datetime"
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        # All sensors should be reset to UNAVAILABLE after error
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS] == {}

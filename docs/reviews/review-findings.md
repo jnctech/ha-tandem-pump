@@ -7,6 +7,8 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | ID | Severity | Status | Fixed In | Description |
 |----|----------|--------|----------|-------------|
 | L-5 | Low | OPEN | — | Profile `idp` matching may silently fail |
+| B-1 | Low | OPEN | — | Missing test: msg1+msg3 without msg2 — join works but msg2 fields are None in attrs |
+| B-2 | Low | OPEN | — | carb_ratio 1000x multiplier from tconnectsync spec — cannot validate without real capture |
 | D-1 | Medium | OPEN | — | No binary event fixture |
 | C-1 | High | FIXED | feature/cgm-g7-libre2-phase3 | Magic event IDs in coordinator — replaced ALL with EVT_* constants from tandem_api |
 | C-2 | High | FIXED | feature/cgm-g7-libre2-phase3 | Daily status `except Exception` + `warning` — narrowed to `(KeyError, TypeError, IndexError)` + `error` + event count |
@@ -47,17 +49,14 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | D-4 | OK | pumper_info minimal by design |
 | D-5 | OK | ControlIQ returns 404 |
 
-| B-1 | Low | OPEN | — | Missing test: msg1+msg3 without msg2 — join works but msg2 fields are None in attrs |
-| B-2 | Low | OPEN | — | carb_ratio 1000x multiplier from tconnectsync spec — cannot validate without real capture |
-
-## File Checksums (updated: 2026-03-13, post feature/bolus-calculator-phase4)
+## File Checksums (updated: 2026-03-13, post PR #53 bugfix/bolus-calc-attrs-not-sensor)
 
 Compare before reading files. Skip unchanged files.
 
 ```
-66998ade __init__.py
+ec093426 __init__.py
 7f1a5d40 tandem_api.py
-86911888 const.py
+022f7643 const.py
 d0a63142 sensor.py
 ```
 

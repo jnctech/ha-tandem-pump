@@ -539,6 +539,9 @@ TANDEM_SENSOR_KEY_LAST_ALERT = "tandem_last_alert"
 TANDEM_SENSOR_KEY_LAST_ALARM = "tandem_last_alarm"
 TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT = "tandem_active_alerts_count"
 
+# ── CGM sensor type key (Phase 3 — from event 313) ────────────────────
+TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE = "tandem_cgm_sensor_type"
+
 # ── Battery monitoring keys (Phase 1 — from events 81, 53, 36, 37) ────
 TANDEM_SENSOR_KEY_BATTERY_PERCENT = "tandem_battery_percent"
 TANDEM_SENSOR_KEY_BATTERY_VOLTAGE = "tandem_battery_voltage"
@@ -685,6 +688,7 @@ TANDEM_SENSORS_ALWAYS_AVAILABLE = (
     TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT,
     TANDEM_SENSOR_KEY_BATTERY_PERCENT,
     TANDEM_SENSOR_KEY_CHARGING_STATUS,
+    TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE,
 )
 
 TANDEM_SENSORS = (
@@ -1280,6 +1284,16 @@ TANDEM_SENSORS = (
         state_class=None,
         device_class=None,
         icon="mdi:power-plug",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # ── Phase 3: CGM sensor type (from event 313 AA_DAILY_STATUS) ────
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE,
+        name="CGM sensor type",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:chip",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )

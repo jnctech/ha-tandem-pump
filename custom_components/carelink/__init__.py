@@ -170,6 +170,8 @@ from .const import (
     TANDEM_SENSOR_KEY_LAST_ALERT,
     TANDEM_SENSOR_KEY_LAST_ALARM,
     TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT,
+    # CGM sensor type (Phase 3)
+    TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE,
 )
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER]
@@ -1211,6 +1213,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[TANDEM_SENSOR_KEY_LAST_ALERT] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_ALARM] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] = UNAVAILABLE
 
         if not timeline:
             data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
@@ -1421,10 +1424,11 @@ class TandemCoordinator(DataUpdateCoordinator):
         usb_events: list[dict] = []
         alert_events: list[dict] = []
         alarm_events: list[dict] = []
+        daily_status_events: list[dict] = []
 
         for evt in pump_events:
             eid = evt.get("event_id")
-            if eid == 256:  # CGM_DATA_GXB
+            if eid in (256, 399, 372):  # CGM_DATA_GXB / CGM_DATA_G7 / CGM_DATA_FSL2
                 cgm_readings.append(evt)
             elif eid == 20:  # BOLUS_COMPLETED
                 bolus_completed.append(evt)
@@ -1462,6 +1466,8 @@ class TandemCoordinator(DataUpdateCoordinator):
                 alert_events.append(evt)
             elif eid in (5, 6, 28):  # ALARM_ACTIVATED / MALFUNCTION_ACTIVATED / ALARM_CLEARED
                 alarm_events.append(evt)
+            elif eid == 313:  # AA_DAILY_STATUS (CGM sensor type)
+                daily_status_events.append(evt)
 
         _LOGGER.debug(
             "Tandem: Events - CGM: %d, BolusCompleted: %d, BolexCompleted: %d, "
@@ -1469,7 +1475,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             "Suspend/Resume: %d, BG: %d, Cartridge: %d, Carbs: %d, "
             "Cannula: %d, Tubing: %d, UserMode: %d, PCM: %d, "
             "DailyBasal: %d, ShelfMode: %d, USB: %d, "
-            "Alert: %d, Alarm: %d",
+            "Alert: %d, Alarm: %d, DailyStatus: %d",
             len(cgm_readings),
             len(bolus_completed),
             len(bolex_completed),
@@ -1489,6 +1495,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             len(usb_events),
             len(alert_events),
             len(alarm_events),
+            len(daily_status_events),
         )
 
         # Update the last-seen sequence number for statistics deduplication
@@ -1517,6 +1524,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         usb_events.sort(key=lambda e: e["timestamp"])
         alert_events.sort(key=lambda e: e["timestamp"])
         alarm_events.sort(key=lambda e: e["timestamp"])
+        daily_status_events.sort(key=lambda e: e["timestamp"])
 
         # ── Populate current sensor values from latest events ────────
 
@@ -1895,6 +1903,17 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_LAST_ALERT] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_LAST_ALARM] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = UNAVAILABLE
+
+        # ── CGM Sensor Type (Phase 3) ────────────────────────────────
+        try:
+            if daily_status_events:
+                latest_status = daily_status_events[-1]
+                data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] = latest_status.get("sensor_type", UNAVAILABLE)
+            else:
+                data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] = UNAVAILABLE
+        except Exception as e:
+            _LOGGER.warning("Error parsing daily status events: %s", e, exc_info=True)
+            data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] = UNAVAILABLE
 
         # ── Computed summaries ─────────────────────────────────────────
         try:
@@ -2424,7 +2443,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             # (HA requires timestamps at the top of the hour)
             period_start = ts.replace(minute=0, second=0, microsecond=0)
 
-            if eid == 256:  # CGM
+            if eid in (256, 399, 372):  # CGM (GXB, G7, FSL2)
                 sg = evt.get("glucose_mgdl", 0)
                 if sg and sg > 0:
                     mmol = round(sg * 0.0555, 2)

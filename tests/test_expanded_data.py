@@ -54,6 +54,8 @@ from custom_components.carelink.const import (
     TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT,
     TANDEM_ALERT_MAP,
     TANDEM_ALARM_MAP,
+    # CGM sensor type (Phase 3)
+    TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE,
 )
 
 from custom_components.carelink.tandem_api import decode_pump_events
@@ -1371,3 +1373,213 @@ class TestAlertAlarmCoordinator:
         coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALERT] is UNAVAILABLE
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALARM] == "Empty Cartridge"
+
+
+# ── Helpers: Phase 3 (CGM G7 / Libre 2 / Daily Status) ──────────────────
+
+
+def _make_cgm_event_g7(seq: int, glucose_mgdl: int, minutes_ago: int = 0) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 399,
+        "event_name": "CGM",
+        "seq": seq,
+        "timestamp": ts,
+        "glucose_mgdl": glucose_mgdl,
+        "rate_of_change": 0.3,
+        "status": 0,
+    }
+
+
+def _make_cgm_event_fsl2(seq: int, glucose_mgdl: int, minutes_ago: int = 0) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 372,
+        "event_name": "CGM",
+        "seq": seq,
+        "timestamp": ts,
+        "glucose_mgdl": glucose_mgdl,
+        "rate_of_change": -0.2,
+        "status": 0,
+    }
+
+
+def _make_daily_status(seq: int, sensor_type: str, sensor_type_id: int, minutes_ago: int = 0) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 313,
+        "event_name": "AADailyStatus",
+        "seq": seq,
+        "timestamp": ts,
+        "sensor_type": sensor_type,
+        "sensor_type_id": sensor_type_id,
+        "user_mode": 0,
+        "pump_control_state": 3,
+    }
+
+
+# ── Decoder tests: Phase 3 events ───────────────────────────────────────
+
+
+class TestCGMPhase3Decoder:
+    """Binary decoder tests for events 399 (G7), 372 (FSL2), 313 (DailyStatus)."""
+
+    @staticmethod
+    def _decode_single(event_id: int, payload: bytes, seq: int = 1) -> dict:
+        raw = _build_binary_event(event_id, seq, 500000000, payload)
+        b64 = base64.b64encode(raw).decode()
+        events = decode_pump_events(b64)
+        assert len(events) == 1
+        return events[0]
+
+    def test_decode_cgm_g7(self):
+        """Event 399 (CGM_DATA_G7) decodes with same layout as event 256."""
+        # int8 @ offset 0 (rate_raw), uint16 @ offset 2 (status), uint16 @ offset 4 (glucose)
+        payload = struct.pack(">b", 8) + b"\x00" + struct.pack(">H", 0) + struct.pack(">H", 145)
+        evt = self._decode_single(399, payload)
+        assert evt["event_name"] == "CGM"
+        assert evt["glucose_mgdl"] == 145
+        assert evt["rate_of_change"] == 0.8
+        assert evt["status"] == 0
+
+    def test_decode_cgm_g7_negative_rate(self):
+        """Event 399 with negative rate of change."""
+        payload = struct.pack(">b", -3) + b"\x00" + struct.pack(">H", 2) + struct.pack(">H", 70)
+        evt = self._decode_single(399, payload)
+        assert evt["glucose_mgdl"] == 70
+        assert evt["rate_of_change"] == -0.3
+        assert evt["status"] == 2  # Low
+
+    def test_decode_cgm_fsl2(self):
+        """Event 372 (CGM_DATA_FSL2) decodes with int16 rate and uint8 status."""
+        # int16 @ offset 0 (rate_raw), uint8 @ offset 2 (status), pad, uint16 @ offset 4 (glucose)
+        payload = struct.pack(">h", 12) + struct.pack(">B", 1) + b"\x00" + struct.pack(">H", 200)
+        evt = self._decode_single(372, payload)
+        assert evt["event_name"] == "CGM"
+        assert evt["glucose_mgdl"] == 200
+        assert evt["rate_of_change"] == 1.2
+        assert evt["status"] == 1  # High
+
+    def test_decode_cgm_fsl2_large_negative_rate(self):
+        """Event 372 int16 rate allows larger values than event 256's int8."""
+        payload = struct.pack(">h", -200) + struct.pack(">B", 0) + b"\x00" + struct.pack(">H", 55)
+        evt = self._decode_single(372, payload)
+        assert evt["rate_of_change"] == -20.0
+        assert evt["glucose_mgdl"] == 55
+
+    def test_decode_daily_status_g6(self):
+        """Event 313 (AA_DAILY_STATUS) decodes sensor type G6."""
+        # byte 0 = unused, byte 1 = sensor_type, byte 2 = user_mode, byte 3 = pump_control_state
+        payload = b"\x00" + struct.pack(">B", 1) + struct.pack(">B", 0) + struct.pack(">B", 3)
+        evt = self._decode_single(313, payload)
+        assert evt["event_name"] == "AADailyStatus"
+        assert evt["sensor_type"] == "G6"
+        assert evt["sensor_type_id"] == 1
+        assert evt["user_mode"] == 0
+        assert evt["pump_control_state"] == 3
+
+    def test_decode_daily_status_g7(self):
+        """Event 313 with sensor type G7."""
+        payload = b"\x00" + struct.pack(">B", 3) + struct.pack(">B", 1) + struct.pack(">B", 2)
+        evt = self._decode_single(313, payload)
+        assert evt["sensor_type"] == "G7"
+        assert evt["sensor_type_id"] == 3
+        assert evt["user_mode"] == 1
+        assert evt["pump_control_state"] == 2
+
+    def test_decode_daily_status_libre2(self):
+        """Event 313 with sensor type Libre 2."""
+        payload = b"\x00" + struct.pack(">B", 2) + struct.pack(">B", 0) + struct.pack(">B", 0)
+        evt = self._decode_single(313, payload)
+        assert evt["sensor_type"] == "Libre 2"
+        assert evt["sensor_type_id"] == 2
+
+    def test_decode_daily_status_none(self):
+        """Event 313 with sensor type None (no CGM paired)."""
+        payload = b"\x00" + struct.pack(">B", 0) + struct.pack(">B", 0) + struct.pack(">B", 0)
+        evt = self._decode_single(313, payload)
+        assert evt["sensor_type"] == "None"
+        assert evt["sensor_type_id"] == 0
+
+    def test_decode_daily_status_unknown(self):
+        """Event 313 with unknown sensor type ID falls back to Unknown (N)."""
+        payload = b"\x00" + struct.pack(">B", 99) + struct.pack(">B", 0) + struct.pack(">B", 0)
+        evt = self._decode_single(313, payload)
+        assert evt["sensor_type"] == "Unknown (99)"
+
+
+# ── Coordinator tests: Phase 3 CGM routing and sensor type ──────────────
+
+
+class TestCGMPhase3Coordinator:
+    """Test coordinator routes G7/FSL2 CGM events and parses daily status."""
+
+    async def test_g7_event_used_for_glucose(self, hass: HomeAssistant):
+        """Event 399 (G7) routes to cgm_readings and populates glucose sensor."""
+        from custom_components.carelink.const import TANDEM_SENSOR_KEY_LASTSG_MGDL
+
+        events = [_make_cgm_event_g7(1, 155)]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LASTSG_MGDL] == 155
+
+    async def test_fsl2_event_used_for_glucose(self, hass: HomeAssistant):
+        """Event 372 (FSL2) routes to cgm_readings and populates glucose sensor."""
+        from custom_components.carelink.const import TANDEM_SENSOR_KEY_LASTSG_MGDL
+
+        events = [_make_cgm_event_fsl2(1, 180)]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LASTSG_MGDL] == 180
+
+    async def test_mixed_cgm_sources_latest_wins(self, hass: HomeAssistant):
+        """When G6 (256) and G7 (399) events exist, most recent timestamp wins."""
+        from custom_components.carelink.const import TANDEM_SENSOR_KEY_LASTSG_MGDL
+
+        events = [
+            _make_cgm_event(1, 100, minutes_ago=10),  # older G6
+            _make_cgm_event_g7(2, 160, minutes_ago=5),  # newer G7
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_LASTSG_MGDL] == 160
+
+    async def test_daily_status_sensor_type_g7(self, hass: HomeAssistant):
+        """Event 313 with sensor_type=G7 populates CGM sensor type."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_daily_status(2, "G7", 3),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] == "G7"
+
+    async def test_daily_status_sensor_type_libre2(self, hass: HomeAssistant):
+        """Event 313 with sensor_type=Libre 2 populates CGM sensor type."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_daily_status(2, "Libre 2", 2),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] == "Libre 2"
+
+    async def test_daily_status_latest_wins(self, hass: HomeAssistant):
+        """Multiple daily status events — most recent sensor type wins."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_daily_status(2, "G6", 1, minutes_ago=60),
+            _make_daily_status(3, "G7", 3, minutes_ago=5),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] == "G7"
+
+    async def test_no_daily_status_sensor_type_unavailable(self, hass: HomeAssistant):
+        """No event 313 → sensor type is UNAVAILABLE."""
+        events = [_make_cgm_event(1, 100)]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] is UNAVAILABLE
+
+    async def test_g7_cgm_summary_computed(self, hass: HomeAssistant):
+        """G7 events contribute to CGM summary statistics (avg glucose, TIR)."""
+        from custom_components.carelink.const import TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL
+
+        events = [_make_cgm_event_g7(i, 120 + i, minutes_ago=i * 5) for i in range(10)]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        # Average of 120..129 = 124.5, int() truncates to 124
+        assert coordinator.data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] == 124

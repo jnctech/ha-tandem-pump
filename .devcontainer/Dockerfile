@@ -1,5 +1,7 @@
 FROM python:3.12-slim-bookworm
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # System deps + Gitleaks binary (pinned) + non-root user — single layer
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential ca-certificates curl gcc git \

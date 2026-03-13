@@ -62,6 +62,8 @@ from custom_components.carelink.const import (
     TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION,
     TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD,
     TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS,
+    # PLGS & Daily Status (Phase 5)
+    TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE,
 )
 
 from custom_components.carelink.tandem_api import decode_pump_events
@@ -1902,3 +1904,209 @@ class TestBolusCalcCoordinator:
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION] is UNAVAILABLE
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_BOLUS_FOOD] is UNAVAILABLE
         assert coordinator.data[TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS] == {}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Phase 5: PLGS & Daily Status — decoder + coordinator tests
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _make_plgs_event(
+    seq: int, pgv: int, fmr: int = 100, homin_state: int = 1, rule_state: int = 0, minutes_ago: int = 0
+) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    homin_state_map = {
+        0: "No Prediction",
+        1: "BG Rising",
+        2: "BG Falling Mildly",
+        3: "BG Falling Rapidly",
+        4: "BG Falling - Suspend",
+    }
+    return {
+        "event_id": 140,
+        "event_name": "PLGSPeriodic",
+        "seq": seq,
+        "timestamp": ts,
+        "homin_state": homin_state_map.get(homin_state, f"State_{homin_state}"),
+        "homin_state_id": homin_state,
+        "rule_state": rule_state,
+        "predicted_glucose_mgdl": pgv,
+        "fmr_mgdl": fmr,
+    }
+
+
+def _make_new_day_event(seq: int, basal_rate: float = 0.8, features: int = 0, minutes_ago: int = 0) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 90,
+        "event_name": "NewDay",
+        "seq": seq,
+        "timestamp": ts,
+        "commanded_basal_rate": basal_rate,
+        "features_bitmask": features,
+    }
+
+
+class TestPLGSDecoders:
+    """Test binary decoding of PLGS (event 140) and NewDay (event 90)."""
+
+    def _decode_single(self, event_id: int, payload: bytes, seq: int = 1) -> dict:
+        raw = _build_binary_event(event_id, seq, 500000000, payload)
+        b64 = base64.b64encode(raw).decode()
+        events = decode_pump_events(b64)
+        assert len(events) == 1
+        return events[0]
+
+    def test_decode_plgs_periodic(self):
+        """Event 140 (PLGS_Periodic) decodes predicted glucose and state."""
+        payload = (
+            b"\x00\x00\x00\x00"  # bytes 0-3 (unused in our decoder)
+            + struct.pack(">B", 1)  # homin_state = BG Rising
+            + struct.pack(">B", 3)  # rule_state bitmask
+            + b"\x00\x00\x00\x00"  # bytes 6-9 (unused)
+            + struct.pack(">H", 145)  # predicted glucose (PGV)
+            + struct.pack(">H", 120)  # FMR
+        )
+        evt = self._decode_single(140, payload)
+        assert evt["event_name"] == "PLGSPeriodic"
+        assert evt["predicted_glucose_mgdl"] == 145
+        assert evt["fmr_mgdl"] == 120
+        assert evt["homin_state"] == "BG Rising"
+        assert evt["homin_state_id"] == 1
+        assert evt["rule_state"] == 3
+
+    def test_decode_plgs_falling_rapidly(self):
+        """PLGS with BG Falling Rapidly state."""
+        payload = (
+            b"\x00\x00\x00\x00"
+            + struct.pack(">B", 3)  # BG Falling Rapidly
+            + struct.pack(">B", 0)
+            + b"\x00\x00\x00\x00"
+            + struct.pack(">H", 70)  # low predicted glucose
+            + struct.pack(">H", 65)
+        )
+        evt = self._decode_single(140, payload)
+        assert evt["homin_state"] == "BG Falling Rapidly"
+        assert evt["predicted_glucose_mgdl"] == 70
+
+    def test_decode_plgs_suspend_state(self):
+        """PLGS with BG Falling - Suspend state."""
+        payload = (
+            b"\x00\x00\x00\x00"
+            + struct.pack(">B", 4)  # BG Falling - Suspend
+            + struct.pack(">B", 5)  # rule_state
+            + b"\x00\x00\x00\x00"
+            + struct.pack(">H", 55)
+            + struct.pack(">H", 50)
+        )
+        evt = self._decode_single(140, payload)
+        assert evt["homin_state"] == "BG Falling - Suspend"
+        assert evt["predicted_glucose_mgdl"] == 55
+
+    def test_decode_plgs_unknown_state(self):
+        """Unknown PLGS homin_state produces fallback string."""
+        payload = (
+            b"\x00\x00\x00\x00"
+            + struct.pack(">B", 99)  # unknown state
+            + struct.pack(">B", 0)
+            + b"\x00\x00\x00\x00"
+            + struct.pack(">H", 130)
+            + struct.pack(">H", 110)
+        )
+        evt = self._decode_single(140, payload)
+        assert evt["homin_state"] == "State_99"
+
+    def test_decode_plgs_no_prediction(self):
+        """PLGS with No Prediction state and zero PGV."""
+        payload = (
+            b"\x00\x00\x00\x00"
+            + struct.pack(">B", 0)  # No Prediction
+            + struct.pack(">B", 0)
+            + b"\x00\x00\x00\x00"
+            + struct.pack(">H", 0)  # PGV = 0
+            + struct.pack(">H", 0)
+        )
+        evt = self._decode_single(140, payload)
+        assert evt["homin_state"] == "No Prediction"
+        assert evt["predicted_glucose_mgdl"] == 0
+
+    def test_decode_new_day(self):
+        """Event 90 (NewDay) decodes commanded basal rate and features."""
+        payload = (
+            struct.pack(">f", 0.85)  # commanded_basal_rate
+            + struct.pack(">I", 0x0F)  # features_bitmask
+        )
+        evt = self._decode_single(90, payload)
+        assert evt["event_name"] == "NewDay"
+        assert evt["commanded_basal_rate"] == 0.85
+        assert evt["features_bitmask"] == 0x0F
+
+    def test_decode_new_day_zero_rate(self):
+        """NewDay with zero basal rate."""
+        payload = struct.pack(">f", 0.0) + struct.pack(">I", 0)
+        evt = self._decode_single(90, payload)
+        assert evt["commanded_basal_rate"] == 0.0
+        assert evt["features_bitmask"] == 0
+
+
+class TestPLGSCoordinator:
+    """Test coordinator handling of PLGS predicted glucose sensor."""
+
+    async def test_plgs_predicted_glucose(self, hass: HomeAssistant):
+        """PLGS event populates predicted glucose sensor."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_plgs_event(2, pgv=145),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] == 145
+
+    async def test_plgs_latest_wins(self, hass: HomeAssistant):
+        """Most recent PLGS event provides predicted glucose."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_plgs_event(2, pgv=130, minutes_ago=10),
+            _make_plgs_event(3, pgv=145, minutes_ago=5),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] == 145
+
+    async def test_plgs_zero_pgv_unavailable(self, hass: HomeAssistant):
+        """PGV of 0 is treated as unavailable (No Prediction state)."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_plgs_event(2, pgv=0, homin_state=0),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] is UNAVAILABLE
+
+    async def test_no_plgs_events_unavailable(self, hass: HomeAssistant):
+        """No PLGS events results in unavailable predicted glucose."""
+        events = [_make_cgm_event(1, 120)]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] is UNAVAILABLE
+
+    async def test_new_day_does_not_affect_predicted_glucose(self, hass: HomeAssistant):
+        """NewDay events are decoded but don't produce a sensor (no crash)."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_new_day_event(2, basal_rate=0.8, features=15),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        # No crash, predicted glucose is unavailable (no PLGS events)
+        assert coordinator.data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] is UNAVAILABLE
+
+    async def test_plgs_with_new_day_combined(self, hass: HomeAssistant):
+        """Both PLGS and NewDay events are handled without interference."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_new_day_event(2, basal_rate=0.8, features=15),
+            _make_plgs_event(3, pgv=160),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] == 160
+
+    async def test_no_pump_events_predicted_glucose_unavailable(self, hass: HomeAssistant):
+        """Empty pump events results in unavailable predicted glucose."""
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data([]))
+        assert coordinator.data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] is UNAVAILABLE

@@ -4,6 +4,36 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-013 — PLGS & Daily Status Sensors (Phase 5)
+**Date:** 2026-03-13
+**Branch:** `feature/plgs-daily-status-phase5`
+**PR:** TBD
+**Status:** In review
+
+### What Changed
+| Area | Change |
+|------|--------|
+| tandem_api.py | Added decoders for event 140 (PLGS Periodic) and event 90 (NewDay) |
+| tandem_api.py | Added events 90 and 140 to API event filter string |
+| const.py | Added `TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE` constant and `SensorEntityDescription` |
+| __init__.py | Added PLGS event categorisation, sorting, and predicted glucose sensor population |
+| __init__.py | Added NewDay event collection and logging (sensor population deferred to Phase 6) |
+
+### Why
+PLGS (Predictive Low Glucose Suspend) events contain the pump's predicted glucose value — useful for dashboards showing what Control-IQ "sees" ahead of actual CGM readings. NewDay events capture the commanded basal rate at midnight, decoded for diagnostics and future Phase 6 use.
+
+### New Sensor
+| Sensor | Device Class | Unit | Notes |
+|--------|-------------|------|-------|
+| Predicted glucose | BLOOD_GLUCOSE | mg/dL | From PLGS algorithm PGV; 0 = UNAVAILABLE (No Prediction) |
+
+### Tests
+- 8 decoder tests (PLGS states, unknown fallback, NewDay rate/features)
+- 7 coordinator tests (latest-wins, zero PGV, no events, combined events)
+- 641 total passing
+
+---
+
 ## CR-012 — Bolus Calculator Attributes Bugfix
 **Date:** 2026-03-13
 **Branch:** `bugfix/bolus-calc-attrs-not-sensor`

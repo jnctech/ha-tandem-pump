@@ -84,6 +84,8 @@ EVT_BOLUS_DELIVERY = 280
 EVT_BOLUS_REQUESTED_MSG1 = 64
 EVT_BOLUS_REQUESTED_MSG2 = 65
 EVT_BOLUS_REQUESTED_MSG3 = 66
+EVT_NEW_DAY = 90
+EVT_PLGS_PERIODIC = 140
 EVT_AA_DAILY_STATUS = 313
 EVT_CGM_DATA_FSL2 = 372
 EVT_CGM_DATA_G7 = 399
@@ -391,6 +393,32 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             evt["sensor_type_id"] = sensor_type
             evt["user_mode"] = user_mode
             evt["pump_control_state"] = pump_control_state
+
+        elif event_id == EVT_NEW_DAY:
+            evt["event_name"] = "NewDay"
+            commanded_basal_rate = struct.unpack_from(">f", payload, 0)[0]
+            features_bitmask = struct.unpack_from(">I", payload, 4)[0]
+            evt["commanded_basal_rate"] = round(commanded_basal_rate, 3)
+            evt["features_bitmask"] = features_bitmask
+
+        elif event_id == EVT_PLGS_PERIODIC:
+            evt["event_name"] = "PLGSPeriodic"
+            homin_state = struct.unpack_from(">B", payload, 4)[0]
+            rule_state = struct.unpack_from(">B", payload, 5)[0]
+            pgv = struct.unpack_from(">H", payload, 10)[0]
+            fmr = struct.unpack_from(">H", payload, 12)[0]
+            homin_state_map = {
+                0: "No Prediction",
+                1: "BG Rising",
+                2: "BG Falling Mildly",
+                3: "BG Falling Rapidly",
+                4: "BG Falling - Suspend",
+            }
+            evt["homin_state"] = homin_state_map.get(homin_state, f"State_{homin_state}")
+            evt["homin_state_id"] = homin_state
+            evt["rule_state"] = rule_state
+            evt["predicted_glucose_mgdl"] = pgv
+            evt["fmr_mgdl"] = fmr
 
         elif event_id == EVT_BOLUS_REQUESTED_MSG1:
             evt["event_name"] = "BolusRequestedMsg1"
@@ -855,6 +883,8 @@ class TandemSourceClient:
                 "61,"  # CANNULA_FILLED (site change)
                 "63,"  # TUBING_FILLED
                 "81,"  # DAILY_BASAL (battery %, voltage, daily totals)
+                "90,"  # NEW_DAY (commanded basal rate, features bitmask)
+                "140,"  # PLGS_PERIODIC (predicted glucose value)
                 "229,"  # AA_USER_MODE_CHANGE (sleep/exercise)
                 "230,"  # AA_PCM_CHANGE (Control-IQ mode)
                 "256,"  # CGM_DATA_GXB (glucose readings)

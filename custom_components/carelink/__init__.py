@@ -139,6 +139,8 @@ from .const import (
     TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON,
     # Event-derived lookup maps
     CGM_STATUS_MAP,
+    TANDEM_ALERT_MAP,
+    TANDEM_ALARM_MAP,
     # Computed insulin summary
     TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN,
     TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL,
@@ -164,6 +166,10 @@ from .const import (
     TANDEM_SENSOR_KEY_BATTERY_VOLTAGE,
     TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH,
     TANDEM_SENSOR_KEY_CHARGING_STATUS,
+    # Alerts & Alarms (Phase 2)
+    TANDEM_SENSOR_KEY_LAST_ALERT,
+    TANDEM_SENSOR_KEY_LAST_ALARM,
+    TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT,
 )
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER]
@@ -1202,6 +1208,9 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_CHARGING_STATUS] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_ALERT] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_ALARM] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = UNAVAILABLE
 
         if not timeline:
             data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
@@ -1410,6 +1419,8 @@ class TandemCoordinator(DataUpdateCoordinator):
         daily_basal_events: list[dict] = []
         shelf_mode_events: list[dict] = []
         usb_events: list[dict] = []
+        alert_events: list[dict] = []
+        alarm_events: list[dict] = []
 
         for evt in pump_events:
             eid = evt.get("event_id")
@@ -1447,13 +1458,18 @@ class TandemCoordinator(DataUpdateCoordinator):
                 shelf_mode_events.append(evt)
             elif eid in (36, 37):  # USB_CONNECTED / USB_DISCONNECTED
                 usb_events.append(evt)
+            elif eid in (4, 26):  # ALERT_ACTIVATED / ALERT_CLEARED
+                alert_events.append(evt)
+            elif eid in (5, 6, 28):  # ALARM_ACTIVATED / MALFUNCTION_ACTIVATED / ALARM_CLEARED
+                alarm_events.append(evt)
 
         _LOGGER.debug(
             "Tandem: Events - CGM: %d, BolusCompleted: %d, BolexCompleted: %d, "
             "BolusDelivery: %d, BasalChange: %d, BasalDelivery: %d, "
             "Suspend/Resume: %d, BG: %d, Cartridge: %d, Carbs: %d, "
             "Cannula: %d, Tubing: %d, UserMode: %d, PCM: %d, "
-            "DailyBasal: %d, ShelfMode: %d, USB: %d",
+            "DailyBasal: %d, ShelfMode: %d, USB: %d, "
+            "Alert: %d, Alarm: %d",
             len(cgm_readings),
             len(bolus_completed),
             len(bolex_completed),
@@ -1471,6 +1487,8 @@ class TandemCoordinator(DataUpdateCoordinator):
             len(daily_basal_events),
             len(shelf_mode_events),
             len(usb_events),
+            len(alert_events),
+            len(alarm_events),
         )
 
         # Update the last-seen sequence number for statistics deduplication
@@ -1497,6 +1515,8 @@ class TandemCoordinator(DataUpdateCoordinator):
         daily_basal_events.sort(key=lambda e: e["timestamp"])
         shelf_mode_events.sort(key=lambda e: e["timestamp"])
         usb_events.sort(key=lambda e: e["timestamp"])
+        alert_events.sort(key=lambda e: e["timestamp"])
+        alarm_events.sort(key=lambda e: e["timestamp"])
 
         # ── Populate current sensor values from latest events ────────
 
@@ -1861,6 +1881,21 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CHARGING_STATUS] = UNAVAILABLE
 
+        # ── Alerts & Alarms (Phase 2) ─────────────────────────────────
+        try:
+            self._parse_alert_alarm_events(alert_events, alarm_events, data)
+        except Exception as e:
+            _LOGGER.error(
+                "Error parsing alert/alarm events (%d alert, %d alarm events): %s",
+                len(alert_events),
+                len(alarm_events),
+                e,
+                exc_info=True,
+            )
+            data[TANDEM_SENSOR_KEY_LAST_ALERT] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_LAST_ALARM] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = UNAVAILABLE
+
         # ── Computed summaries ─────────────────────────────────────────
         try:
             self._compute_cgm_summary(cgm_readings, data)
@@ -1878,6 +1913,99 @@ class TandemCoordinator(DataUpdateCoordinator):
             )
         except Exception as e:
             _LOGGER.warning("Error computing insulin summary: %s", e, exc_info=True)
+
+    def _parse_alert_alarm_events(
+        self,
+        alert_events: list[dict],
+        alarm_events: list[dict],
+        data: dict,
+    ) -> None:
+        """Parse alert and alarm events into sensor values.
+
+        alert_events contains events 4 (AlertActivated) and 26 (AlertCleared).
+        alarm_events contains events 5 (AlarmActivated), 6 (MalfunctionActivated),
+        and 28 (AlarmCleared).
+
+        Active count tracks all uncleared activations across both lists.
+        """
+        tz = ZoneInfo(self.timezone)
+
+        # ── Alert sensors (events 4 / 26) ────────────────────────────
+        # Track which alert IDs are currently active (activated but not cleared).
+        # Events are pre-sorted by timestamp so we replay in order.
+        active_alerts: dict[int, dict] = {}
+        for evt in alert_events:
+            if evt["event_name"] == "AlertActivated":
+                active_alerts[evt["alert_id"]] = evt
+            elif evt["event_name"] == "AlertCleared":
+                active_alerts.pop(evt["alert_id"], None)
+
+        last_activated_alert = next(
+            (e for e in reversed(alert_events) if e["event_name"] == "AlertActivated"),
+            None,
+        )
+        if last_activated_alert:
+            aid = last_activated_alert["alert_id"]
+            name = TANDEM_ALERT_MAP.get(aid, f"Alert {aid}")
+            ts = last_activated_alert["timestamp"].replace(tzinfo=tz)
+            # Last 10 activation events in order; the same alert_id may appear
+            # multiple times if it fired and cleared repeatedly.
+            recent = [
+                {
+                    "id": e["alert_id"],
+                    "name": TANDEM_ALERT_MAP.get(e["alert_id"], f"Alert {e['alert_id']}"),
+                    "timestamp": e["timestamp"].replace(tzinfo=tz).isoformat(),
+                }
+                for e in alert_events
+                if e["event_name"] == "AlertActivated"
+            ][-10:]
+            data[TANDEM_SENSOR_KEY_LAST_ALERT] = name
+            data[f"{TANDEM_SENSOR_KEY_LAST_ALERT}_attributes"] = {
+                "alert_id": aid,
+                "cleared": aid not in active_alerts,
+                "timestamp": ts.isoformat(),
+                "recent": recent,
+            }
+        else:
+            data[TANDEM_SENSOR_KEY_LAST_ALERT] = UNAVAILABLE
+
+        # ── Alarm sensors (events 5, 6 / 28) ─────────────────────────
+        active_alarms: dict[int, dict] = {}
+        for evt in alarm_events:
+            if evt["event_name"] in ("AlarmActivated", "MalfunctionActivated"):
+                active_alarms[evt["alert_id"]] = evt
+            elif evt["event_name"] == "AlarmCleared":
+                active_alarms.pop(evt["alert_id"], None)
+
+        last_activated_alarm = next(
+            (e for e in reversed(alarm_events) if e["event_name"] in ("AlarmActivated", "MalfunctionActivated")),
+            None,
+        )
+        if last_activated_alarm:
+            aid = last_activated_alarm["alert_id"]
+            name = TANDEM_ALARM_MAP.get(aid, f"Alarm {aid}")
+            ts = last_activated_alarm["timestamp"].replace(tzinfo=tz)
+            recent = [
+                {
+                    "id": e["alert_id"],
+                    "name": TANDEM_ALARM_MAP.get(e["alert_id"], f"Alarm {e['alert_id']}"),
+                    "timestamp": e["timestamp"].replace(tzinfo=tz).isoformat(),
+                }
+                for e in alarm_events
+                if e["event_name"] in ("AlarmActivated", "MalfunctionActivated")
+            ][-10:]
+            data[TANDEM_SENSOR_KEY_LAST_ALARM] = name
+            data[f"{TANDEM_SENSOR_KEY_LAST_ALARM}_attributes"] = {
+                "alert_id": aid,
+                "cleared": aid not in active_alarms,
+                "timestamp": ts.isoformat(),
+                "recent": recent,
+            }
+        else:
+            data[TANDEM_SENSOR_KEY_LAST_ALARM] = UNAVAILABLE
+
+        # ── Active count (alerts + alarms combined) ───────────────────
+        data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = len(active_alerts) + len(active_alarms)
 
     def _parse_dashboard_summary(self, summary: dict | None, data: dict) -> None:
         """Parse dashboard summary into sensor values."""

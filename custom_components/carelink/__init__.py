@@ -1924,7 +1924,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                 cartridge_fills, bolus_completed, bolex_completed, basal_delivery, data
             )
         except (KeyError, TypeError, IndexError, ValueError, AttributeError) as e:
-            _LOGGER.error("Error computing estimated remaining insulin: %s", e, exc_info=True)
+            _LOGGER.warning("Error computing estimated remaining insulin: %s", e, exc_info=True)
             data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] = UNAVAILABLE
 
         # ── Site change ───────────────────────────────────────────────
@@ -2668,13 +2668,22 @@ class TandemCoordinator(DataUpdateCoordinator):
         max_new_seq = self._last_delivery_seq
 
         for b in bolus_completed + bolex_completed:
-            seq = b.get("seq", 0)
+            seq = b.get("seq")
+            if seq is None:
+                _LOGGER.warning("Bolus event missing seq field, skipping")
+                continue
             if seq > self._last_delivery_seq:
-                new_bolus += b.get("insulin_delivered", 0) or 0
+                delivered = b.get("insulin_delivered")
+                if delivered is None:
+                    _LOGGER.warning("Bolus seq=%d missing insulin_delivered", seq)
+                    delivered = 0
+                new_bolus += delivered
                 max_new_seq = max(max_new_seq, seq)
 
         # Basal: only count new delivery events (seq > last_delivery_seq)
-        new_basal_events = [b for b in basal_delivery if b.get("seq", 0) > self._last_delivery_seq]
+        new_basal_events = [
+            b for b in basal_delivery if b.get("seq") is not None and b.get("seq") > self._last_delivery_seq
+        ]
         if new_basal_events:
             sorted_basal = sorted(new_basal_events, key=lambda e: e.get("seq", 0))
             for i in range(len(sorted_basal) - 1):
@@ -2685,6 +2694,11 @@ class TandemCoordinator(DataUpdateCoordinator):
                     dt_hours = (ts_b - ts_a).total_seconds() / 3600.0
                     dt_hours = max(0.0, min(dt_hours, 1.0))
                     new_basal += rate * dt_hours
+                else:
+                    _LOGGER.debug(
+                        "Basal event seq=%s missing timestamp, skipping interval",
+                        sorted_basal[i].get("seq"),
+                    )
             # Last segment: assume 5 min
             last_rate = sorted_basal[-1].get("commanded_rate", 0) or 0
             new_basal += last_rate * (5.0 / 60.0)

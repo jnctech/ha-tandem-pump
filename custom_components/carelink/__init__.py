@@ -1811,10 +1811,10 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         # ── Battery monitoring (Phase 1) ─────────────────────────────────
         # Battery data comes from two event types:
-        # - Event 81 (DailyBasal): battery %, voltage (emitted daily)
+        # - Event 81 (DailyBasal): battery % only (emitted daily)
         # - Event 53 (ShelfMode): battery %, voltage, mAh, current (periodic)
-        # We prefer the most recent of either source for % and voltage,
-        # and only ShelfMode provides mAh.
+        # We prefer the most recent of either source for %,
+        # and only ShelfMode provides voltage and mAh.
         try:
             battery_pct = UNAVAILABLE
             battery_mv = UNAVAILABLE

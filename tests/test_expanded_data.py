@@ -836,7 +836,6 @@ class TestBatteryEventDecoders:
             + struct.pack(">f", 3.2)  # iob
             + struct.pack(">B", 16)  # battery_msb_raw
             + struct.pack(">B", 128)  # battery_lsb_raw
-            + struct.pack(">H", 3900)  # battery_mv
         )
         evt = self._decode_single(81, payload)
         assert evt["event_name"] == "DailyBasal"
@@ -855,7 +854,7 @@ class TestBatteryEventDecoders:
             + struct.pack(">f", 0.0)
             + struct.pack(">B", 14)
             + struct.pack(">B", 0)
-            + struct.pack(">H", 3300)
+            # bytes 14-15 no longer decoded (not millivolts)
         )
         evt = self._decode_single(81, payload)
         assert evt["battery_percent"] == 0.0
@@ -869,7 +868,7 @@ class TestBatteryEventDecoders:
             + struct.pack(">f", 0.0)
             + struct.pack(">B", 17)
             + struct.pack(">B", 255)
-            + struct.pack(">H", 4200)
+            # bytes 14-15 no longer decoded (not millivolts)
         )
         evt = self._decode_single(81, payload)
         assert evt["battery_percent"] == 100
@@ -883,7 +882,7 @@ class TestBatteryEventDecoders:
             + struct.pack(">f", 0.0)
             + struct.pack(">B", 10)
             + struct.pack(">B", 0)
-            + struct.pack(">H", 3000)
+            # bytes 14-15 no longer decoded (not millivolts)
         )
         evt = self._decode_single(81, payload)
         assert evt["battery_percent"] == 0

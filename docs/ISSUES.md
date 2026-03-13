@@ -41,7 +41,7 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 **Type:** Feature / Upstream Sync
 **Priority:** High
 **Created:** 2026-03-13
-**Status:** 🟢 Active — Phase 5 deployed, Phase 6 next
+**Status:** 🟢 Active — Phase 6 in review
 
 Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `ac6f2a3`) found **no new battery/reservoir sensors upstream**. Battery data IS available in the Tandem Source API via event IDs not previously requested.
 
@@ -97,7 +97,7 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 3. ~~Phase 3: G7 & Libre 2 CGM~~ — ✅ Merged (PR #50, #51)
 4. ~~Phase 4: Bolus Calculator~~ — ✅ Deployed & verified (PR #52, #53)
 5. ~~Phase 5: PLGS & Daily Status~~ — ✅ Deployed & verified (PR #55)
-6. Phase 6: Estimated Remaining Insulin — computed from existing events
+6. Phase 6: Estimated Remaining Insulin — in review (CR-015)
 
 **Investigation items:**
 - CGM sensor change tracking (Dexcom G6 10-day cycle) — check if any undecoded event ID corresponds to sensor insertion/removal. Phase 3 CGM events (399, 372, 313) may include this.

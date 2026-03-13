@@ -64,6 +64,8 @@ from custom_components.carelink.const import (
     TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS,
     # PLGS & Daily Status (Phase 5)
     TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE,
+    # Estimated Remaining Insulin (Phase 6)
+    TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING,
 )
 
 from custom_components.carelink.tandem_api import decode_pump_events
@@ -2110,3 +2112,151 @@ class TestPLGSCoordinator:
         """Empty pump events results in unavailable predicted glucose."""
         coordinator = await _setup_coordinator(hass, _make_pump_events_data([]))
         assert coordinator.data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] is UNAVAILABLE
+
+
+# ── Phase 6: Estimated Remaining Insulin ──────────────────────────────
+
+
+def _make_bolex_completed(seq: int, delivered: float, minutes_ago: int = 0) -> dict:
+    ts = BASE_TS - timedelta(minutes=minutes_ago)
+    return {
+        "event_id": 21,
+        "event_name": "BolexCompleted",
+        "seq": seq,
+        "timestamp": ts,
+        "bolus_id": 200 + seq,
+        "completion_status": 3,
+        "insulin_delivered": delivered,
+    }
+
+
+class TestEstimatedRemainingInsulin:
+    """Test coordinator computation of estimated remaining insulin."""
+
+    async def test_basic_remaining_after_bolus(self, hass: HomeAssistant):
+        """Fill volume minus bolus deliveries gives remaining insulin."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_cartridge_event(10, volume=200.0, minutes_ago=120),
+            _make_bolus_completed(20, delivered=5.0, iob=5.0, minutes_ago=60),
+            _make_bolus_completed(21, delivered=3.0, iob=8.0, minutes_ago=30),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        remaining = coordinator.data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING]
+        # 200 - 5 - 3 = 192, minus some basal (0 basal events)
+        assert remaining == 192.0
+
+    async def test_remaining_with_bolex(self, hass: HomeAssistant):
+        """Extended bolus (bolex) deliveries are included in the sum."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_cartridge_event(10, volume=150.0, minutes_ago=120),
+            _make_bolus_completed(20, delivered=4.0, iob=4.0, minutes_ago=60),
+            _make_bolex_completed(21, delivered=2.5, minutes_ago=30),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        remaining = coordinator.data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING]
+        assert remaining == 143.5  # 150 - 4 - 2.5
+
+    async def test_remaining_with_basal(self, hass: HomeAssistant):
+        """Basal delivery events after fill are subtracted."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_cartridge_event(10, volume=200.0, minutes_ago=180),
+            # Two basal delivery events 60 min apart at 1.0 U/hr = 1.0 U
+            _make_basal_delivery(20, rate=1.0, minutes_ago=120),
+            _make_basal_delivery(21, rate=1.0, minutes_ago=60),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        remaining = coordinator.data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING]
+        # basal: 1.0 U/hr × 1 hr = 1.0 U, plus last segment 1.0 × 5/60 ≈ 0.083
+        expected = round(200.0 - 1.0 - (1.0 * 5 / 60), 1)
+        assert remaining == expected
+
+    async def test_remaining_clamped_at_zero(self, hass: HomeAssistant):
+        """Remaining never goes below zero."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_cartridge_event(10, volume=10.0, minutes_ago=120),
+            _make_bolus_completed(20, delivered=15.0, iob=15.0, minutes_ago=60),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] == 0.0
+
+    async def test_no_cartridge_fill_unavailable(self, hass: HomeAssistant):
+        """No cartridge fill event results in unavailable."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_bolus_completed(20, delivered=5.0, iob=5.0, minutes_ago=60),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] is UNAVAILABLE
+
+    async def test_zero_fill_volume_unavailable(self, hass: HomeAssistant):
+        """Tandem API returning 0.0 for fill volume results in unavailable."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_cartridge_event(10, volume=0.0, minutes_ago=120),
+            _make_bolus_completed(20, delivered=5.0, iob=5.0, minutes_ago=60),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] is UNAVAILABLE
+
+    async def test_new_fill_resets_tracking(self, hass: HomeAssistant):
+        """A newer cartridge fill resets the delivered total."""
+        events = [
+            _make_cgm_event(1, 120),
+            # Old fill + bolus
+            _make_cartridge_event(10, volume=200.0, minutes_ago=240),
+            _make_bolus_completed(15, delivered=50.0, iob=50.0, minutes_ago=180),
+            # New fill (higher seq) + smaller bolus
+            _make_cartridge_event(20, volume=150.0, minutes_ago=60),
+            _make_bolus_completed(25, delivered=3.0, iob=3.0, minutes_ago=30),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        remaining = coordinator.data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING]
+        # Should use new fill (150), only count bolus after it (3.0)
+        assert remaining == 147.0
+
+    async def test_bolus_before_fill_not_counted(self, hass: HomeAssistant):
+        """Bolus events before the cartridge fill are excluded."""
+        events = [
+            _make_cgm_event(1, 120),
+            _make_bolus_completed(5, delivered=10.0, iob=10.0, minutes_ago=180),
+            _make_cartridge_event(10, volume=200.0, minutes_ago=120),
+            _make_bolus_completed(20, delivered=2.0, iob=2.0, minutes_ago=60),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        remaining = coordinator.data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING]
+        # Only 2.0 U counted (after fill), not the 10.0 before fill
+        assert remaining == 198.0
+
+    async def test_empty_events_unavailable(self, hass: HomeAssistant):
+        """Empty pump events results in unavailable."""
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data([]))
+        assert coordinator.data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] is UNAVAILABLE
+
+    async def test_state_persists_across_polls(self, hass: HomeAssistant):
+        """Fill state persists when cartridge fill is no longer in event window."""
+        # First poll: cartridge fill + bolus
+        events1 = [
+            _make_cgm_event(1, 120),
+            _make_cartridge_event(10, volume=200.0, minutes_ago=120),
+            _make_bolus_completed(20, delivered=5.0, iob=5.0, minutes_ago=60),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events1))
+        assert coordinator.data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] == 195.0
+
+        # Second poll: no cartridge fill in events, new bolus only
+        # State (_last_cartridge_fill_volume, _cumulative_delivered) persists
+        events2 = [
+            _make_cgm_event(30, 115),
+            _make_bolus_completed(31, delivered=3.0, iob=3.0, minutes_ago=10),
+        ]
+        # Re-parse with same coordinator (simulating second poll)
+        data2 = {}
+        coordinator._parse_pump_events(_make_pump_events_data(events2)["pump_events"], data2)
+        remaining = data2[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING]
+        # Cumulative: 5.0 (poll 1) + 3.0 (poll 2) = 8.0 delivered
+        # 200 - 8.0 = 192.0
+        assert remaining == 192.0

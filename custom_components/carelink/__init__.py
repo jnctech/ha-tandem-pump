@@ -1941,7 +1941,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             if daily_status_events:
                 latest_status = daily_status_events[-1]
                 sensor_type = latest_status.get("sensor_type", UNAVAILABLE)
-                if sensor_type != UNAVAILABLE and sensor_type.startswith("Unknown"):
+                if sensor_type != UNAVAILABLE and isinstance(sensor_type, str) and sensor_type.startswith("Unknown"):
                     _LOGGER.info(
                         "Tandem: Unrecognised CGM sensor_type %r from %d daily_status event(s) — update sensor_type_map in tandem_api.py",
                         sensor_type,
@@ -2501,7 +2501,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                         )
                     )
 
-            elif eid in (20, 21):  # BOLUS_COMPLETED / BOLEX_COMPLETED (has IOB + delivered)
+            elif eid in (EVT_BOLUS_COMPLETED, EVT_BOLEX_COMPLETED):
                 iob = evt.get("iob")
                 if iob is not None:
                     iob_val = round(float(iob), 2)
@@ -2527,7 +2527,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                             )
                         )
 
-            elif eid in (3, 279):  # Basal
+            elif eid in (EVT_BASAL_RATE_CHANGE, EVT_BASAL_DELIVERY):
                 rate = evt.get("commanded_rate")
                 if rate is not None:
                     rate_val = round(float(rate), 3)
@@ -2541,7 +2541,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                         )
                     )
 
-            elif eid == 48:  # CARBS_ENTERED
+            elif eid == EVT_CARBS_ENTERED:
                 carbs = evt.get("carbs")
                 if carbs is not None and carbs > 0:
                     carbs_val = round(float(carbs), 1)
@@ -2553,7 +2553,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                         )
                     )
 
-            elif eid == 280:  # EVT_BOLUS_DELIVERY — completed correction bolus
+            elif eid == EVT_BOLUS_DELIVERY:
                 if evt.get("delivery_status") == 0:
                     correction_mu = evt.get("correction_mu", 0)
                     if correction_mu and correction_mu > 0:

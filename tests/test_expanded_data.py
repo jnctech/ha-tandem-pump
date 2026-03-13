@@ -1498,7 +1498,7 @@ class TestCGMPhase3Decoder:
         """Event 313 with sensor type None (no CGM paired)."""
         payload = b"\x00" + struct.pack(">B", 0) + struct.pack(">B", 0) + struct.pack(">B", 0)
         evt = self._decode_single(313, payload)
-        assert evt["sensor_type"] == "None"
+        assert evt["sensor_type"] == "No CGM"
         assert evt["sensor_type_id"] == 0
 
     def test_decode_daily_status_unknown(self):

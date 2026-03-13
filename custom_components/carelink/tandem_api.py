@@ -389,7 +389,7 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             sensor_type = struct.unpack_from(">B", payload, 1)[0]
             user_mode = struct.unpack_from(">B", payload, 2)[0]
             pump_control_state = struct.unpack_from(">B", payload, 3)[0]
-            sensor_type_map = {0: "None", 1: "G6", 2: "Libre 2", 3: "G7"}
+            sensor_type_map = {0: "No CGM", 1: "G6", 2: "Libre 2", 3: "G7"}
             evt["sensor_type"] = sensor_type_map.get(sensor_type, f"Unknown ({sensor_type})")
             evt["sensor_type_id"] = sensor_type
             evt["user_mode"] = user_mode

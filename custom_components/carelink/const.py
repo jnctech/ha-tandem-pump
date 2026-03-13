@@ -324,8 +324,8 @@ SENSORS = (
     SensorEntityDescription(
         key=SENSOR_KEY_SG_BELOW_LIMIT,
         name="Glucose below limit",
-        native_unit_of_measurement=PERCENT,
-        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=MGDL,
+        state_class=None,
         device_class=None,
         icon=None,
         entity_category=None,

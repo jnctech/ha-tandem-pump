@@ -22,7 +22,39 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .api import CarelinkClient, LEGACY_AUTH_FILE, AUTH_FILE_PREFIX, SHARED_AUTH_FILE
-from .tandem_api import TandemSourceClient, TandemAuthError, TandemApiError, parse_dotnet_date
+from .tandem_api import (
+    TandemSourceClient,
+    TandemAuthError,
+    TandemApiError,
+    parse_dotnet_date,
+    EVT_CGM_DATA_GXB,
+    EVT_CGM_DATA_G7,
+    EVT_CGM_DATA_FSL2,
+    EVT_AA_DAILY_STATUS,
+    EVT_BOLUS_COMPLETED,
+    EVT_BOLEX_COMPLETED,
+    EVT_BOLUS_DELIVERY,
+    EVT_BASAL_RATE_CHANGE,
+    EVT_BASAL_DELIVERY,
+    EVT_PUMPING_SUSPENDED,
+    EVT_PUMPING_RESUMED,
+    EVT_BG_READING_TAKEN,
+    EVT_CARTRIDGE_FILLED,
+    EVT_CARBS_ENTERED,
+    EVT_CANNULA_FILLED,
+    EVT_TUBING_FILLED,
+    EVT_AA_USER_MODE_CHANGE,
+    EVT_AA_PCM_CHANGE,
+    EVT_DAILY_BASAL,
+    EVT_SHELF_MODE,
+    EVT_USB_CONNECTED,
+    EVT_USB_DISCONNECTED,
+    EVT_ALERT_ACTIVATED,
+    EVT_ALERT_CLEARED,
+    EVT_ALARM_ACTIVATED,
+    EVT_MALFUNCTION_ACTIVATED,
+    EVT_ALARM_CLEARED,
+)
 from .nightscout_uploader import NightscoutUploader
 from .helpers import is_data_stale
 
@@ -170,6 +202,8 @@ from .const import (
     TANDEM_SENSOR_KEY_LAST_ALERT,
     TANDEM_SENSOR_KEY_LAST_ALARM,
     TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT,
+    # CGM sensor type (Phase 3)
+    TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE,
 )
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER]
@@ -1211,6 +1245,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[TANDEM_SENSOR_KEY_LAST_ALERT] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_ALARM] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] = UNAVAILABLE
 
         if not timeline:
             data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
@@ -1421,47 +1456,50 @@ class TandemCoordinator(DataUpdateCoordinator):
         usb_events: list[dict] = []
         alert_events: list[dict] = []
         alarm_events: list[dict] = []
+        daily_status_events: list[dict] = []
 
         for evt in pump_events:
             eid = evt.get("event_id")
-            if eid == 256:  # CGM_DATA_GXB
+            if eid in (EVT_CGM_DATA_GXB, EVT_CGM_DATA_G7, EVT_CGM_DATA_FSL2):
                 cgm_readings.append(evt)
-            elif eid == 20:  # BOLUS_COMPLETED
+            elif eid == EVT_BOLUS_COMPLETED:
                 bolus_completed.append(evt)
-            elif eid == 21:  # BOLEX_COMPLETED
+            elif eid == EVT_BOLEX_COMPLETED:
                 bolex_completed.append(evt)
-            elif eid == 280:  # BOLUS_DELIVERY
+            elif eid == EVT_BOLUS_DELIVERY:
                 bolus_delivery.append(evt)
-            elif eid == 3:  # BASAL_RATE_CHANGE
+            elif eid == EVT_BASAL_RATE_CHANGE:
                 basal_rate_changes.append(evt)
-            elif eid == 279:  # BASAL_DELIVERY
+            elif eid == EVT_BASAL_DELIVERY:
                 basal_delivery.append(evt)
-            elif eid in (11, 12):  # PUMPING_SUSPENDED / RESUMED
+            elif eid in (EVT_PUMPING_SUSPENDED, EVT_PUMPING_RESUMED):
                 suspend_resume.append(evt)
-            elif eid == 16:  # BG_READING_TAKEN
+            elif eid == EVT_BG_READING_TAKEN:
                 bg_readings.append(evt)
-            elif eid == 33:  # CARTRIDGE_FILLED
+            elif eid == EVT_CARTRIDGE_FILLED:
                 cartridge_fills.append(evt)
-            elif eid == 48:  # CARBS_ENTERED
+            elif eid == EVT_CARBS_ENTERED:
                 carbs_entered.append(evt)
-            elif eid == 61:  # CANNULA_FILLED
+            elif eid == EVT_CANNULA_FILLED:
                 cannula_fills.append(evt)
-            elif eid == 63:  # TUBING_FILLED
+            elif eid == EVT_TUBING_FILLED:
                 tubing_fills.append(evt)
-            elif eid == 229:  # AA_USER_MODE_CHANGE
+            elif eid == EVT_AA_USER_MODE_CHANGE:
                 user_mode_changes.append(evt)
-            elif eid == 230:  # AA_PCM_CHANGE
+            elif eid == EVT_AA_PCM_CHANGE:
                 pcm_changes.append(evt)
-            elif eid == 81:  # DAILY_BASAL (battery + daily totals)
+            elif eid == EVT_DAILY_BASAL:
                 daily_basal_events.append(evt)
-            elif eid == 53:  # SHELF_MODE (battery detail)
+            elif eid == EVT_SHELF_MODE:
                 shelf_mode_events.append(evt)
-            elif eid in (36, 37):  # USB_CONNECTED / USB_DISCONNECTED
+            elif eid in (EVT_USB_CONNECTED, EVT_USB_DISCONNECTED):
                 usb_events.append(evt)
-            elif eid in (4, 26):  # ALERT_ACTIVATED / ALERT_CLEARED
+            elif eid in (EVT_ALERT_ACTIVATED, EVT_ALERT_CLEARED):
                 alert_events.append(evt)
-            elif eid in (5, 6, 28):  # ALARM_ACTIVATED / MALFUNCTION_ACTIVATED / ALARM_CLEARED
+            elif eid in (EVT_ALARM_ACTIVATED, EVT_MALFUNCTION_ACTIVATED, EVT_ALARM_CLEARED):
                 alarm_events.append(evt)
+            elif eid == EVT_AA_DAILY_STATUS:
+                daily_status_events.append(evt)
 
         _LOGGER.debug(
             "Tandem: Events - CGM: %d, BolusCompleted: %d, BolexCompleted: %d, "
@@ -1469,7 +1507,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             "Suspend/Resume: %d, BG: %d, Cartridge: %d, Carbs: %d, "
             "Cannula: %d, Tubing: %d, UserMode: %d, PCM: %d, "
             "DailyBasal: %d, ShelfMode: %d, USB: %d, "
-            "Alert: %d, Alarm: %d",
+            "Alert: %d, Alarm: %d, DailyStatus: %d",
             len(cgm_readings),
             len(bolus_completed),
             len(bolex_completed),
@@ -1489,6 +1527,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             len(usb_events),
             len(alert_events),
             len(alarm_events),
+            len(daily_status_events),
         )
 
         # Update the last-seen sequence number for statistics deduplication
@@ -1517,6 +1556,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         usb_events.sort(key=lambda e: e["timestamp"])
         alert_events.sort(key=lambda e: e["timestamp"])
         alarm_events.sort(key=lambda e: e["timestamp"])
+        daily_status_events.sort(key=lambda e: e["timestamp"])
 
         # ── Populate current sensor values from latest events ────────
 
@@ -1895,6 +1935,29 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_LAST_ALERT] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_LAST_ALARM] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = UNAVAILABLE
+
+        # ── CGM Sensor Type (Phase 3) ────────────────────────────────
+        try:
+            if daily_status_events:
+                latest_status = daily_status_events[-1]
+                sensor_type = latest_status.get("sensor_type", UNAVAILABLE)
+                if sensor_type != UNAVAILABLE and isinstance(sensor_type, str) and sensor_type.startswith("Unknown"):
+                    _LOGGER.info(
+                        "Tandem: Unrecognised CGM sensor_type %r from %d daily_status event(s) — update sensor_type_map in tandem_api.py",
+                        sensor_type,
+                        len(daily_status_events),
+                    )
+                data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] = sensor_type
+            else:
+                data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] = UNAVAILABLE
+        except (KeyError, TypeError, IndexError) as e:
+            _LOGGER.error(
+                "Tandem: Error parsing %d daily status event(s): %s",
+                len(daily_status_events),
+                e,
+                exc_info=True,
+            )
+            data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] = UNAVAILABLE
 
         # ── Computed summaries ─────────────────────────────────────────
         try:
@@ -2424,7 +2487,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             # (HA requires timestamps at the top of the hour)
             period_start = ts.replace(minute=0, second=0, microsecond=0)
 
-            if eid == 256:  # CGM
+            if eid in (EVT_CGM_DATA_GXB, EVT_CGM_DATA_G7, EVT_CGM_DATA_FSL2):
                 sg = evt.get("glucose_mgdl", 0)
                 if sg and sg > 0:
                     mmol = round(sg * 0.0555, 2)
@@ -2438,7 +2501,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                         )
                     )
 
-            elif eid in (20, 21):  # BOLUS_COMPLETED / BOLEX_COMPLETED (has IOB + delivered)
+            elif eid in (EVT_BOLUS_COMPLETED, EVT_BOLEX_COMPLETED):
                 iob = evt.get("iob")
                 if iob is not None:
                     iob_val = round(float(iob), 2)
@@ -2464,7 +2527,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                             )
                         )
 
-            elif eid in (3, 279):  # Basal
+            elif eid in (EVT_BASAL_RATE_CHANGE, EVT_BASAL_DELIVERY):
                 rate = evt.get("commanded_rate")
                 if rate is not None:
                     rate_val = round(float(rate), 3)
@@ -2478,7 +2541,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                         )
                     )
 
-            elif eid == 48:  # CARBS_ENTERED
+            elif eid == EVT_CARBS_ENTERED:
                 carbs = evt.get("carbs")
                 if carbs is not None and carbs > 0:
                     carbs_val = round(float(carbs), 1)
@@ -2490,7 +2553,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                         )
                     )
 
-            elif eid == 280:  # EVT_BOLUS_DELIVERY — completed correction bolus
+            elif eid == EVT_BOLUS_DELIVERY:
                 if evt.get("delivery_status") == 0:
                     correction_mu = evt.get("correction_mu", 0)
                     if correction_mu and correction_mu > 0:

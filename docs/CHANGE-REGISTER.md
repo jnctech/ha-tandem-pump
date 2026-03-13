@@ -4,11 +4,57 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-010 — G7, Libre 2 CGM Support & Sensor Type Detection (Phase 3)
+**Date:** 2026-03-13
+**Branch:** `feature/cgm-g7-libre2-phase3`
+**PR:** pending
+**Status:** Pre-push gate in progress
+
+### What Changed
+| Area | Change |
+|------|--------|
+| tandem_api.py | Added 3 event constants (EVT_AA_DAILY_STATUS=313, EVT_CGM_DATA_FSL2=372, EVT_CGM_DATA_G7=399) |
+| tandem_api.py | Added 3 decoder cases (G7 same layout as GXB, FSL2 different int16/uint8 layout, AA_DAILY_STATUS for sensor type) |
+| tandem_api.py | Updated get_pump_events() event_ids to include 313, 372, 399 |
+| const.py | Added CGM sensor type key constant and SensorEntityDescription (diagnostic, icon mdi:chip) |
+| __init__.py | Replaced ALL magic event IDs with EVT_* constants (import from tandem_api) |
+| __init__.py | Route events 399/372 into cgm_readings alongside 256; parse 313 for sensor type |
+| __init__.py | Updated LTS statistics to include G7 and FSL2 CGM events |
+| __init__.py | Narrowed exception handling: `except Exception` → `except (KeyError, TypeError, IndexError)`, warning → error |
+| __init__.py | Added logging for unknown CGM sensor types |
+| tests | Added TestCGMPhase3Decoder (11 tests) + TestCGMPhase3Coordinator (8 tests); 613 total passing |
+
+### Sensors Added
+| Key | Name | Value |
+|-----|------|-------|
+| tandem_cgm_sensor_type | CGM sensor type | G6, G7, Libre 2, None, or Unknown (N) — from AA_DAILY_STATUS event 313 |
+
+### Review Gate Results
+| Gate | Result |
+|------|--------|
+| Logic Review 1 (Opus) | No bugs; 7 low-severity test-coverage suggestions |
+| API Drift Review 2 (Opus) | No drift; FSL2 uint8 vs uint16 status noted — can't validate without real capture |
+| Sensor Review 3 (Sonnet) | All correct |
+| silent-failure-hunter | 6 findings; 4 fixed (magic numbers, exception narrowing, unknown type logging, error severity) |
+| code-reviewer | Pending final run |
+
+### Quality Gate Results (at branch)
+| Metric | Value | Gate |
+|--------|-------|------|
+| Tests | 613 passed | ✅ |
+| Ruff format | Clean | ✅ |
+| Ruff lint | Clean | ✅ |
+| API drift | None | ✅ |
+| Bandit | Clean | ✅ |
+
+---
+
 ## CR-009 — Alerts & Alarms Sensors (Phase 2)
 **Date:** 2026-03-13
 **Branch:** `feature/alerts-alarms-phase2`
-**PR:** pending
-**Status:** Pre-push gate complete, awaiting PR
+**PR:** [#49](https://github.com/jnctech/ha-tandem-pump/pull/49)
+**Status:** Merged to `develop`
+**Deployed:** 2026-03-13 — verified on HA
 
 ### What Changed
 | Area | Change |

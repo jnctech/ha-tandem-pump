@@ -81,6 +81,9 @@ EVT_AA_PCM_CHANGE = 230
 EVT_CGM_DATA_GXB = 256
 EVT_BASAL_DELIVERY = 279
 EVT_BOLUS_DELIVERY = 280
+EVT_AA_DAILY_STATUS = 313
+EVT_CGM_DATA_FSL2 = 372
+EVT_CGM_DATA_G7 = 399
 
 
 def decode_pump_events(raw_b64: str) -> list[dict]:
@@ -360,6 +363,37 @@ def decode_pump_events(raw_b64: str) -> list[dict]:
             evt["last_basal_rate"] = round(last_basal_rate, 3)
             evt["iob"] = round(iob, 2)
             evt["battery_percent"] = battery_pct
+
+        elif event_id == EVT_CGM_DATA_G7:
+            # Same binary layout as GXB (event 256)
+            evt["event_name"] = "CGM"
+            glucose = struct.unpack_from(">H", payload, 4)[0]
+            rate_raw = struct.unpack_from(">b", payload, 0)[0]
+            status = struct.unpack_from(">H", payload, 2)[0]
+            evt["glucose_mgdl"] = glucose
+            evt["rate_of_change"] = round(rate_raw * 0.1, 1)
+            evt["status"] = status
+
+        elif event_id == EVT_CGM_DATA_FSL2:
+            # Libre 2: int16 rate (not int8), uint8 status (not uint16)
+            evt["event_name"] = "CGM"
+            glucose = struct.unpack_from(">H", payload, 4)[0]
+            rate_raw = struct.unpack_from(">h", payload, 0)[0]  # int16
+            status = struct.unpack_from(">B", payload, 2)[0]  # uint8
+            evt["glucose_mgdl"] = glucose
+            evt["rate_of_change"] = round(rate_raw * 0.1, 1)
+            evt["status"] = status
+
+        elif event_id == EVT_AA_DAILY_STATUS:
+            evt["event_name"] = "AADailyStatus"
+            sensor_type = struct.unpack_from(">B", payload, 1)[0]
+            user_mode = struct.unpack_from(">B", payload, 2)[0]
+            pump_control_state = struct.unpack_from(">B", payload, 3)[0]
+            sensor_type_map = {0: "No CGM", 1: "G6", 2: "Libre 2", 3: "G7"}
+            evt["sensor_type"] = sensor_type_map.get(sensor_type, f"Unknown ({sensor_type})")
+            evt["sensor_type_id"] = sensor_type
+            evt["user_mode"] = user_mode
+            evt["pump_control_state"] = pump_control_state
 
         else:
             evt["event_name"] = f"Event_{event_id}"
@@ -779,7 +813,10 @@ class TandemSourceClient:
                 "230,"  # AA_PCM_CHANGE (Control-IQ mode)
                 "256,"  # CGM_DATA_GXB (glucose readings)
                 "279,"  # BASAL_DELIVERY (commanded rates)
-                "280"  # BOLUS_DELIVERY (bolus details)
+                "280,"  # BOLUS_DELIVERY (bolus details)
+                "313,"  # AA_DAILY_STATUS (CGM sensor type, user mode)
+                "372,"  # CGM_DATA_FSL2 (Libre 2 glucose readings)
+                "399"  # CGM_DATA_G7 (Dexcom G7 glucose readings)
             )
 
             url = (

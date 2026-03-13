@@ -1,60 +1,174 @@
 {
-  "_comment": "Sanitised known-good API response fixture. Real values replaced with typed placeholders. Update this file when a field changes or a new field is added/removed. Run scripts/check_api_drift.py to validate.",
+  "_comment": "Known-good API response fixture from real Tandem Source API capture (2026-03-13). PII sanitised. Update this file when API shape changes. Run scripts/check_api_drift.py to validate.",
 
   "pump_event_metadata_response": [
     {
       "tconnectDeviceId": 12345,
-      "serialNumber": "SERIALXXX",
-      "modelNumber": "MODEL-1234",
-      "maxDateWithEvents": "2026-01-01T00:00:00",
+      "serialNumber": "SERIAL001",
+      "modelNumber": "001002717",
+      "minDateWithEvents": "2025-11-15T22:39:50",
+      "maxDateWithEvents": "2026-03-13T09:03:28",
       "lastUpload": {
-        "uploadId": "upload-uuid-placeholder",
-        "lastUploadedAt": "2026-01-01T00:00:00",
+        "uploadId": 81920001,
+        "lastUploadedAt": "2026-03-12T22:47:30.16",
         "settings": {
           "profiles": {
-            "activeIdp": 1,
+            "activeIdp": 0,
             "profile": [
               {
-                "basalRate": 1.0,
-                "startTime": 0,
-                "isf": 50,
-                "carbRatio": 10000,
-                "targetBg": 100
+                "name": "Default",
+                "idp": 0,
+                "tDependentSegs": [
+                  {
+                    "startTime": 0,
+                    "basalRate": 1200,
+                    "isf": 54,
+                    "carbRatio": 10000,
+                    "targetBg": 110
+                  },
+                  {
+                    "startTime": 480,
+                    "basalRate": 1000,
+                    "isf": 45,
+                    "carbRatio": 8000,
+                    "targetBg": 110
+                  }
+                ],
+                "insulinDuration": 300,
+                "carbEntry": 1,
+                "maxBolus": 14000
               }
             ]
           },
+          "basalIQSettings": null,
           "controlIQSettings": {
-            "ClosedLoop": true,
-            "Weight": 80.0,
-            "TotalDailyInsulin": 30.0
+            "ClosedLoop": 1,
+            "Weight": 74,
+            "WeightUnit": 2,
+            "TotalDailyInsulin": 60,
+            "sleepSchedules": [
+              {
+                "activeDays": 127,
+                "startTime": 1439,
+                "endTime": 360,
+                "enabled": 1
+              }
+            ]
+          },
+          "pumpProperties": {
+            "partNum": "1013572"
           },
           "pumpSettings": {
-            "maxBolus": 10.0,
-            "basalLimit": 5.0
-          },
-          "cgmSettings": {
-            "highGlucoseAlert": {
-              "mgPerDl": 250
-            },
-            "lowGlucoseAlert": {
-              "mgPerDl": 70
+            "basalLimit": 2000,
+            "maxBolus": 14000,
+            "quickBolus": {
+              "incrementsUnits": 500,
+              "incrementsCarbs": 2000,
+              "active": 0,
+              "dataEntryType": 0,
+              "status": 0
             }
           },
           "alertsAndReminders": {
-            "lowBgThreshold": 65,
-            "highBgThreshold": 300,
-            "lowInsulinThreshold": 10.0
-          }
+            "autoShutDownEnabled": 0,
+            "autoShutDownDuration": 12,
+            "lowInsulinThreshold": 20,
+            "lowBg": {
+              "frequencyMinutes": 15,
+              "enabled": 1,
+              "status": 2
+            },
+            "highBg": {
+              "frequencyMinutes": 60,
+              "enabled": 1,
+              "status": 3
+            },
+            "siteChangeReminder": {
+              "frequencyMinutes": 1080,
+              "enabled": 0,
+              "status": 3
+            },
+            "afterBolusBgReminder": {
+              "frequencyMinutes": 90,
+              "enabled": 0,
+              "status": 0
+            },
+            "lowBgThreshold": 70,
+            "highBgThreshold": 214,
+            "siteChangeDays": 3,
+            "status": 6
+          },
+          "cgmSettings": {
+            "highGlucoseAlert": {
+              "mgPerDl": 200,
+              "enabled": 1,
+              "duration": 0,
+              "status": 7
+            },
+            "lowGlucoseAlert": {
+              "mgPerDl": 80,
+              "enabled": 1,
+              "duration": 0,
+              "status": 7
+            },
+            "riseRateAlert": {
+              "level": 3,
+              "enabled": 1,
+              "status": 1
+            },
+            "fallRateAlert": {
+              "level": 3,
+              "enabled": 0,
+              "status": 5
+            },
+            "outOfRangeAlert": {
+              "enabled": 1,
+              "sensorTimeoutMinutes": 20,
+              "status": 5
+            }
+          },
+          "localizationSettings": {
+            "glucoseUOM": 1,
+            "languageSelected": 0,
+            "regionSetting": 1
+          },
+          "mobileConnectionSettings": null,
+          "snoozeSettings": null
         }
       },
-      "softwareVersion": "1.2.3",
-      "partNumber": "PART-001"
+      "patientName": "[REDACTED]",
+      "patientDateOfBirth": "[REDACTED]",
+      "patientCareGiver": "[REDACTED]",
+      "softwareVersion": null,
+      "partNumber": null
     }
   ],
 
   "pumper_info_response": {
-    "pumperId": "pumper-uuid-placeholder",
-    "accountId": "account-uuid-placeholder"
+    "id": "pumper-uuid-placeholder",
+    "firstName": "[REDACTED]",
+    "lastName": "[REDACTED]",
+    "name": "[REDACTED]",
+    "birthdate": "[REDACTED]",
+    "type": "PersonalUser",
+    "account": {
+      "id": "account-uuid-placeholder",
+      "email": "[REDACTED]",
+      "role": "personal_standard",
+      "countrySubdivision": "AU-SA",
+      "preferredLanguage": "en-AU"
+    },
+    "devices": [
+      {
+        "modelNumber": "1002717",
+        "serialNumber": "SERIAL001",
+        "modelName": "t:slim X2\u2122 Insulin Pump",
+        "assignmentId": "assignment-uuid-placeholder",
+        "assignedAt": "2026-02-10T12:24:16.063+00:00"
+      }
+    ],
+    "lowGlucoseThreshold": 70,
+    "highGlucoseThreshold": 180
   },
 
   "jwt_claims": {
@@ -62,6 +176,167 @@
     "accountId": "account-uuid-placeholder",
     "sub": "subject-placeholder",
     "iss": "https://tdcservices.eu.tandemdiabetes.com/accounts/api"
+  },
+
+  "pump_events_samples": {
+    "_comment": "Decoded event samples from real API capture. These are post-decode dicts, not raw binary. One sample per event type decoded by tandem_api.py.",
+
+    "USBConnected_36": {
+      "event_id": 36,
+      "event_name": "USBConnected",
+      "timestamp": "2026-03-08T15:56:15",
+      "seq": 1825150,
+      "negotiated_current_ma": 100.0
+    },
+    "USBDisconnected_37": {
+      "event_id": 37,
+      "event_name": "USBDisconnected",
+      "timestamp": "2026-03-08T16:07:20",
+      "seq": 1825209,
+      "negotiated_current_ma": 100.0
+    },
+    "ShelfMode_53": {
+      "event_id": 53,
+      "event_name": "ShelfMode",
+      "timestamp": "2026-03-09T06:36:29",
+      "seq": 1827143,
+      "msec_since_reset": 441960183,
+      "battery_percent": 0,
+      "battery_percent_alt": 19,
+      "battery_current_ma": 0,
+      "battery_remaining_mah": 80,
+      "battery_voltage_mv": 3722
+    },
+    "DailyBasal_81": {
+      "event_id": 81,
+      "event_name": "DailyBasal",
+      "timestamp": "2026-03-04T09:30:35",
+      "seq": 1811119,
+      "daily_total_basal": 12.75,
+      "last_basal_rate": 1.2,
+      "iob": 3.76,
+      "battery_percent": 75.8,
+      "_note": "DailyBasal does NOT emit battery_voltage_mv — bytes 14-15 are raw ADC, not millivolts"
+    },
+    "CGM_256": {
+      "event_id": 256,
+      "event_name": "CGM",
+      "timestamp": "2026-03-04T09:31:20",
+      "seq": 1811122,
+      "glucose_mgdl": 150,
+      "rate_of_change": -0.9,
+      "status": 0
+    },
+    "BolusCompleted_20": {
+      "event_id": 20,
+      "event_name": "BolusCompleted",
+      "timestamp": "2026-03-04T10:20:59",
+      "seq": 1811250,
+      "bolus_id": 9850,
+      "completion_status": 3,
+      "iob": 2.46,
+      "insulin_delivered": 0.64,
+      "insulin_requested": 0.64
+    },
+    "BolusDelivery_280": {
+      "event_id": 280,
+      "event_name": "BolusDelivery",
+      "timestamp": "2026-03-04T10:20:21",
+      "seq": 1811242,
+      "bolus_type": 9,
+      "delivery_status": 1,
+      "bolus_id": 9850,
+      "requested_now_mu": 637,
+      "correction_mu": 637,
+      "delivered_total_mu": 0,
+      "insulin_delivered": 0.0
+    },
+    "BasalRateChange_3": {
+      "event_id": 3,
+      "event_name": "BasalRateChange",
+      "timestamp": "2026-03-04T10:19:31",
+      "seq": 1811233,
+      "commanded_rate": 1.801,
+      "base_rate": 1.2,
+      "max_rate": 2.0,
+      "change_type": 1
+    },
+    "BasalDelivery_279": {
+      "event_id": 279,
+      "event_name": "BasalDelivery",
+      "timestamp": "2026-03-04T09:29:28",
+      "seq": 1811118,
+      "commanded_source": 3,
+      "profile_rate_mu": 1200,
+      "commanded_rate_mu": 1200,
+      "commanded_rate": 1.2
+    },
+    "PumpingSuspended_11": {
+      "event_id": 11,
+      "event_name": "PumpingSuspended",
+      "timestamp": "2026-03-05T01:16:08",
+      "seq": 1813477,
+      "suspend_reason": "User",
+      "suspend_reason_id": 0,
+      "insulin_amount": 0.0
+    },
+    "PumpingResumed_12": {
+      "event_id": 12,
+      "event_name": "PumpingResumed",
+      "timestamp": "2026-03-05T01:19:11",
+      "seq": 1813505,
+      "pre_resume_state": 0,
+      "insulin_amount": 0.0
+    },
+    "BGReading_16": {
+      "event_id": 16,
+      "event_name": "BGReading",
+      "timestamp": "2026-03-04T11:12:10",
+      "seq": 1811386,
+      "bg_mgdl": 256,
+      "iob": 1.81,
+      "entry_type": "Manual"
+    },
+    "CartridgeFilled_33": {
+      "event_id": 33,
+      "event_name": "CartridgeFilled",
+      "timestamp": "2026-03-05T01:18:40",
+      "seq": 1813497,
+      "insulin_volume": 0.0
+    },
+    "CarbsEntered_48": {
+      "event_id": 48,
+      "event_name": "CarbsEntered",
+      "timestamp": "2026-03-04T11:12:13",
+      "seq": 1811387,
+      "carbs": 30
+    },
+    "TubingFilled_63": {
+      "event_id": 63,
+      "event_name": "TubingFilled",
+      "timestamp": "2026-03-05T01:18:40",
+      "seq": 1813498,
+      "prime_size": 11.28,
+      "completion_status": 0
+    },
+    "UserModeChange_229": {
+      "event_id": 229,
+      "event_name": "UserModeChange",
+      "timestamp": "2026-03-04T23:59:34",
+      "seq": 1813169,
+      "current_mode": "Normal",
+      "previous_mode": "Sleep",
+      "current_mode_id": 0,
+      "previous_mode_id": 1
+    },
+    "PCMChange_230": {
+      "event_id": 230,
+      "event_name": "PCMChange",
+      "timestamp": "2026-03-04T09:52:59",
+      "seq": 1811161,
+      "current_pcm": "Open Loop",
+      "previous_pcm": "No Control"
+    }
   },
 
   "_drift_check": {
@@ -73,7 +348,9 @@
       "modelNumber",
       "maxDateWithEvents",
       "lastUpload",
-      "softwareVersion"
+      "softwareVersion",
+      "partNumber",
+      "patientName"
     ],
 
     "last_upload_settings_fields": [
@@ -82,6 +359,16 @@
       "profiles",
       "activeIdp",
       "profile",
+      "idp",
+      "name",
+      "tDependentSegs",
+      "startTime",
+      "basalRate",
+      "isf",
+      "carbRatio",
+      "targetBg",
+      "insulinDuration",
+      "carbEntry",
       "controlIQSettings",
       "ClosedLoop",
       "Weight",

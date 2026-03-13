@@ -4,6 +4,37 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-008 — Display Precision & Fixture Update
+**Date:** 2026-03-13
+**Branch:** `fix/sensor-display-precision`
+**PR:** [#48](https://github.com/jnctech/ha-tandem-pump/pull/48)
+**Status:** PR pending
+**Deployed:** Pending
+
+### What Changed
+| Area | Change |
+|------|--------|
+| const.py | Added `suggested_display_precision` to 25 Tandem sensors (0 for integers, 1 for %/mmol, 2 for insulin, 3 for basal rates) |
+| fixture | Rebuilt `known_good_api_response.json` from real API capture — full metadata structure, pumper_info, 16 event samples |
+| fixture | Updated `_drift_check` field lists: added `patientName`, profile sub-fields |
+| docs | Resolved findings D-2 (drift check), S-4 (accepted), S-5 (fixed) |
+
+### Finding Reference
+- S-5: suggested_display_precision was missing from all sensors — HA showed raw float precision
+- S-4: No HA `SensorDeviceClass.BLOOD_GLUCOSE` exists — `device_class=None` is correct
+- D-2: `partNumber` and `patientName` now in drift check canonical field list
+
+### Quality Gate Results (at branch)
+| Metric | Value | Gate |
+|--------|-------|------|
+| Coverage | 83%+ | ≥80% ✅ |
+| Tests | 576 passed | — ✅ |
+| Ruff format | Clean | ✅ |
+| Ruff lint | Clean | ✅ |
+| API drift | None | ✅ |
+
+---
+
 ## CR-007 — Sensor Metadata Audit & Battery Voltage Fix
 **Date:** 2026-03-13
 **Branch:** `fix/sensor-metadata-audit`

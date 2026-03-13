@@ -616,6 +616,7 @@ TANDEM_SENSORS = (
         device_class=_BLOOD_GLUCOSE,
         icon="mdi:water",
         entity_category=None,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_LASTSG_MGDL,
@@ -625,6 +626,7 @@ TANDEM_SENSORS = (
         device_class=_BLOOD_GLUCOSE,
         icon="mdi:water",
         entity_category=None,
+        suggested_display_precision=0,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
@@ -643,6 +645,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:plus-minus-variant",
         entity_category=None,
+        suggested_display_precision=0,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE,
@@ -652,6 +655,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:trending-up",
         entity_category=None,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_CGM_STATUS,
@@ -679,6 +683,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:water-alert",
         entity_category=None,
+        suggested_display_precision=2,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_BASAL_RATE,
@@ -688,6 +693,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:chart-line",
         entity_category=None,
+        suggested_display_precision=3,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_LAST_BOLUS_UNITS,
@@ -697,6 +703,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:needle",
         entity_category=None,
+        suggested_display_precision=2,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP,
@@ -715,6 +722,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:food",
         entity_category=None,
+        suggested_display_precision=2,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_LAST_UPLOAD,
@@ -733,6 +741,7 @@ TANDEM_SENSORS = (
         device_class=_BLOOD_GLUCOSE,
         icon="mdi:chart-line",
         entity_category=None,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL,
@@ -742,6 +751,7 @@ TANDEM_SENSORS = (
         device_class=_BLOOD_GLUCOSE,
         icon="mdi:chart-line",
         entity_category=None,
+        suggested_display_precision=0,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_TIME_IN_RANGE,
@@ -751,6 +761,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon=None,
         entity_category=None,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_CGM_USAGE,
@@ -760,6 +771,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:percent",
         entity_category=None,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS,
@@ -806,6 +818,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:chart-bell-curve",
         entity_category=None,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_GLUCOSE_CV,
@@ -815,6 +828,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:chart-bell-curve-cumulative",
         entity_category=None,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_GMI,
@@ -824,6 +838,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:diabetes",
         entity_category=None,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_TIME_BELOW_RANGE,
@@ -833,6 +848,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:arrow-down-bold",
         entity_category=None,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE,
@@ -842,6 +858,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:arrow-up-bold",
         entity_category=None,
+        suggested_display_precision=1,
     ),
     # ── Event-derived sensors ──────────────────────────────────────────
     SensorEntityDescription(
@@ -915,6 +932,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:needle",
         entity_category=None,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_LAST_SITE_CHANGE,
@@ -942,6 +960,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:cup-water",
         entity_category=None,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_LAST_BG_READING,
@@ -951,6 +970,7 @@ TANDEM_SENSORS = (
         device_class=_BLOOD_GLUCOSE,
         icon="mdi:blood-bag",
         entity_category=None,
+        suggested_display_precision=0,
     ),
     # ── Computed insulin summary sensors ───────────────────────────────
     SensorEntityDescription(
@@ -961,6 +981,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:needle",
         entity_category=None,
+        suggested_display_precision=2,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_DAILY_BOLUS_TOTAL,
@@ -970,6 +991,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:needle",
         entity_category=None,
+        suggested_display_precision=2,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_DAILY_BASAL_TOTAL,
@@ -979,6 +1001,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:chart-line",
         entity_category=None,
+        suggested_display_precision=2,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT,
@@ -988,6 +1011,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:chart-pie",
         entity_category=None,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_DAILY_CARBS,
@@ -1052,6 +1076,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:needle",
         entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_BASAL_LIMIT,
@@ -1061,6 +1086,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:speedometer",
         entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=1,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_CGM_HIGH_ALERT,
@@ -1116,6 +1142,7 @@ TANDEM_SENSORS = (
         device_class=SensorDeviceClass.BATTERY,
         icon="mdi:battery",
         entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=0,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_BATTERY_VOLTAGE,
@@ -1125,6 +1152,7 @@ TANDEM_SENSORS = (
         device_class=SensorDeviceClass.VOLTAGE,
         icon="mdi:flash",
         entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=0,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH,
@@ -1134,6 +1162,7 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:battery-charging",
         entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=0,
     ),
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_CHARGING_STATUS,

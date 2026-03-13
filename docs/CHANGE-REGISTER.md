@@ -4,11 +4,28 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-012 — Bolus Calculator Attributes Bugfix
+**Date:** 2026-03-13
+**Branch:** `bugfix/bolus-calc-attrs-not-sensor`
+**PR:** [#53](https://github.com/jnctech/ha-tandem-pump/pull/53)
+**Status:** Merged & deployed
+
+### What Changed
+| Area | Change |
+|------|--------|
+| const.py | Removed `TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS` SensorEntityDescription — dict values are not valid HA sensor states |
+| const.py | Changed constant value to `"tandem_last_bolus_bg_attributes"` so bolus calc details surface as `extra_state_attributes` on `last_bolus_bg` sensor via the existing `_attributes` convention in `sensor.py` |
+
+### Why
+Code review (post-merge on PR #52) identified that the `bolus_calculator_attributes` sensor was passing a dict as `native_value`. HA sensors require scalar values. The existing codebase pattern for attribute dicts (e.g., `LAST_BOLUS_ATTRS`, `LAST_MEAL_BOLUS_ATTRS`) stores them as coordinator data keys with `_attributes` suffix but does NOT register them as SensorEntityDescriptions. Applied the same pattern.
+
+---
+
 ## CR-011 — Bolus Calculator Sensors (Phase 4)
 **Date:** 2026-03-13
 **Branch:** `feature/bolus-calculator-phase4`
-**PR:** pending
-**Status:** Pre-push gate in progress
+**PR:** [#52](https://github.com/jnctech/ha-tandem-pump/pull/52)
+**Status:** Merged & deployed (bugfix in CR-012)
 
 ### What Changed
 | Area | Change |
@@ -16,19 +33,18 @@ Significant changes to this repository, listed in reverse chronological order.
 | tandem_api.py | Added 3 event constants (EVT_BOLUS_REQUESTED_MSG1=64, MSG2=65, MSG3=66) |
 | tandem_api.py | Added 3 decoder cases for bolus calculator messages (BG, carbs, IOB, ISF, food/correction split) |
 | tandem_api.py | Updated get_pump_events() event_ids to include 64, 65, 66 |
-| const.py | Added 5 sensor key constants and SensorEntityDescriptions |
+| const.py | Added 5 sensor key constants and 4 SensorEntityDescriptions (5th removed in CR-012) |
 | __init__.py | Added 3-way join by BolusID across msg1/msg2/msg3 events |
-| __init__.py | Populate 4 primary sensors + 1 diagnostic attributes sensor from latest complete bolus calc record |
-| tests | Added TestBolusCalcDecoder (6 tests) + TestBolusCalcCoordinator (6 tests); 625 total passing |
+| __init__.py | Populate 4 primary sensors + attributes dict from latest complete bolus calc record |
+| tests | Added TestBolusCalcDecoder (6 tests) + TestBolusCalcCoordinator (8 tests); 627 total passing |
 
 ### Sensors Added
 | Key | Name | Value |
 |-----|------|-------|
-| tandem_last_bolus_bg | Last bolus BG | mg/dL at time of bolus request |
+| tandem_last_bolus_bg | Last bolus BG | mg/dL at time of bolus request (+ bolus calc details as extra_state_attributes) |
 | tandem_last_bolus_carbs_entered | Last bolus carbs entered | grams entered into calculator |
 | tandem_last_bolus_correction | Last bolus correction | units (correction portion) |
 | tandem_last_bolus_food_portion | Last bolus food portion | units (food portion) |
-| tandem_bolus_calculator_attributes | Bolus calculator details | Full joined record (IOB, ISF, target BG, carb ratio, etc.) |
 
 ### Review Gate Results
 | Gate | Result |
@@ -37,12 +53,12 @@ Significant changes to this repository, listed in reverse chronological order.
 | API Drift Review 2 (Opus) | No drift (binary events not in JSON fixture) |
 | Sensor Review 3 (Sonnet) | All correct |
 | silent-failure-hunter | No new findings (pre-existing C-4 noted) |
-| code-reviewer | No issues |
+| code-reviewer | 1 critical finding — dict-as-sensor (fixed in CR-012) |
 
 ### Quality Gate Results (at branch)
 | Metric | Value | Gate |
 |--------|-------|------|
-| Tests | 625 passed | ✅ |
+| Tests | 627 passed | ✅ |
 | Ruff format | Clean | ✅ |
 | Ruff lint | Clean | ✅ |
 | API drift | None | ✅ |

@@ -67,6 +67,10 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 5. Phase 5: PLGS & Daily Status — events 140, 90
 6. Phase 6: Estimated Remaining Insulin — computed from existing events
 
+**Investigation items:**
+- CGM sensor change tracking (Dexcom G6 10-day cycle) — check if any undecoded event ID corresponds to sensor insertion/removal. Phase 3 CGM events (399, 372, 313) may include this.
+- CGM transmitter change tracking (Dexcom G6 3-month cycle) — check if transmitter pairing/unpairing events exist in undecoded event IDs.
+
 **Reference:** `docs/upstream-review-2026-03-12.md`, `docs/plan-tandem-api-expansion.md`
 
 ---

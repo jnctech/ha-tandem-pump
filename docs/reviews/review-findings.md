@@ -8,10 +8,10 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 |----|----------|--------|----------|-------------|
 | L-5 | Low | OPEN | — | Profile `idp` matching may silently fail |
 | D-1 | Medium | OPEN | — | No binary event fixture |
-| D-2 | Low | OPEN | — | `partNumber` missing from drift check |
+| D-2 | Low | FIXED | PR #48 | `partNumber` missing from drift check — added to fixture _drift_check |
 | S-2 | Low | FIXED | PR #47 | Inconsistent insulin unit strings — "U" → UNITS constant, "mV" → UnitOfElectricPotential, "kg" → UnitOfMass |
-| S-4 | Low | OPEN | — | Threshold sensors missing BLOOD_GLUCOSE (CGM alert thresholds) |
-| S-5 | Low | OPEN | — | suggested_display_precision not set (requires sensor.py plumbing) |
+| S-4 | Low | ACCEPTED | — | Threshold sensors: no HA BLOOD_GLUCOSE device class exists; device_class=None is correct |
+| S-5 | Low | FIXED | PR #48 | suggested_display_precision added to 25 Tandem sensors (22 initial + 3 from code review) |
 | S-6 | Medium | FIXED | PR #47 | Duration sensors: bare "h"/"m" → UnitOfTime, added DURATION device class |
 | S-7 | Medium | FIXED | PR #47 | Battery sensors (conduit, CGM): missing SensorDeviceClass.BATTERY |
 | S-8 | Medium | FIXED | PR #47 | Device info sensors (6 Carelink): missing EntityCategory.DIAGNOSTIC |
@@ -35,14 +35,14 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | D-4 | OK | pumper_info minimal by design |
 | D-5 | OK | ControlIQ returns 404 |
 
-## File Checksums (updated: 2026-03-13, post PR #47)
+## File Checksums (updated: 2026-03-13, post PR #48)
 
 Compare before reading files. Skip unchanged files.
 
 ```
 2eb0d3ee __init__.py
 320a4b85 tandem_api.py
-a82a1c9a const.py
+a252e7c1 const.py
 85c251a2 sensor.py
 ```
 

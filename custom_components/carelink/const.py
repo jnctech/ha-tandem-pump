@@ -12,7 +12,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
 )
 
-from homeassistant.const import UnitOfTime
+from homeassistant.const import UnitOfElectricPotential, UnitOfMass, UnitOfTime
 from homeassistant.helpers.entity import EntityCategory
 
 # BLOOD_GLUCOSE_CONCENTRATION was added in HA 2024.11.
@@ -1029,7 +1029,7 @@ TANDEM_SENSORS = (
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_CONTROL_IQ_WEIGHT,
         name="Control-IQ weight",
-        native_unit_of_measurement="kg",
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
         state_class=None,
         device_class=SensorDeviceClass.WEIGHT,
         icon="mdi:weight-kilogram",
@@ -1038,7 +1038,7 @@ TANDEM_SENSORS = (
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_CONTROL_IQ_TDI,
         name="Control-IQ total daily insulin",
-        native_unit_of_measurement="U",
+        native_unit_of_measurement=UNITS,
         state_class=None,
         device_class=None,
         icon="mdi:needle",
@@ -1047,7 +1047,7 @@ TANDEM_SENSORS = (
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_MAX_BOLUS,
         name="Max bolus setting",
-        native_unit_of_measurement="U",
+        native_unit_of_measurement=UNITS,
         state_class=None,
         device_class=None,
         icon="mdi:needle",
@@ -1101,7 +1101,7 @@ TANDEM_SENSORS = (
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT,
         name="Low insulin alert threshold",
-        native_unit_of_measurement="U",
+        native_unit_of_measurement=UNITS,
         state_class=None,
         device_class=None,
         icon="mdi:battery-alert",
@@ -1120,7 +1120,7 @@ TANDEM_SENSORS = (
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_BATTERY_VOLTAGE,
         name="Pump battery voltage",
-        native_unit_of_measurement="mV",
+        native_unit_of_measurement=UnitOfElectricPotential.MILLIVOLT,
         state_class=SensorStateClass.MEASUREMENT,
         device_class=SensorDeviceClass.VOLTAGE,
         icon="mdi:flash",

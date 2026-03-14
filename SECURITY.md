@@ -42,3 +42,16 @@ This integration handles authentication credentials for Medtronic Carelink and T
 - Vulnerabilities in Home Assistant core (report to [home-assistant/core](https://github.com/home-assistant/core))
 - Vulnerabilities in the Carelink or Tandem platforms themselves
 - Theoretical vulnerabilities with no practical exploit path
+
+## Security Measures
+
+This project uses the following automated security controls:
+
+- **Gitleaks** — secret scanning on every push and PR (full history)
+- **Bandit** — Python static analysis for common security issues
+- **pip-audit** — dependency vulnerability scanning against known CVE databases
+- **Dependabot** — automated dependency updates for Python packages and GitHub Actions
+- **OpenSSF Scorecard** — weekly supply chain security assessment (results in GitHub Security tab)
+- **Dependency Review** — blocks PRs that introduce dependencies with known vulnerabilities
+- **SonarCloud** — continuous code quality and security analysis (blocking quality gate)
+- **SHA-pinned actions** — all GitHub Actions references use commit SHAs to prevent supply chain attacks

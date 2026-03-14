@@ -7,8 +7,8 @@ Significant changes to this repository, listed in reverse chronological order.
 ## CR-016 — OpenSSF Security Baseline (Phase 7)
 **Date:** 2026-03-14
 **Branch:** `feature/openssf-security-baseline`
-**PR:** TBD
-**Status:** In review
+**PR:** [#60](https://github.com/jnctech/ha-tandem-pump/pull/60)
+**Status:** Merged
 
 ### What Changed
 | Area | Change |
@@ -22,14 +22,16 @@ Significant changes to this repository, listed in reverse chronological order.
 ### Why
 OpenSSF security baseline is a prerequisite for HACS submission. SHA-pinning prevents supply chain attacks via tag mutation. Dependabot for GitHub Actions keeps pinned SHAs current. Scorecard provides a public supply chain security score. Dependency review prevents introducing vulnerable or incompatibly-licensed dependencies.
 
-### Quality Gate Results (at branch)
+### Quality Gate Results (at merge)
 | Metric | Value | Gate |
 |--------|-------|------|
-| Tests | TBD | ⏳ |
-| Ruff format | TBD | ⏳ |
-| Ruff lint | TBD | ⏳ |
-| Bandit | TBD | ⏳ |
-| Actionlint | TBD | ⏳ |
+| Tests | 641 passed | ✅ |
+| Ruff format | Clean | ✅ |
+| Ruff lint | Clean | ✅ |
+| Bandit | Clean | ✅ |
+| Actionlint | Clean | ✅ |
+| SonarCloud | Passed | ✅ |
+| Dependency review | Passed | ✅ |
 
 ---
 

@@ -108,14 +108,9 @@ Upstream review of yo-han/Home-Assistant-Carelink (17 commits since fork point `
 5. ~~Phase 5: PLGS & Daily Status~~ — ✅ Done
 6. ~~Phase 6: Estimated Remaining Insulin~~ — ✅ Done
 
-**Phase 7 (OpenSSF Security Baseline + Dependabot) — 🟡 In review:**
-- ✅ `.github/dependabot.yml` — added `github-actions` ecosystem (pip already existed)
-- ✅ `SECURITY.md` — added Security Measures section
-- ✅ `ossf/scorecard-action` workflow — publishes SARIF to GitHub Security tab (weekly + push)
-- ✅ `actions/dependency-review-action` — blocks PRs with moderate+ CVEs or AGPL/GPL-3.0
-- ✅ SHA-pinned all action refs in `.github/workflows/*.yml` (9 actions, 7 files)
-- ⏳ Opus compliance review → `docs/reviews/review-openssf-YYYY-MM-DD.md`
-- **Branch:** `feature/openssf-security-baseline` | **CR:** CR-016
+7. ~~Phase 7: OpenSSF Security Baseline~~ — ✅ Done (PR #60, merged 2026-03-14)
+   - SHA-pinned 9 actions, dependabot github-actions, scorecard, dependency-review
+   - ⏳ Opus compliance review → `docs/reviews/review-openssf-YYYY-MM-DD.md` (next session)
 
 **Investigation items:**
 - CGM sensor change tracking (Dexcom G6 10-day cycle) — check if any undecoded event ID corresponds to sensor insertion/removal. Phase 3 CGM events (399, 372, 313) may include this.

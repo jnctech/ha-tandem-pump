@@ -4,11 +4,89 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-016 — OpenSSF Security Baseline (Phase 7)
+**Date:** 2026-03-14
+**Branch:** `feature/openssf-security-baseline`
+**PR:** TBD
+**Status:** In review
+
+### What Changed
+| Area | Change |
+|------|--------|
+| .github/workflows/*.yml | SHA-pinned all GitHub Actions references (9 actions across 7 workflows) |
+| .github/dependabot.yml | Added `github-actions` ecosystem (weekly, targets develop) alongside existing `pip` |
+| .github/workflows/scorecard.yml | New: OpenSSF Scorecard analysis (weekly + push to master/develop), publishes SARIF to GitHub Security tab |
+| .github/workflows/dependency-review.yml | New: blocks PRs introducing dependencies with moderate+ CVEs or AGPL/GPL-3.0 licenses |
+| SECURITY.md | Added Security Measures section documenting all automated controls |
+
+### Why
+OpenSSF security baseline is a prerequisite for HACS submission. SHA-pinning prevents supply chain attacks via tag mutation. Dependabot for GitHub Actions keeps pinned SHAs current. Scorecard provides a public supply chain security score. Dependency review prevents introducing vulnerable or incompatibly-licensed dependencies.
+
+### Quality Gate Results (at branch)
+| Metric | Value | Gate |
+|--------|-------|------|
+| Tests | TBD | ⏳ |
+| Ruff format | TBD | ⏳ |
+| Ruff lint | TBD | ⏳ |
+| Bandit | TBD | ⏳ |
+| Actionlint | TBD | ⏳ |
+
+---
+
+## CR-015 — Estimated Remaining Insulin (Phase 6)
+**Date:** 2026-03-13
+**Branch:** `feature/estimated-insulin-remaining-phase6`
+**PR:** [#58](https://github.com/jnctech/ha-tandem-pump/pull/58)
+**Status:** Merged & deployed
+
+### What Changed
+| Area | Change |
+|------|--------|
+| const.py | Added `TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING` constant and `SensorEntityDescription` (MEASUREMENT, no device_class, "U", precision 1) |
+| __init__.py | Added `_compute_estimated_remaining_insulin()` method with cumulative seq-based delivery tracking |
+| __init__.py | Added 4 state variables on TandemCoordinator for cross-poll persistence (`_last_cartridge_fill_seq`, `_last_cartridge_fill_volume`, `_cumulative_delivered`, `_last_delivery_seq`) |
+| __init__.py | Added call site with `(KeyError, TypeError, IndexError, ValueError, AttributeError)` exception handling and `exc_info=True` |
+| tests | Added `TestEstimatedRemainingInsulin` (10 tests) including cumulative tracking, cartridge reset, edge cases |
+
+### Why
+Estimated remaining insulin is the most-requested missing sensor — it tracks how much insulin is left in the cartridge by subtracting cumulative deliveries from fill volume. Uses incremental seq-based accumulation to avoid both double-counting (overlapping 14-day API windows) and upward drift (events aging out of window). No new API decoders needed — computed from existing events (33 cartridge fill, 20/21 bolus, 280/279 basal).
+
+### New Sensor
+| Sensor | Device Class | Unit | Notes |
+|--------|-------------|------|-------|
+| Estimated insulin remaining | None | U | Computed; state lost on HA restart, shows UNAVAILABLE until cartridge fill appears |
+
+### Design Decisions
+- **Cumulative seq-based tracking** — avoids critical drift bug where events aging out of 14-day window caused remaining to drift UPWARD (dangerous direction for medical device)
+- **State on coordinator** — `_cumulative_delivered` persists across polls but lost on HA restart; acceptable because cartridge fill events stay in 14-day window for ~2 weeks
+- **Seq filtering** — `_last_delivery_seq` set to `fill_seq` on cartridge reset, ensuring pre-fill deliveries are excluded without timestamp comparison
+
+### Tests
+- 10 tests: basic bolus, extended bolus, basal rate×interval, clamped at zero, no fill, zero fill, new fill reset, pre-fill exclusion, empty events, cross-poll cumulative persistence
+- Cumulative tracking verified: poll 1 (5.0 U) + poll 2 (3.0 U) = 8.0 U total, remaining 192.0
+
+### Review Gate Results
+| Gate | Result |
+|------|--------|
+| silent-failure-hunter | 10 findings (R-1 to R-9), all addressed — missing seq/field guards, logging, error→warning |
+| code-reviewer | 1 finding (R-10): negative basal interval — fixed with max(0.0, ...) clamp |
+
+### Quality Gate Results (at branch)
+| Metric | Value | Gate |
+|--------|-------|------|
+| Tests | TBD | ⏳ |
+| Ruff format | Clean | ✅ |
+| Ruff lint | Clean | ✅ |
+| API drift | N/A (no API changes) | ✅ |
+| Bandit | TBD | ⏳ |
+
+---
+
 ## CR-014 — Devcontainer Gitleaks Download Fix
 **Date:** 2026-03-14
 **Branch:** `bugfix/devcontainer-gitleaks-download`
 **PR:** [#57](https://github.com/jnctech/ha-tandem-pump/pull/57)
-**Status:** In review
+**Status:** Merged
 
 ### What Changed
 | Area | Change |
@@ -74,55 +152,6 @@ PLGS (Predictive Low Glucose Suspend) events contain the pump's predicted glucos
 | Ruff lint | Clean | ✅ |
 | API drift | None | ✅ |
 | Bandit | Clean | ✅ |
-
----
-
-## CR-015 — Estimated Remaining Insulin (Phase 6)
-**Date:** 2026-03-13
-**Branch:** `feature/estimated-insulin-remaining-phase6`
-**PR:** TBD
-**Status:** In review
-
-### What Changed
-| Area | Change |
-|------|--------|
-| const.py | Added `TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING` constant and `SensorEntityDescription` (MEASUREMENT, no device_class, "U", precision 1) |
-| __init__.py | Added `_compute_estimated_remaining_insulin()` method with cumulative seq-based delivery tracking |
-| __init__.py | Added 4 state variables on TandemCoordinator for cross-poll persistence (`_last_cartridge_fill_seq`, `_last_cartridge_fill_volume`, `_cumulative_delivered`, `_last_delivery_seq`) |
-| __init__.py | Added call site with `(KeyError, TypeError, IndexError, ValueError, AttributeError)` exception handling and `exc_info=True` |
-| tests | Added `TestEstimatedRemainingInsulin` (10 tests) including cumulative tracking, cartridge reset, edge cases |
-
-### Why
-Estimated remaining insulin is the most-requested missing sensor — it tracks how much insulin is left in the cartridge by subtracting cumulative deliveries from fill volume. Uses incremental seq-based accumulation to avoid both double-counting (overlapping 14-day API windows) and upward drift (events aging out of window). No new API decoders needed — computed from existing events (33 cartridge fill, 20/21 bolus, 280/279 basal).
-
-### New Sensor
-| Sensor | Device Class | Unit | Notes |
-|--------|-------------|------|-------|
-| Estimated insulin remaining | None | U | Computed; state lost on HA restart, shows UNAVAILABLE until cartridge fill appears |
-
-### Design Decisions
-- **Cumulative seq-based tracking** — avoids critical drift bug where events aging out of 14-day window caused remaining to drift UPWARD (dangerous direction for medical device)
-- **State on coordinator** — `_cumulative_delivered` persists across polls but lost on HA restart; acceptable because cartridge fill events stay in 14-day window for ~2 weeks
-- **Seq filtering** — `_last_delivery_seq` set to `fill_seq` on cartridge reset, ensuring pre-fill deliveries are excluded without timestamp comparison
-
-### Tests
-- 10 tests: basic bolus, extended bolus, basal rate×interval, clamped at zero, no fill, zero fill, new fill reset, pre-fill exclusion, empty events, cross-poll cumulative persistence
-- Cumulative tracking verified: poll 1 (5.0 U) + poll 2 (3.0 U) = 8.0 U total, remaining 192.0
-
-### Review Gate Results
-| Gate | Result |
-|------|--------|
-| silent-failure-hunter | 10 findings (R-1 to R-9), all addressed — missing seq/field guards, logging, error→warning |
-| code-reviewer | 1 finding (R-10): negative basal interval — fixed with max(0.0, ...) clamp |
-
-### Quality Gate Results (at branch)
-| Metric | Value | Gate |
-|--------|-------|------|
-| Tests | TBD | ⏳ |
-| Ruff format | Clean | ✅ |
-| Ruff lint | Clean | ✅ |
-| API drift | N/A (no API changes) | ✅ |
-| Bandit | TBD | ⏳ |
 
 ---
 

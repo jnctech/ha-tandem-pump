@@ -145,7 +145,7 @@ class TestPumpEntityMixinProperties:
 
     def test_unique_id_format(self):
         obj = self._make_mixin_instance(key="last_glucose_level")
-        assert obj.unique_id == f"{DOMAIN}_{_TEST_ENTRY_ID}_last_glucose_level"
+        assert obj.unique_id == f"{DOMAIN}_last_glucose_level"
 
     def test_icon_from_sensor_description(self):
         obj = self._make_mixin_instance(icon="mdi:water")

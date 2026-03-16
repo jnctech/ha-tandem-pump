@@ -31,7 +31,7 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | HACS-F9 | High | FIXED | feature/iss-012-hacs-compliance | `TandemAuthError` raises `ConfigEntryAuthFailed` (triggers reauth) |
 | HACS-E8 | Low | OPEN | — | Carelink sensors missing `suggested_display_precision` |
 | HACS-AUTH1 | Critical | FIXED | feature/iss-012-hacs-compliance | Carelink login+fetch combined — auth failures now routed to reauth via `ConfigEntryAuthFailed` |
-| HACS-ENT1 | Medium | FIXED | feature/iss-012-hacs-compliance | Entity `unique_id` lacked `entry_id` — multi-entry collisions. Added `coordinator.entry_id` |
+| HACS-ENT1 | Medium | DEFERRED | — | Entity `unique_id` lacks `entry_id` — multi-entry collision risk. Reverted: causes entity duplication on upgrade. Will address with proper migration if multi-entry support needed |
 | SFH-1 | High | OPEN | — | Therapy parse failure leaves coordinator data dict in partial state |
 | SFH-3 | High | OPEN | — | import_history service silently returns on failure, no user feedback |
 | SFH-4 | Medium | OPEN | — | capture_diagnostics service silently returns on failure |

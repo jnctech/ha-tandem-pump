@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.carelink.const import (
@@ -290,19 +290,34 @@ class TestCarelinkCoordinatorFullCycle:
         coordinator, _ = await _make_coordinator(hass, recent_data={})
         assert coordinator.data is not None
 
-    async def test_login_failure_raises_config_entry_not_ready(self, hass: HomeAssistant):
+    async def test_login_exception_raises_config_entry_not_ready(self, hass: HomeAssistant):
         """Login exception → UpdateFailed → ConfigEntryNotReady."""
         from custom_components.carelink import CarelinkCoordinator
 
         entry = _make_entry(hass)
         client = _make_client()
-        client.login = AsyncMock(side_effect=Exception("auth failed"))
+        client.login = AsyncMock(side_effect=Exception("network error"))
         hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
             CLIENT: client,
             PLATFORM_TYPE: PLATFORM_CARELINK,
         }
         coordinator = CarelinkCoordinator(hass, entry, update_interval=timedelta(seconds=60))
         with pytest.raises(ConfigEntryNotReady):
+            await coordinator.async_config_entry_first_refresh()
+
+    async def test_login_returns_false_raises_config_entry_auth_failed(self, hass: HomeAssistant):
+        """Login returning False → ConfigEntryAuthFailed (triggers reauth)."""
+        from custom_components.carelink import CarelinkCoordinator
+
+        entry = _make_entry(hass)
+        client = _make_client()
+        client.login = AsyncMock(return_value=False)
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+            CLIENT: client,
+            PLATFORM_TYPE: PLATFORM_CARELINK,
+        }
+        coordinator = CarelinkCoordinator(hass, entry, update_interval=timedelta(seconds=60))
+        with pytest.raises(ConfigEntryAuthFailed):
             await coordinator.async_config_entry_first_refresh()
 
     async def test_averagesg_none_sets_unavailable(self, hass: HomeAssistant):

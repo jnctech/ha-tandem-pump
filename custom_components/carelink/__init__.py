@@ -675,7 +675,14 @@ class CarelinkCoordinator(DataUpdateCoordinator):
         client_timezone = DEFAULT_TIME_ZONE
 
         try:
-            await self.client.login()
+            logged_in = await self.client.login()
+        except Exception as err:
+            raise UpdateFailed(f"Carelink login error: {err}") from err
+
+        if not logged_in:
+            raise ConfigEntryAuthFailed("Carelink authentication failed — credentials may have expired")
+
+        try:
             recent_data = await self.client.get_recent_data()
         except Exception as err:
             raise UpdateFailed(f"Carelink data fetch failed: {err}") from err

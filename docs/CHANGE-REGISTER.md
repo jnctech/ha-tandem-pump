@@ -20,8 +20,11 @@ Significant changes to this repository, listed in reverse chronological order.
 | __init__.py | `_migrate_legacy_logindata` called via `await hass.async_add_executor_job()` — no longer blocks event loop (A-6) |
 | manifest.json | Requirements pinned: `aiofiles==24.1.0`, `certifi==2024.12.14`, `httpx==0.28.1` (H-4) |
 | manifest.json | Added `integration_type: hub` (H-11) and `loggers: ["httpx"]` (H-9) |
+| __init__.py | Carelink coordinator: split login from data fetch, `login()=False` raises `ConfigEntryAuthFailed` (AUTH-01) |
+| helpers.py | Entity `unique_id` includes `entry_id` — prevents collisions in multi-entry setups (ENT-01) |
 | strings.json, translations/en.json | Added `reauth_confirm` step strings and `reauth_successful` abort reason |
 | tests/test_config_flow.py | 9 new tests: unique ID (4), reauth flow (5) |
+| tests/test_carelink_coordinator.py | Added Carelink login-returns-False test; updated login exception test |
 | tests/test_coordinator_error_paths.py | Updated auth error test: `ConfigEntryNotReady` → `ConfigEntryAuthFailed` |
 
 ### Why

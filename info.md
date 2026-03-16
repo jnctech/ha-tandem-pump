@@ -34,13 +34,16 @@ remaining, CGM sensor type (G6/G7/Libre 2), suspend state + reason, site age, ca
 **Pump Settings (11 sensors)**
 Active basal profile + full hourly schedule, max bolus, CIQ weight/TDI, alert thresholds
 
+**Device & Timestamps (7 sensors)**
+Serial, firmware, last sync, last glucose update, CGM usage
+
 **Long-Term Statistics (6)**
 CGM, IOB, basal, carbs, correction bolus — works with the Statistics Graph card.
 Backfill months of data: **Developer Tools → Actions → carelink.import_history**
 
 **Example Dashboard**
-A starter Lovelace dashboard with Mushroom cards, ApexCharts glucose graph, and template sensors.
-Copy the YAML from `examples/` and customise to taste.
+A quick-start dashboard is included in `examples/` — early mock-up, future releases will
+include more templates and dashboarding guidance.
 
 ---
 

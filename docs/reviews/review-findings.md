@@ -20,6 +20,20 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | R-10 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | Negative basal time interval not clamped — could inflate remaining. Added max(0.0, ...) floor |
 | R-11 | Critical | FIXED | feature/estimated-insulin-remaining-phase6 | Partial state mutation before exception corrupts accumulator permanently — refactored to compute-then-commit pattern with local variables |
 | R-12 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | _last_delivery_seq not advanced for zero-delivery events — causes repeated processing. Now always advances |
+| HACS-H4 | High | FIXED | feature/iss-012-hacs-compliance | manifest.json requirements pinned to exact `==` versions |
+| HACS-H9 | Low | FIXED | feature/iss-012-hacs-compliance | manifest.json `loggers` list added for httpx |
+| HACS-H11 | Medium | FIXED | feature/iss-012-hacs-compliance | manifest.json `integration_type: hub` added |
+| HACS-A4a | High | DEFERRED | — | Own httpx.AsyncClient — major refactor, clients lifecycle-managed |
+| HACS-A6 | High | FIXED | feature/iss-012-hacs-compliance | `_migrate_legacy_logindata` wrapped in `async_add_executor_job` |
+| HACS-F1 | High | FIXED | feature/iss-012-hacs-compliance | `async_set_unique_id` + `_abort_if_unique_id_configured` in config flow |
+| HACS-F7 | Medium | FIXED | feature/iss-012-hacs-compliance | `async_step_reauth` + `async_step_reauth_confirm` implemented |
+| HACS-F8 | High | FIXED | feature/iss-012-hacs-compliance | Pre-coordinator setup failures wrapped in `ConfigEntryNotReady` |
+| HACS-F9 | High | FIXED | feature/iss-012-hacs-compliance | `TandemAuthError` raises `ConfigEntryAuthFailed` (triggers reauth) |
+| HACS-E8 | Low | OPEN | — | Carelink sensors missing `suggested_display_precision` |
+| SFH-1 | High | OPEN | — | Therapy parse failure leaves coordinator data dict in partial state |
+| SFH-2 | High | OPEN | — | Carelink login+fetch combined — auth failures not routed to reauth |
+| SFH-3 | High | OPEN | — | import_history service silently returns on failure, no user feedback |
+| SFH-4 | Medium | OPEN | — | capture_diagnostics service silently returns on failure |
 | B-2 | Low | OPEN | — | carb_ratio 1000x multiplier from tconnectsync spec — cannot validate without real capture |
 | D-1 | Medium | OPEN | — | No binary event fixture |
 | C-1 | High | FIXED | feature/cgm-g7-libre2-phase3 | Magic event IDs in coordinator — replaced ALL with EVT_* constants from tandem_api |

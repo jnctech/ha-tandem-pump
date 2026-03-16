@@ -668,3 +668,200 @@ class TestReconfigureFlow:
             )
         assert result["type"] == "abort"
         assert result["reason"] == "reconfigure_successful"
+
+
+class TestUniqueId:
+    """Tests for unique ID deduplication (F-1)."""
+
+    async def test_tandem_sets_unique_id(self, hass: HomeAssistant):
+        """Tandem flow sets unique ID from email + region."""
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {PLATFORM_TYPE: PLATFORM_TANDEM})
+        with (
+            patch(
+                "custom_components.carelink.config_flow.validate_tandem_input",
+                return_value={"title": "Tandem t:slim (EU)"},
+            ),
+            patch("custom_components.carelink.async_setup_entry", return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    "tandem_email": "User@Example.com",
+                    "tandem_password": "x",
+                    "tandem_region": "EU",
+                    "scan_interval": 300,
+                },
+            )
+            await hass.async_block_till_done()
+        assert result["type"] == "create_entry"
+        # Verify the entry got a unique_id
+        entry = hass.config_entries.async_entries(DOMAIN)[0]
+        assert entry.unique_id == "tandem_user@example.com_EU"
+
+    async def test_tandem_duplicate_aborts(self, hass: HomeAssistant):
+        """Second Tandem entry with same email + region aborts."""
+        existing = MockConfigEntry(
+            domain=DOMAIN,
+            unique_id="tandem_a@b.com_EU",
+            data={
+                PLATFORM_TYPE: PLATFORM_TANDEM,
+                "tandem_email": "a@b.com",
+                "tandem_password": "x",
+                "tandem_region": "EU",
+                "scan_interval": 300,
+            },
+        )
+        existing.add_to_hass(hass)
+
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {PLATFORM_TYPE: PLATFORM_TANDEM})
+        with patch(
+            "custom_components.carelink.config_flow.validate_tandem_input",
+            return_value={"title": "Tandem t:slim (EU)"},
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {"tandem_email": "a@b.com", "tandem_password": "y", "tandem_region": "EU", "scan_interval": 300},
+            )
+        assert result["type"] == "abort"
+        assert result["reason"] == "already_configured"
+
+    async def test_carelink_sets_unique_id_with_patient(self, hass: HomeAssistant):
+        """Carelink flow sets unique ID from patient ID."""
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {PLATFORM_TYPE: PLATFORM_CARELINK})
+        with (
+            patch(
+                "custom_components.carelink.config_flow.validate_carelink_input",
+                return_value={"title": "Carelink"},
+            ),
+            patch("custom_components.carelink.async_setup_entry", return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {"patientId": "patient123", "scan_interval": 60},
+            )
+            await hass.async_block_till_done()
+        assert result["type"] == "create_entry"
+        entry = hass.config_entries.async_entries(DOMAIN)[0]
+        assert entry.unique_id == "carelink_patient123"
+
+    async def test_carelink_no_patient_id_no_unique_id(self, hass: HomeAssistant):
+        """Carelink flow without patient ID creates entry without unique ID."""
+        result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {PLATFORM_TYPE: PLATFORM_CARELINK})
+        with (
+            patch(
+                "custom_components.carelink.config_flow.validate_carelink_input",
+                return_value={"title": "Carelink"},
+            ),
+            patch("custom_components.carelink.async_setup_entry", return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {"scan_interval": 60},
+            )
+            await hass.async_block_till_done()
+        assert result["type"] == "create_entry"
+        entry = hass.config_entries.async_entries(DOMAIN)[0]
+        assert entry.unique_id is None
+
+
+class TestReauthFlow:
+    """Tests for reauth flow (F-7/F-9)."""
+
+    async def test_reauth_tandem_shows_form(self, hass: HomeAssistant):
+        """Reauth for Tandem entry shows the reauth_confirm form."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                PLATFORM_TYPE: PLATFORM_TANDEM,
+                "tandem_email": "a@b.com",
+                "tandem_password": "old",
+                "tandem_region": "EU",
+                "scan_interval": 300,
+            },
+        )
+        entry.add_to_hass(hass)
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "reauth", "entry_id": entry.entry_id}, data=entry.data
+        )
+        assert result["type"] == "form"
+        assert result["step_id"] == "reauth_confirm"
+
+    async def test_reauth_tandem_success(self, hass: HomeAssistant):
+        """Successful Tandem reauth updates credentials and aborts."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                PLATFORM_TYPE: PLATFORM_TANDEM,
+                "tandem_email": "a@b.com",
+                "tandem_password": "old",
+                "tandem_region": "EU",
+                "scan_interval": 300,
+            },
+        )
+        entry.add_to_hass(hass)
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "reauth", "entry_id": entry.entry_id}, data=entry.data
+        )
+        with (
+            patch(
+                "custom_components.carelink.config_flow.validate_tandem_input",
+                return_value={"title": "Tandem t:slim (EU)"},
+            ),
+            patch("custom_components.carelink.async_setup_entry", return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {"tandem_email": "a@b.com", "tandem_password": "new", "tandem_region": "EU", "scan_interval": 300},
+            )
+            await hass.async_block_till_done()
+        assert result["type"] == "abort"
+        assert result["reason"] == "reauth_successful"
+        assert entry.data["tandem_password"] == "new"
+
+    async def test_reauth_tandem_invalid_auth(self, hass: HomeAssistant):
+        """Invalid credentials during reauth show error."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                PLATFORM_TYPE: PLATFORM_TANDEM,
+                "tandem_email": "a@b.com",
+                "tandem_password": "old",
+                "tandem_region": "EU",
+                "scan_interval": 300,
+            },
+        )
+        entry.add_to_hass(hass)
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "reauth", "entry_id": entry.entry_id}, data=entry.data
+        )
+        with patch(
+            "custom_components.carelink.config_flow.validate_tandem_input",
+            side_effect=InvalidAuth,
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {"tandem_email": "a@b.com", "tandem_password": "wrong", "tandem_region": "EU", "scan_interval": 300},
+            )
+        assert result["errors"]["base"] == "invalid_auth"
+
+    async def test_reauth_carelink_shows_form(self, hass: HomeAssistant):
+        """Reauth for Carelink entry shows the reauth_confirm form."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                PLATFORM_TYPE: PLATFORM_CARELINK,
+                "cl_token": "t",
+                "cl_refresh_token": "r",
+                "scan_interval": 60,
+            },
+        )
+        entry.add_to_hass(hass)
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "reauth", "entry_id": entry.entry_id}, data=entry.data
+        )
+        assert result["type"] == "form"
+        assert result["step_id"] == "reauth_confirm"

@@ -4,6 +4,39 @@ Significant changes to this repository, listed in reverse chronological order.
 
 ---
 
+## CR-260316-iss-012-hacs-compliance — HACS Compliance Fixes (ISS-012)
+**Date:** 2026-03-16
+**Branch:** `feature/iss-012-hacs-compliance`
+**PR:** TBD
+**Status:** In Review
+
+### What Changed
+| Area | Change |
+|------|--------|
+| config_flow.py | Added `async_set_unique_id` + `_abort_if_unique_id_configured` for both Tandem and Carelink flows — prevents duplicate config entries (F-1) |
+| config_flow.py | Added `async_step_reauth` + `async_step_reauth_confirm` — reauth flow triggered by `ConfigEntryAuthFailed` (F-7) |
+| __init__.py | `TandemAuthError` in coordinator now raises `ConfigEntryAuthFailed` instead of `UpdateFailed` — triggers automatic reauth (F-9) |
+| __init__.py | Client construction wrapped in try/except → `ConfigEntryNotReady` for both Carelink and Tandem setup paths (F-8) |
+| __init__.py | `_migrate_legacy_logindata` called via `await hass.async_add_executor_job()` — no longer blocks event loop (A-6) |
+| manifest.json | Requirements pinned: `aiofiles==24.1.0`, `certifi==2024.12.14`, `httpx==0.28.1` (H-4) |
+| manifest.json | Added `integration_type: hub` (H-11) and `loggers: ["httpx"]` (H-9) |
+| strings.json, translations/en.json | Added `reauth_confirm` step strings and `reauth_successful` abort reason |
+| tests/test_config_flow.py | 9 new tests: unique ID (4), reauth flow (5) |
+| tests/test_coordinator_error_paths.py | Updated auth error test: `ConfigEntryNotReady` → `ConfigEntryAuthFailed` |
+
+### Why
+HACS default repository submission (PR #6316) requires compliance with HA integration best practices. The HACS baseline review (2026-03-16) identified 6 HIGH, 2 MEDIUM, and 2 LOW findings. This CR resolves 5 HIGH, 2 MEDIUM, and 1 LOW — with A-4a deferred as accepted risk (major refactor, clients already lifecycle-managed).
+
+### Quality Gate Results (at branch)
+| Metric | Value | Gate |
+|--------|-------|------|
+| Tests | TBD (CI) | ⏳ |
+| Ruff format | Clean | ✅ |
+| Ruff lint | Clean | ✅ |
+| Bandit | Clean | ✅ |
+
+---
+
 ## CR-016 — OpenSSF Security Baseline (Phase 7)
 **Date:** 2026-03-14
 **Branch:** `feature/openssf-security-baseline`

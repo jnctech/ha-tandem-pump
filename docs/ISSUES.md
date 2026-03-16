@@ -50,11 +50,19 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 
 **Done:**
 - ✅ ADR-001 through ADR-006 (PR #41, merged)
+- ✅ ADR-007: Entity unique_id format (ISS-012, 2026-03-16)
+- ✅ ADR-012: Auth lifecycle & reauth flow (ISS-012, 2026-03-16)
 - ✅ PR template + issue templates (PR #42, merged)
 
-**Remaining:**
-- ADR-007 (test coverage targets) — needs research
-- ADR-008 (unit consistency: "U" vs "units") — needs research
+**ADR backlog (from ISS-012 gap analysis):**
+- ADR-008: Cumulative seq-based insulin tracking (Phase 6 decision)
+- ADR-009: Own httpx.AsyncClient vs HA shared session (A-4a accepted risk)
+- ADR-010: Binary event decoding (struct.unpack approach)
+- ADR-011: CGM multi-source routing (G6/G7/Libre2 pipeline)
+- ADR-013: Test coverage targets — needs research
+- ADR-014: Unit consistency ("U" vs "units") — needs research
+
+**Tooling remaining:**
 - CHANGELOG.md + generator
 - Release checklist action
 - Pre-push hook

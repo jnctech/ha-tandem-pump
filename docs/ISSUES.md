@@ -7,14 +7,38 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 
 ## Current Priorities
 
-1. **ISS-011 Phase 7** — OpenSSF Security Baseline + Dependabot (before HACS submission)
-2. **ISS-010** — ADRs + templates done; tooling + ADR-007/008 remaining
-3. **ISS-005** — tandem_api.py coverage gap
-4. Remaining baseline findings (D-1, L-5, S-4)
+1. **ISS-012** — HACS review findings (6 HIGH — before HACS submission)
+2. **ISS-011 Phase 7** — OpenSSF Security Baseline + Dependabot (before HACS submission)
+3. **ISS-010** — ADRs + templates done; tooling + ADR-007/008 remaining
+4. **ISS-005** — tandem_api.py coverage gap
+5. Remaining baseline findings (D-1, L-5, S-4)
 
 ---
 
 ## Active
+
+### ISS-012 — HACS Review Findings
+**Type:** Quality / HACS Compliance
+**Priority:** High
+**Created:** 2026-03-16
+**Status:** 🟢 Active
+**Source:** `docs/reviews/review-hacs-2026-03-16.md`
+
+**HIGH findings to resolve (before HACS submission):**
+- [ ] F-1: No `async_set_unique_id` in config flow — allows duplicate entries
+- [ ] F-9: Auth errors raise `UpdateFailed` not `ConfigEntryAuthFailed` — no automatic reauth
+- [ ] F-8: Pre-coordinator setup failures not wrapped in `ConfigEntryNotReady`
+- [ ] A-6: `_migrate_legacy_logindata` does sync file I/O on event loop
+- [ ] H-4: Requirements in manifest use `>=` instead of exact `==` pins
+
+**Deferred (accepted risk):**
+- A-4a: Own httpx.AsyncClient instead of HA shared session — major refactor, clients are lifecycle-managed. Not blocking for HACS submission.
+
+**MEDIUM (fix opportunistically):**
+- H-11: Missing `integration_type` in manifest.json
+- F-7: No reauth flow implemented (pairs with F-9)
+
+**Reference:** `/hacs-review` skill created 2026-03-16 (`~/.claude/skills/hacs-review/`)
 
 ### ISS-010 — Architecture Decision Records & Documentation Gaps
 **Type:** Documentation / Engineering Practice

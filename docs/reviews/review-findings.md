@@ -8,6 +8,16 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 |----|----------|--------|----------|-------------|
 | L-5 | Low | OPEN | — | Profile `idp` matching may silently fail |
 | B-1 | Low | OPEN | — | Missing test: msg1+msg3 without msg2 — join works but msg2 fields are None in attrs |
+| HACS-H4 | High | OPEN | — | manifest.json requirements use `>=` not `==` (pinned versions required) |
+| HACS-H9 | Low | OPEN | — | manifest.json missing `loggers` list for httpx |
+| HACS-H11 | Medium | OPEN | — | manifest.json missing `integration_type` |
+| HACS-A4a | High | OPEN | — | Own httpx.AsyncClient in api.py/tandem_api.py/nightscout_uploader.py instead of HA session (deferred — major refactor) |
+| HACS-A6 | High | OPEN | — | `_migrate_legacy_logindata` uses sync file I/O on event loop |
+| HACS-F1 | High | OPEN | — | No `async_set_unique_id` / `_abort_if_unique_id_configured` in config flow |
+| HACS-F7 | Medium | OPEN | — | No reauth flow (`async_step_reauth`) implemented |
+| HACS-F8 | High | OPEN | — | Pre-coordinator setup failures not wrapped in ConfigEntryNotReady |
+| HACS-F9 | High | OPEN | — | Auth failures raise UpdateFailed not ConfigEntryAuthFailed |
+| HACS-E8 | Low | OPEN | — | Carelink sensors missing `suggested_display_precision` |
 | R-1 | High | FIXED | feature/estimated-insulin-remaining-phase6 | Insulin remaining drift: recomputing from event window each poll caused upward drift when events aged out — fixed with cumulative seq-based tracking |
 | R-2 | Medium | FIXED | feature/estimated-insulin-remaining-phase6 | Exception handling too narrow: missing ValueError, AttributeError — added to catch tuple |
 | R-3 | Low | FIXED | feature/estimated-insulin-remaining-phase6 | Missing exc_info=True on error log — added for stack trace visibility |

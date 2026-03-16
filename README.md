@@ -278,6 +278,7 @@ This project is built with AI assistance (Claude) operating under strict enginee
 - **Bandit** static security analysis runs on every push
 - **pytest** test suite with coverage reporting on every push
 - **hassfest** and **HACS** validation ensure Home Assistant compatibility
+- **OpenSSF Scorecard** supply chain security assessment
 - Structured AI code review on each PR: logic correctness, silent failure detection, and code simplification
 - Git Flow branching with conventional commits
 

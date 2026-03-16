@@ -190,7 +190,7 @@ class TestLastCartridgeFillAmount:
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL] == 300.0
 
     async def test_zero_fill_volume_is_unavailable(self, hass: HomeAssistant):
-        """insulin_volume of 0.0 (API limitation) produces UNAVAILABLE."""
+        """insulin_volume of 0.0 produces UNAVAILABLE."""
         coordinator = await _make_coordinator(hass, [_cartridge_event(insulin_volume=0.0)])
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL] is UNAVAILABLE
 

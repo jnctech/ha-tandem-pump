@@ -1,8 +1,13 @@
 # Tandem t:slim Pump for Home Assistant
 
+> **Medical Disclaimer:** This integration is for **informational and home automation purposes only**.
+> It is not a medical device and must not be used to make treatment decisions.
+> Always refer to your pump, CGM receiver, or a fingerstick meter before acting on any reading.
+> This software is provided as-is with no warranty.
+
 The only Home Assistant integration for the **Tandem t:slim X2** insulin pump.
-Connect to your existing **Tandem Source** account and get **49+ sensors** covering every
-metric your pump reports — glucose, insulin on board, Control-IQ status, and more.
+Connect to your existing **Tandem Source** account and get **69 sensors** covering every
+metric your pump reports — glucose, insulin on board, Control-IQ status, battery, alerts, and more.
 
 **No extra hardware. No developer account. Just your Tandem Source login.**
 
@@ -11,14 +16,20 @@ metric your pump reports — glucose, insulin on board, Control-IQ status, and m
 ## What you get
 
 **Glucose Monitoring (12 sensors)**
-Live CGM in mg/dL and mmol/L, rate of change, delta, time in range, GMI, SD, CV
+Live CGM in mg/dL and mmol/L, rate of change, delta, time in range, GMI, SD, CV, predicted glucose (PLGS)
 
-**Insulin Delivery (10 sensors)**
-IOB, current basal rate, last bolus, TDI, daily totals, carb intake, bolus count
+**Insulin Delivery (14 sensors)**
+IOB, current basal rate, last bolus, TDI, daily totals, carb intake, bolus calculator details, estimated remaining insulin
 
-**Pump Status (9 sensors)**
+**Pump Battery (4 sensors)**
+Battery %, voltage (mV), remaining capacity (mAh), charging status
+
+**Alerts & Alarms (3 sensors)**
+Last alert, last alarm, active alert count — with human-readable names for ~65 alert/alarm types
+
+**Pump Status (10 sensors)**
 Control-IQ mode, activity mode (Normal / Sleep / Exercise / Eating Soon), cartridge insulin
-remaining, suspend state + reason, site age, cartridge age, tubing age
+remaining, CGM sensor type (G6/G7/Libre 2), suspend state + reason, site age, cartridge age, tubing age
 
 **Pump Settings (11 sensors)**
 Active basal profile + full hourly schedule, max bolus, CIQ weight/TDI, alert thresholds

@@ -1,7 +1,15 @@
 # Tandem t:slim Pump for Home Assistant
 
+> **Medical Disclaimer:** This integration is for **informational and home automation purposes only**.
+> It is not a medical device and must not be used to make treatment decisions.
+> Always refer to your pump, CGM receiver, or a fingerstick blood glucose meter before acting
+> on any glucose reading or insulin value. For reliable real-time glucose monitoring, use your
+> Dexcom/Libre receiver or compatible CGM app — this integration relies on cloud uploads which
+> can be delayed by minutes to hours. If in doubt, use a fingerstick meter.
+> This software is provided as-is with no warranty. See [LICENSE](LICENSE).
+
 The only Home Assistant integration for the **Tandem t:slim X2** insulin pump.
-Get real-time CGM readings, insulin on board, Control-IQ status, and 49+ sensors —
+Get CGM readings, insulin on board, Control-IQ status, and 69 sensors —
 using your existing Tandem Source account. No extra hardware required.
 
 [![release](https://img.shields.io/github/v/release/jnctech/ha-tandem-pump)](https://github.com/jnctech/ha-tandem-pump/releases)
@@ -29,13 +37,15 @@ using your existing Tandem Source account. No extra hardware required.
 - Track time-in-range, GMI, and long-term insulin trends over weeks with the Statistics Graph card
 - Know your active basal profile, Control-IQ mode, and IOB — everything your pump reports, visible in your smart home
 
-## 49+ sensors across 5 categories
+## 69 sensors across 7 categories
 
 | Category | Sensors | Highlights |
 |---|---|---|
-| Glucose Monitoring | 12 | CGM mg/dL + mmol/L, rate of change, TIR, GMI, SD, CV |
-| Insulin Delivery | 10 | IOB, basal rate, last bolus, TDI, daily totals, carbs |
-| Pump Status | 9 | Control-IQ mode, activity mode, cartridge insulin, suspend reason, site/cartridge/tubing age |
+| Glucose Monitoring | 12 | CGM mg/dL + mmol/L, rate of change, TIR, GMI, SD, CV, predicted glucose (PLGS) |
+| Insulin Delivery | 14 | IOB, basal rate, last bolus, TDI, daily totals, carbs, bolus calculator details, estimated remaining insulin |
+| Pump Battery | 4 | Battery %, voltage (mV), remaining capacity (mAh), charging status |
+| Alerts & Alarms | 3 | Last alert, last alarm, active alert count |
+| Pump Status | 10 | Control-IQ mode, activity mode, cartridge insulin, CGM sensor type, suspend reason, site/cartridge/tubing age |
 | Pump Settings | 11 | Active profile + hourly schedule, max bolus, CIQ limits, alert thresholds |
 | Device & Timestamps | 7 | Serial, firmware, last sync, last glucose update |
 
@@ -57,8 +67,9 @@ using your existing Tandem Source account. No extra hardware required.
 | Time above range | % of readings above 180 mg/dL |
 | Glucose SD / CV | Standard deviation and coefficient of variation |
 | GMI | Glucose Management Indicator |
+| Predicted glucose | Control-IQ PLGS predicted value (mg/dL; shows when PLGS activates) |
 
-### Insulin Delivery (10)
+### Insulin Delivery (14)
 | Sensor | Description |
 |---|---|
 | Active insulin (IOB) | Insulin on board |
@@ -70,8 +81,28 @@ using your existing Tandem Source account. No extra hardware required.
 | Daily bolus count | Number of boluses today |
 | Daily carbs | Total carbs entered today |
 | Last carb entry | Most recent carb entry with timestamp |
+| Last bolus BG | BG at time of bolus request (+ calculator details as attributes) |
+| Last bolus carbs entered | Carbs entered into bolus calculator |
+| Last bolus correction | Correction portion (units) |
+| Last bolus food portion | Food portion (units) |
+| Estimated insulin remaining | Fill volume minus cumulative deliveries (units) |
 
-### Pump Status (9)
+### Pump Battery (4)
+| Sensor | Description |
+|---|---|
+| Battery percentage | Current battery level (%) |
+| Battery voltage | Battery voltage (mV) |
+| Battery remaining | Remaining capacity (mAh) |
+| Charging status | Charging / Not charging |
+
+### Alerts & Alarms (3)
+| Sensor | Description |
+|---|---|
+| Last pump alert | Most recent alert (human-readable name) |
+| Last pump alarm | Most recent alarm (human-readable name) |
+| Active pump alerts | Count of uncleared alerts + alarms |
+
+### Pump Status (10)
 | Sensor | Description |
 |---|---|
 | Control-IQ status | Open Loop / Closed Loop |
@@ -79,10 +110,11 @@ using your existing Tandem Source account. No extra hardware required.
 | Pump suspended | Suspended / Active |
 | Pump suspend reason | User / Alarm / Malfunction / Auto-PLGS |
 | Cartridge insulin | Remaining insulin (units) |
-| Last cartridge fill amount | Fill volume from API (units; often Unknown — see note below) |
+| Last cartridge fill amount | Fill volume from API (units) |
 | Last cartridge change | Timestamp of last cartridge fill |
 | Last site change | Timestamp (derived from cartridge fill) |
 | Last tubing change | Timestamp of last tubing prime |
+| CGM sensor type | G6 / G7 / Libre 2 / None |
 
 ### Pump Settings (11)
 | Sensor | Description |
@@ -113,7 +145,11 @@ using your existing Tandem Source account. No extra hardware required.
 **Plus 6 long-term statistics** (CGM, IOB, basal, carbs, total bolus, correction bolus) compatible with
 HA's Statistics Graph card. Import months of history with `carelink.import_history`.
 
-> **Note on "Last cartridge fill amount":** The Tandem Source API typically returns 0 for the fill volume, so this sensor usually shows Unknown. Set the **Cartridge fill volume** number entity manually when you change your cartridge — the integration uses that value to estimate remaining insulin.
+> **Estimated remaining insulin:** This sensor tracks how much insulin is left in the cartridge
+> by subtracting cumulative deliveries (bolus + basal) from the fill volume reported by the API.
+> The value is an estimate — always check your pump screen for the definitive reading.
+> State is lost on HA restart; the sensor recovers automatically once a cartridge fill event
+> appears in the 14-day data window.
 
 ---
 

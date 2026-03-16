@@ -31,7 +31,6 @@ class NightscoutUploader:
     """Nightscout Uploader library"""
 
     def __init__(self, nightscout_url, nightscout_secret):
-
         # Nightscout info
         self.__nightscout_url = nightscout_url.lower().rstrip("/")
         # SHA-1 is required by the Nightscout API specification for the API-SECRET header.

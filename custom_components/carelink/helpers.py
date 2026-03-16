@@ -43,7 +43,7 @@ def pump_device_info(coordinator) -> DeviceInfo:
     """Build a DeviceInfo object for any pump coordinator.
 
     Centralises the device identity so all entity types (sensor, binary_sensor,
-    number) produce identical DeviceInfo from a single source of truth.
+    binary_sensor) produce identical DeviceInfo from a single source of truth.
     """
     data = coordinator.data or {}
     return DeviceInfo(

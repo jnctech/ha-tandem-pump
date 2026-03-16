@@ -344,7 +344,8 @@ class TestNewEventDecoders:
         assert evt["iob"] == 2.5
 
     def test_decode_cartridge_filled(self):
-        payload = struct.pack(">f", 200.5)
+        # Volume is at payload offset 4 (offset 0 is unused/zero)
+        payload = struct.pack(">f", 0.0) + struct.pack(">f", 200.5)
         evt = self._decode_single(33, payload)
         assert evt["event_name"] == "CartridgeFilled"
         assert evt["insulin_volume"] == 200.5

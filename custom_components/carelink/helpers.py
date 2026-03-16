@@ -81,7 +81,7 @@ class PumpEntityMixin:
     @property
     def unique_id(self) -> str:
         """Return a unique ID for this sensor."""
-        return f"{DOMAIN.lower()}_{self.sensor_description.key}"
+        return f"{DOMAIN}_{self.coordinator.entry_id}_{self.sensor_description.key}"
 
     @property
     def icon(self) -> str | None:

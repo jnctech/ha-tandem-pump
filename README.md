@@ -26,10 +26,6 @@ using your existing Tandem Source account. No extra hardware required.
 
 ---
 
-<!-- SCREENSHOT: Add a screenshot of the T1D dashboard Live page here -->
-
----
-
 ## What you can do
 
 - Display your current glucose reading and trend arrow on any Home Assistant dashboard
@@ -145,12 +141,6 @@ using your existing Tandem Source account. No extra hardware required.
 **Plus 6 long-term statistics** (CGM, IOB, basal, carbs, total bolus, correction bolus) compatible with
 HA's Statistics Graph card. Import months of history with `carelink.import_history`.
 
-> **Estimated remaining insulin:** This sensor tracks how much insulin is left in the cartridge
-> by subtracting cumulative deliveries (bolus + basal) from the fill volume reported by the API.
-> The value is an estimate — always check your pump screen for the definitive reading.
-> State is lost on HA restart; the sensor recovers automatically once a cartridge fill event
-> appears in the 14-day data window.
-
 ---
 
 ## Requirements
@@ -222,29 +212,16 @@ Data is fetched in 7-day chunks. The action is idempotent — safe to run multip
 
 ## Example dashboard
 
-A starter dashboard is included in [`examples/`](examples/) — one file for computed template
-sensors and one for the Lovelace layout.
+A quick-start dashboard is included in [`examples/`](examples/) to get you up and running.
+This is an early mock-up — future releases will include more templates and dashboarding guidance.
 
-**Prerequisites** (install via HACS → Frontend):
-- [Mushroom](https://github.com/piitaya/lovelace-mushroom) — `custom:mushroom-template-card`, `custom:mushroom-chips-card`
-- [ApexCharts Card](https://github.com/RomRider/apexcharts-card) — `custom:apexcharts-card`
-- [card-mod](https://github.com/thomasloven/lovelace-card-mod) (optional, for gradient glucose hero)
+**Requires** (install via HACS → Frontend):
+- [Mushroom](https://github.com/piitaya/lovelace-mushroom) — card layout
+- [ApexCharts Card](https://github.com/RomRider/apexcharts-card) — glucose graph
+- [card-mod](https://github.com/thomasloven/lovelace-card-mod) — colour-coded glucose hero card
 
-**Setup:**
-1. Copy [`examples/template_sensors.yaml`](examples/template_sensors.yaml) into your
-   `configuration.yaml` (or a packages file) and restart HA
-2. Create a new dashboard: **Settings → Dashboards → Add Dashboard**
-3. Open it → ⋮ → **Edit** → ⋮ → **Raw configuration editor**
-4. Paste the contents of [`examples/simple-dashboard.yaml`](examples/simple-dashboard.yaml) → Save
-
-**Template sensors included:**
-
-| Sensor | What it does |
-|---|---|
-| `sensor.tandem_glucose_display` | Glucose + trend arrow (e.g. "124 ↗") |
-| `sensor.tandem_data_age` | Minutes since last glucose update |
-
-> **mmol/L users:** See the conversion notes at the bottom of `template_sensors.yaml`.
+See [`examples/simple-dashboard.yaml`](examples/simple-dashboard.yaml) and
+[`examples/template_sensors.yaml`](examples/template_sensors.yaml) for details.
 
 ## Upgrading
 

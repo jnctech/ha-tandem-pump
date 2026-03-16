@@ -9,8 +9,8 @@
   "homekit": {},
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "loggers": ["httpx"],
   "issue_tracker": "https://github.com/jnctech/ha-tandem-pump/issues",
+  "loggers": ["httpx"],
   "requirements": ["aiofiles==24.1.0", "certifi==2024.12.14", "httpx==0.28.1"],
   "version": "1.5.0",
   "zeroconf": []

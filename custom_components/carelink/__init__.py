@@ -221,7 +221,7 @@ from .const import (
     TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING,
 )
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -651,7 +651,6 @@ class CarelinkCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the Carelink API."""
 
     def __init__(self, hass: HomeAssistant, entry, update_interval: timedelta):
-
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=update_interval)
 
         self.entry_id = entry.entry_id
@@ -665,7 +664,6 @@ class CarelinkCoordinator(DataUpdateCoordinator):
             self.uploader = hass.data[DOMAIN][entry.entry_id][UPLOADER]
 
     async def _async_update_data(self):
-
         data = {}
         client_timezone = DEFAULT_TIME_ZONE
 
@@ -1897,16 +1895,12 @@ class TandemCoordinator(DataUpdateCoordinator):
             last_cart = cartridge_fills[-1]
             data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] = last_cart["timestamp"].replace(tzinfo=tz)
             fill_volume = last_cart.get("insulin_volume")
-            # Tandem API often returns 0.0 for insulin_volume — treat as unknown.
-            # Users can set the fill volume via the Cartridge Fill Volume number
-            # entity, which is used to estimate remaining insulin.
             if fill_volume and fill_volume > 0:
                 data[TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN] = fill_volume
                 data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL] = round(fill_volume, 1)
             else:
                 _LOGGER.debug(
-                    "Cartridge fill volume is %s — Tandem API limitation. "
-                    "Set the 'Cartridge fill volume' number entity to track remaining insulin.",
+                    "Cartridge fill volume is %s — no fill volume in API response",
                     fill_volume,
                 )
                 data[TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN] = UNAVAILABLE

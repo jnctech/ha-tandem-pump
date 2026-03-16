@@ -1,11 +1,11 @@
 """Tests for stable DeviceInfo using entry_id as the device identifier.
 
-All entity types (sensor, binary_sensor, number) must produce identical
+All entity types (sensor, binary_sensor) must produce identical
 identifiers, serial_number, sw_version, and configuration_url because they
 all delegate to the shared pump_device_info() helper / PumpEntityMixin.
 
 Also covers entity properties (device_class, native_value, state_class, etc.)
-and async_setup_entry for all three platforms to meet the 80% coverage target.
+and async_setup_entry for both platforms to meet the 80% coverage target.
 """
 
 import pytest
@@ -23,7 +23,6 @@ from custom_components.carelink.const import (
 from custom_components.carelink.helpers import PumpEntityMixin, pump_device_info
 from custom_components.carelink.sensor import CarelinkSensorEntity
 from custom_components.carelink.binary_sensor import CarelinkConnectivityEntity
-from custom_components.carelink.number import CartridgeFillVolumeNumber
 
 _FIXED_DEVICE_NAME = "Tandem"
 
@@ -67,13 +66,6 @@ def _make_binary_sensor(data: dict, **kwargs) -> CarelinkConnectivityEntity:
     desc.device_class = None
     desc.entity_category = None
     return CarelinkConnectivityEntity(coordinator, desc)
-
-
-def _make_number(data: dict, **kwargs) -> CartridgeFillVolumeNumber:
-    coordinator = _make_coordinator(data, **kwargs)
-    entity = CartridgeFillVolumeNumber(coordinator)
-    entity._coordinator = coordinator
-    return entity
 
 
 # ── pump_device_info() helper ──────────────────────────────────────────────
@@ -299,57 +291,11 @@ class TestBinarySensorDeviceInfoStableIdentifier:
         assert info["name"] == _FIXED_DEVICE_NAME
 
 
-# ── Number entity ──────────────────────────────────────────────────────────
-
-
-class TestNumberDeviceInfoStableIdentifier:
-    """CartridgeFillVolumeNumber device_info must use entry_id as stable identifier."""
-
-    def test_identifier_uses_entry_id_not_serial(self):
-        entity = _make_number({DEVICE_PUMP_SERIAL: "SN-NUM-123"})
-        info = entity.device_info
-        assert (DOMAIN, _TEST_ENTRY_ID) in info["identifiers"]
-        assert (DOMAIN, "SN-NUM-123") not in info["identifiers"]
-
-    def test_identifier_stable_when_serial_missing(self):
-        entity = _make_number({})
-        info = entity.device_info
-        assert (DOMAIN, _TEST_ENTRY_ID) in info["identifiers"]
-
-    def test_serial_number_attribute(self):
-        entity = _make_number({DEVICE_PUMP_SERIAL: "SN-NUM-456"})
-        info = entity.device_info
-        assert info.get("serial_number") == "SN-NUM-456"
-
-    def test_sw_version_attribute(self):
-        entity = _make_number({TANDEM_SENSOR_KEY_SOFTWARE_VERSION: "7.6.0"})
-        info = entity.device_info
-        assert info.get("sw_version") == "7.6.0"
-
-    def test_configuration_url_is_tandem(self):
-        entity = _make_number({})
-        info = entity.device_info
-        assert info.get("configuration_url") == _TANDEM_URL
-
-    def test_name_is_fixed_when_data_empty(self):
-        """Device name is always 'Tandem' regardless of coordinator data."""
-        entity = _make_number({})
-        info = entity.device_info
-        assert info["name"] == _FIXED_DEVICE_NAME
-        assert info["manufacturer"] == "Tandem Diabetes Care"
-
-    def test_model_from_data(self):
-        """Model comes from coordinator data, not a hardcoded default."""
-        entity = _make_number({DEVICE_PUMP_MODEL: "t:slim X2"})
-        info = entity.device_info
-        assert info["model"] == "t:slim X2"
-
-
 # ── Cross-entity consistency ───────────────────────────────────────────────
 
 
 class TestAllEntityTypesProduceConsistentDeviceInfo:
-    """All three entity types must produce identical DeviceInfo for the same coordinator.
+    """Both entity types must produce identical DeviceInfo for the same coordinator.
 
     This is the guarantee that PumpEntityMixin + pump_device_info() provide:
     one device in HA regardless of which entity type registers first.
@@ -358,29 +304,28 @@ class TestAllEntityTypesProduceConsistentDeviceInfo:
     def _get_device_info_from_all_types(self, data: dict, entry_id: str = _TEST_ENTRY_ID):
         sensor_info = _make_sensor(data, entry_id=entry_id).device_info
         bs_info = _make_binary_sensor(data, entry_id=entry_id).device_info
-        num_info = _make_number(data, entry_id=entry_id).device_info
-        return sensor_info, bs_info, num_info
+        return sensor_info, bs_info
 
     def test_identifiers_identical_across_entity_types(self):
-        s, b, n = self._get_device_info_from_all_types({DEVICE_PUMP_SERIAL: "SN-X"})
-        assert s["identifiers"] == b["identifiers"] == n["identifiers"]
+        s, b = self._get_device_info_from_all_types({DEVICE_PUMP_SERIAL: "SN-X"})
+        assert s["identifiers"] == b["identifiers"]
 
     def test_serial_number_identical_across_entity_types(self):
-        s, b, n = self._get_device_info_from_all_types({DEVICE_PUMP_SERIAL: "SN-Y"})
-        assert s.get("serial_number") == b.get("serial_number") == n.get("serial_number") == "SN-Y"
+        s, b = self._get_device_info_from_all_types({DEVICE_PUMP_SERIAL: "SN-Y"})
+        assert s.get("serial_number") == b.get("serial_number") == "SN-Y"
 
     def test_sw_version_identical_across_entity_types(self):
-        s, b, n = self._get_device_info_from_all_types({TANDEM_SENSOR_KEY_SOFTWARE_VERSION: "7.9.0"})
-        assert s.get("sw_version") == b.get("sw_version") == n.get("sw_version") == "7.9.0"
+        s, b = self._get_device_info_from_all_types({TANDEM_SENSOR_KEY_SOFTWARE_VERSION: "7.9.0"})
+        assert s.get("sw_version") == b.get("sw_version") == "7.9.0"
 
     def test_configuration_url_identical_across_entity_types(self):
-        s, b, n = self._get_device_info_from_all_types({})
-        assert s.get("configuration_url") == b.get("configuration_url") == n.get("configuration_url") == _TANDEM_URL
+        s, b = self._get_device_info_from_all_types({})
+        assert s.get("configuration_url") == b.get("configuration_url") == _TANDEM_URL
 
-    def test_all_three_use_entry_id_not_serial(self):
+    def test_both_use_entry_id_not_serial(self):
         data = {DEVICE_PUMP_SERIAL: "REAL-SN"}
-        s, b, n = self._get_device_info_from_all_types(data)
-        for info in (s, b, n):
+        s, b = self._get_device_info_from_all_types(data)
+        for info in (s, b):
             assert (DOMAIN, _TEST_ENTRY_ID) in info["identifiers"]
             assert (DOMAIN, "REAL-SN") not in info["identifiers"]
 
@@ -561,31 +506,3 @@ class TestBinarySensorAsyncSetupEntry:
         async_add_entities.assert_called_once()
         entities = async_add_entities.call_args[0][0]
         assert len(entities) == len(BINARY_SENSORS)
-
-
-class TestNumberAsyncSetupEntry:
-    """number.async_setup_entry registers entity only for Tandem platform."""
-
-    @pytest.mark.asyncio
-    async def test_tandem_platform_registers_cartridge_fill_entity(self):
-        from custom_components.carelink.const import PLATFORM_TANDEM
-        from custom_components.carelink.number import CartridgeFillVolumeNumber
-        from custom_components.carelink.number import async_setup_entry as number_setup
-
-        hass, entry = _make_hass_and_entry(PLATFORM_TANDEM)
-        async_add_entities = MagicMock()
-        await number_setup(hass, entry, async_add_entities)
-        async_add_entities.assert_called_once()
-        entities = async_add_entities.call_args[0][0]
-        assert len(entities) == 1
-        assert isinstance(entities[0], CartridgeFillVolumeNumber)
-
-    @pytest.mark.asyncio
-    async def test_carelink_platform_skips_entity_registration(self):
-        from custom_components.carelink.const import PLATFORM_CARELINK
-        from custom_components.carelink.number import async_setup_entry as number_setup
-
-        hass, entry = _make_hass_and_entry(PLATFORM_CARELINK)
-        async_add_entities = MagicMock()
-        await number_setup(hass, entry, async_add_entities)
-        async_add_entities.assert_not_called()

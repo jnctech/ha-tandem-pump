@@ -63,7 +63,6 @@ class CarelinkClient:
         config_path=None,
         entry_id=None,
     ):
-
         # Auth info
         self.__carelink_refresh_token = carelink_refresh_token
         self.__carelink_access_token = carelink_token

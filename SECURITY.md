@@ -17,14 +17,6 @@
 2. Click **"Report a vulnerability"**
 3. Fill in the details — include steps to reproduce, impact, and any suggested fixes
 
-### Alternative: Email
-
-Email **security@jnctech.co.uk** with:
-- A description of the vulnerability
-- Steps to reproduce
-- Potential impact
-- Any suggested mitigations
-
 ### Response timeline
 
 - **Acknowledgement:** within 48 hours

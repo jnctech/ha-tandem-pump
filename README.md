@@ -167,9 +167,10 @@ Or click the **Add to HACS** button at the top of this page.
 
 ### Manual
 
-Download the [latest release](https://github.com/jnctech/ha-tandem-pump/releases/latest),
-copy `custom_components/carelink/` into `config/custom_components/`, restart, and add
-the integration as above.
+Download the [latest release](https://github.com/jnctech/ha-tandem-pump/releases/latest).
+**Delete** the existing `config/custom_components/carelink/` folder first (removes stale files
+from previous versions), then copy the new `custom_components/carelink/` into place.
+Restart Home Assistant and add the integration as above.
 
 ---
 

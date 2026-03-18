@@ -44,6 +44,24 @@
           "nightscout_url": "Nightscout URL",
           "nightscout_api": "Nightscout API secret"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "description": "Your credentials have expired or are invalid. Please re-enter them to continue.",
+        "data": {
+          "tandem_email": "Email address",
+          "tandem_password": "Password",
+          "tandem_region": "Region",
+          "scan_interval": "Scan interval (seconds)",
+          "cl_token": "Access token",
+          "cl_refresh_token": "Refresh token",
+          "cl_client_id": "Client ID",
+          "cl_client_secret": "Client secret",
+          "cl_mag_identifier": "MAG identifier",
+          "patientId": "Patient ID",
+          "nightscout_url": "Nightscout URL",
+          "nightscout_api": "Nightscout API secret"
+        }
       }
     },
     "error": {
@@ -53,6 +71,7 @@
     },
     "abort": {
       "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+      "reauth_successful": "[%key:common::config_flow::abort::reauth_successful%]",
       "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
     }
   }

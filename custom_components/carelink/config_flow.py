@@ -202,6 +202,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
+                # Use patient ID as unique ID to prevent duplicate entries
+                patient_id = user_input.get("patientId", "")
+                if patient_id:
+                    await self.async_set_unique_id(f"carelink_{patient_id}")
+                    self._abort_if_unique_id_configured()
+                else:
+                    _LOGGER.debug("No patientId provided — duplicate entry detection disabled")
                 return self.async_create_entry(title=info["title"], data=user_input)
 
         return self.async_show_form(
@@ -267,10 +274,60 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
+                # Use email + region as unique ID to prevent duplicate entries
+                email = user_input.get("tandem_email", "").strip().lower()
+                region = user_input.get("tandem_region", "EU")
+                await self.async_set_unique_id(f"tandem_{email}_{region}")
+                self._abort_if_unique_id_configured()
                 return self.async_create_entry(title=info["title"], data=user_input)
 
         return self.async_show_form(
             step_id="tandem", data_schema=self._get_tandem_schema(user_input, include_auth=True), errors=errors
+        )
+
+    # ── Reauth (triggered by ConfigEntryAuthFailed) ────────────────────
+
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> FlowResult:
+        """Handle reauth triggered by ConfigEntryAuthFailed."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Handle reauth credential entry."""
+        errors = {}
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        if entry is None:
+            return self.async_abort(reason="unknown")
+        platform = entry.data.get(PLATFORM_TYPE, PLATFORM_CARELINK)
+
+        if user_input is not None:
+            full_config = {**entry.data, **user_input}
+
+            try:
+                if platform == PLATFORM_TANDEM:
+                    await validate_tandem_input(full_config)
+                else:
+                    await validate_carelink_input(self.hass, full_config)
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception during reauth")
+                errors["base"] = "unknown"
+            else:
+                self.hass.config_entries.async_update_entry(entry, data=full_config)
+                await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
+
+        if platform == PLATFORM_TANDEM:
+            schema = self._get_tandem_schema(dict(entry.data), include_auth=True)
+        else:
+            schema = self._get_carelink_schema(dict(entry.data), include_auth=True)
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=schema,
+            errors=errors,
         )
 
     # ── Reconfiguration ──────────────────────────────────────────────────

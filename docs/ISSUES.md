@@ -7,11 +7,10 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 
 ## Current Priorities
 
-1. **ISS-012** — HACS review findings (6 HIGH — before HACS submission)
-2. **ISS-011 Phase 7** — OpenSSF Security Baseline + Dependabot (before HACS submission)
-3. **ISS-010** — ADRs + templates done; tooling + ADR-007/008 remaining
-4. **ISS-005** — tandem_api.py coverage gap
-5. Remaining baseline findings (D-1, L-5, S-4)
+1. **ISS-012** — HACS review findings (in progress — feature/iss-012-hacs-compliance)
+2. **ISS-010** — ADRs + templates done; tooling + ADR-007/008 remaining
+3. **ISS-005** — tandem_api.py coverage gap
+4. Remaining baseline findings (D-1, L-5, S-4)
 
 ---
 
@@ -21,24 +20,27 @@ For quick cross-project tasks, see `~/Code/TODO.md`.
 **Type:** Quality / HACS Compliance
 **Priority:** High
 **Created:** 2026-03-16
-**Status:** 🟢 Active
+**Status:** 🟢 Active — PR in progress
 **Source:** `docs/reviews/review-hacs-2026-03-16.md`
 
-**HIGH findings to resolve (before HACS submission):**
-- [ ] F-1: No `async_set_unique_id` in config flow — allows duplicate entries
-- [ ] F-9: Auth errors raise `UpdateFailed` not `ConfigEntryAuthFailed` — no automatic reauth
-- [ ] F-8: Pre-coordinator setup failures not wrapped in `ConfigEntryNotReady`
-- [ ] A-6: `_migrate_legacy_logindata` does sync file I/O on event loop
-- [ ] H-4: Requirements in manifest use `>=` instead of exact `==` pins
+**HIGH findings resolved:**
+- [x] F-1: `async_set_unique_id` + `_abort_if_unique_id_configured` in config flow
+- [x] F-9: Auth errors raise `ConfigEntryAuthFailed` (triggers reauth)
+- [x] F-8: Pre-coordinator setup failures wrapped in `ConfigEntryNotReady`
+- [x] A-6: `_migrate_legacy_logindata` sync I/O wrapped in `async_add_executor_job`
+- [x] H-4: Requirements pinned to exact `==` versions
 
 **Deferred (accepted risk):**
-- A-4a: Own httpx.AsyncClient instead of HA shared session — major refactor, clients are lifecycle-managed. Not blocking for HACS submission.
+- A-4a: Own httpx.AsyncClient — major refactor, clients lifecycle-managed. Not blocking for HACS.
 
-**MEDIUM (fix opportunistically):**
-- H-11: Missing `integration_type` in manifest.json
-- F-7: No reauth flow implemented (pairs with F-9)
+**MEDIUM resolved:**
+- [x] H-11: `integration_type: hub` added to manifest
+- [x] F-7: Reauth flow (`async_step_reauth` + `async_step_reauth_confirm`) implemented
 
-**Reference:** `/hacs-review` skill created 2026-03-16 (`~/.claude/skills/hacs-review/`)
+**LOW resolved:**
+- [x] H-9: `loggers` list added for httpx
+
+**Reference:** HACS submission PR: https://github.com/hacs/default/pull/6316
 
 ### ISS-010 — Architecture Decision Records & Documentation Gaps
 **Type:** Documentation / Engineering Practice

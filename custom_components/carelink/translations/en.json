@@ -2,6 +2,7 @@
     "config": {
         "abort": {
             "already_configured": "Device is already configured",
+            "reauth_successful": "Re-authentication was successful.",
             "reconfigure_successful": "The integration has been reconfigured successfully."
         },
         "error": {
@@ -49,6 +50,24 @@
                 "description": "Update your Nightscout connection or scan interval.",
                 "data": {
                     "scan_interval": "Scan Interval in seconds",
+                    "nightscout_url": "Nightscout URL (Optional)",
+                    "nightscout_api": "Nightscout API Secret (Optional)"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Re-authenticate",
+                "description": "Your credentials have expired or are invalid. Please re-enter them to continue.",
+                "data": {
+                    "tandem_email": "Email Address",
+                    "tandem_password": "Password",
+                    "tandem_region": "Region",
+                    "scan_interval": "Scan Interval in seconds",
+                    "cl_token": "Access Token",
+                    "cl_refresh_token": "Refresh Token",
+                    "cl_client_id": "Client ID",
+                    "cl_client_secret": "Client Secret",
+                    "cl_mag_identifier": "Mag Identifier",
+                    "patientId": "Patient ID",
                     "nightscout_url": "Nightscout URL (Optional)",
                     "nightscout_api": "Nightscout API Secret (Optional)"
                 }

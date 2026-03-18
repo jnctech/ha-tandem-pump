@@ -1,16 +1,17 @@
 name: Release
 
-permissions:
-  contents: write
-
 on:
   release:
     types: [published]
+
+permissions: {}
 
 jobs:
   release:
     name: Build and Upload Release Asset
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 

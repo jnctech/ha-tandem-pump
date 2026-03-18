@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from unittest.mock import AsyncMock
 
@@ -96,10 +96,10 @@ async def _make_coordinator(hass: HomeAssistant):
 
 
 class TestUpdateDataLoginErrors:
-    """Login failures raise ConfigEntryNotReady (lines 869–873)."""
+    """Login failures raise appropriate exceptions."""
 
     async def test_tandemautherror_during_login(self, hass: HomeAssistant):
-        """TandemAuthError from login → UpdateFailed → ConfigEntryNotReady."""
+        """TandemAuthError from login → ConfigEntryAuthFailed (triggers reauth)."""
         from custom_components.carelink import TandemCoordinator
         from custom_components.carelink.tandem_api import TandemAuthError
 
@@ -111,7 +111,7 @@ class TestUpdateDataLoginErrors:
             PLATFORM_TYPE: PLATFORM_TANDEM,
         }
         coordinator = TandemCoordinator(hass, entry, update_interval=timedelta(seconds=300))
-        with pytest.raises(ConfigEntryNotReady):
+        with pytest.raises(ConfigEntryAuthFailed):
             await coordinator.async_config_entry_first_refresh()
         client.get_pump_event_metadata.assert_not_called()
 

@@ -16,6 +16,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.util.dt import DEFAULT_TIME_ZONE
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -347,18 +348,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def _async_setup_carelink_entry(hass: HomeAssistant, entry: ConfigEntry, config: dict) -> bool:
     """Set up a Medtronic Carelink config entry."""
     # Migrate logindata from old location if needed
-    _migrate_legacy_logindata(hass.config.path(), entry.entry_id)
+    await hass.async_add_executor_job(_migrate_legacy_logindata, hass.config.path(), entry.entry_id)
 
-    carelink_client = CarelinkClient(
-        config["cl_refresh_token"],
-        config["cl_token"],
-        config["cl_client_id"],
-        config["cl_client_secret"],
-        config["cl_mag_identifier"],
-        config["patientId"],
-        config_path=hass.config.path(),
-        entry_id=entry.entry_id,
-    )
+    try:
+        carelink_client = CarelinkClient(
+            config["cl_refresh_token"],
+            config["cl_token"],
+            config["cl_client_id"],
+            config["cl_client_secret"],
+            config["cl_mag_identifier"],
+            config["patientId"],
+            config_path=hass.config.path(),
+            entry_id=entry.entry_id,
+        )
+    except Exception as err:
+        raise ConfigEntryNotReady(f"Failed to initialise Carelink client: {err}") from err
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         CLIENT: carelink_client,
@@ -574,11 +578,14 @@ async def _async_setup_tandem_entry(hass: HomeAssistant, entry: ConfigEntry, con
     """Set up a Tandem t:slim Source config entry."""
     _LOGGER.info("Setting up Tandem entry: %s", entry.entry_id)
 
-    tandem_client = TandemSourceClient(
-        email=config["tandem_email"],
-        password=config["tandem_password"],
-        region=config.get("tandem_region", "EU"),
-    )
+    try:
+        tandem_client = TandemSourceClient(
+            email=config["tandem_email"],
+            password=config["tandem_password"],
+            region=config.get("tandem_region", "EU"),
+        )
+    except Exception as err:
+        raise ConfigEntryNotReady(f"Failed to initialise Tandem client: {err}") from err
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         TANDEM_CLIENT: tandem_client,
@@ -668,7 +675,14 @@ class CarelinkCoordinator(DataUpdateCoordinator):
         client_timezone = DEFAULT_TIME_ZONE
 
         try:
-            await self.client.login()
+            logged_in = await self.client.login()
+        except Exception as err:
+            raise UpdateFailed(f"Carelink login error: {err}") from err
+
+        if not logged_in:
+            raise ConfigEntryAuthFailed("Carelink authentication failed — credentials may have expired")
+
+        try:
             recent_data = await self.client.get_recent_data()
         except Exception as err:
             raise UpdateFailed(f"Carelink data fetch failed: {err}") from err
@@ -1067,7 +1081,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         try:
             await self.client.login()
         except TandemAuthError as err:
-            raise UpdateFailed(f"Tandem authentication failed: {err}") from err
+            raise ConfigEntryAuthFailed(f"Tandem authentication failed: {err}") from err
         except Exception as err:
             _LOGGER.debug("Unexpected error during Tandem login: %s", err, exc_info=True)
             raise UpdateFailed(f"Tandem login error: {err}") from err

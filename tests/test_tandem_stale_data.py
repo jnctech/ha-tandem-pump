@@ -296,91 +296,85 @@ class TestCoordinatorMaxDateOptimisation:
     """Tests for skipping pumpevents when maxDateWithEvents is unchanged."""
 
     async def test_first_poll_always_fetches(self, hass: HomeAssistant):
-        """First poll should always fetch pump events (no cached maxDate)."""
+        """First poll fetches (short window) but defers caching maxDate to the backfill.
+
+        The first refresh deliberately does not cache maxDateWithEvents so the
+        full-window backfill (scheduled by async_setup_entry) is not
+        short-circuited by the freshness check.
+        """
         coordinator, mock_client = await _setup_coordinator_for_stale_test(hass)
 
         await coordinator.async_config_entry_first_refresh()
 
-        # get_recent_data should have been called (first poll, no cache)
         mock_client.get_recent_data.assert_called_once()
+        assert coordinator._last_max_date is None
+
+        # The full-window backfill runs off the setup path and caches maxDate.
+        await coordinator.async_backfill_full_history()
+        assert mock_client.get_recent_data.call_count == 2
         assert coordinator._last_max_date == "2024-01-15T12:00:00"
 
     async def test_skips_fetch_when_max_date_unchanged(self, hass: HomeAssistant):
-        """Second poll with same maxDateWithEvents should skip pumpevents."""
-        coordinator, mock_client = await _setup_coordinator_for_stale_test(
-            hass,
-            metadata_side_effect=[
-                [{"maxDateWithEvents": "2024-01-15T12:00:00"}],
-                [{"maxDateWithEvents": "2024-01-15T12:00:00"}],  # Same
-            ],
-        )
+        """A later poll with unchanged maxDateWithEvents skips the events fetch."""
+        coordinator, mock_client = await _setup_coordinator_for_stale_test(hass)
 
+        # Two-phase startup: fast first refresh + full-window backfill.
         await coordinator.async_config_entry_first_refresh()
-        assert mock_client.get_recent_data.call_count == 1
+        await coordinator.async_backfill_full_history()
+        assert mock_client.get_recent_data.call_count == 2
+        assert coordinator._last_max_date == "2024-01-15T12:00:00"
 
-        # Second refresh — same maxDate, should skip
+        # Next scheduled poll — same maxDate — should skip.
         await coordinator.async_refresh()
         await hass.async_block_till_done()
-
-        # get_recent_data should NOT have been called again
-        assert mock_client.get_recent_data.call_count == 1
+        assert mock_client.get_recent_data.call_count == 2
 
     async def test_fetches_when_max_date_changes(self, hass: HomeAssistant):
         """Poll should fetch when maxDateWithEvents changes."""
-        second_data = _default_recent_data()
-        second_data["pump_metadata"]["maxDateWithEvents"] = "2024-01-15T12:30:00"
-
         coordinator, mock_client = await _setup_coordinator_for_stale_test(
             hass,
             metadata_side_effect=[
-                [{"maxDateWithEvents": "2024-01-15T12:00:00"}],
-                [{"maxDateWithEvents": "2024-01-15T12:30:00"}],  # Changed!
-            ],
-            recent_data_side_effect=[
-                _default_recent_data(),
-                second_data,
+                [{"maxDateWithEvents": "2024-01-15T12:00:00"}],  # first refresh
+                [{"maxDateWithEvents": "2024-01-15T12:00:00"}],  # backfill
+                [{"maxDateWithEvents": "2024-01-15T12:30:00"}],  # next poll — changed!
             ],
         )
 
         await coordinator.async_config_entry_first_refresh()
-        assert mock_client.get_recent_data.call_count == 1
+        await coordinator.async_backfill_full_history()
+        assert mock_client.get_recent_data.call_count == 2
+        assert coordinator._last_max_date == "2024-01-15T12:00:00"
 
-        # Second refresh — different maxDate, should fetch
+        # Next poll — different maxDate — should fetch again.
         await coordinator.async_refresh()
         await hass.async_block_till_done()
-
-        assert mock_client.get_recent_data.call_count == 2
+        assert mock_client.get_recent_data.call_count == 3
         assert coordinator._last_max_date == "2024-01-15T12:30:00"
 
     async def test_cached_data_preserved_on_skip(self, hass: HomeAssistant):
         """When skipping fetch, sensor data from previous poll should be preserved."""
-        coordinator, mock_client = await _setup_coordinator_for_stale_test(
-            hass,
-            metadata_side_effect=[
-                [{"maxDateWithEvents": "2024-01-15T12:00:00"}],
-                [{"maxDateWithEvents": "2024-01-15T12:00:00"}],  # Same
-            ],
-        )
+        coordinator, mock_client = await _setup_coordinator_for_stale_test(hass)
 
         await coordinator.async_config_entry_first_refresh()
+        await coordinator.async_backfill_full_history()
         first_data = dict(coordinator.data)
 
-        # Second refresh — should skip but preserve data
+        # Next poll — same maxDate — should skip but preserve data.
         await coordinator.async_refresh()
         await hass.async_block_till_done()
 
         assert coordinator.data[DEVICE_PUMP_SERIAL] == first_data[DEVICE_PUMP_SERIAL]
 
     async def test_metadata_failure_falls_through_to_full_fetch(self, hass: HomeAssistant):
-        """If metadata check fails, should proceed with full fetch."""
+        """If metadata check fails, should proceed with the events fetch."""
         coordinator, mock_client = await _setup_coordinator_for_stale_test(
             hass,
             metadata_side_effect=[
-                Exception("API timeout"),  # Metadata fails
+                Exception("API timeout"),  # Metadata fails on the first refresh
             ],
         )
 
         await coordinator.async_config_entry_first_refresh()
 
-        # Should still have called get_recent_data despite metadata failure
+        # Should still have called get_recent_data despite metadata failure.
         mock_client.get_recent_data.assert_called_once()

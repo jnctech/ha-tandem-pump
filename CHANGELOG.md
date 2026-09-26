@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Last CGM session end** from session stops 214 and G7 447: when the session ended,
     the cause (G7 algorithm state), stop reason and raw codes, sensor wear time, whether it
     ended before its rated duration, and the last 10 session ends.
+  - **Sensor life rules.** The rated life comes from the session event (10 days for G6/G7,
+    15 for G7 15 Day). A G7 stays current through its 12 h grace window: days-remaining holds
+    at 0 and `in_grace_period` is set. G6 has no grace window. Session-end records add
+    `sensor`, `grace_period_hours`, `wear_pct_of_rated` and `replacement_eligible`, which
+    follows Dexcom's rule: a sensor that fails before 10 days of wear is replaced, whatever
+    its rating. The expiry sensor also exposes the `replacement_threshold` time.
 
 ### Fixed
 - **Pump alert/alarm names.** `TANDEM_ALERT_MAP` / `TANDEM_ALARM_MAP` no longer matched

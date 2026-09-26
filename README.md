@@ -99,7 +99,7 @@ using your existing Tandem Source account. No extra hardware required.
 | Active pump alerts | Count of uncleared pump alerts + alarms |
 | Last CGM alert | Most recent CGM alert — e.g. CGM Sensor Failed, Sensor Expired, Out Of Range, CGM High/Low. Attributes: `cgm_alert_id`, `sensor_type`, `cleared`, `acknowledged`, `active`, `recent` |
 | CGM sensor state | G7 / Libre 2 sensor algorithm state — Warmup, In Session, Session Stopped (Sensor Failed / End of Session / …) |
-| Last CGM session end | When the last sensor session ended ("Sensor Session Ended"). Attributes: `cause`, `stop_reason`, raw stop codes, `sensor_wear_hours`, `ended_early`, `recent` (last 10) |
+| Last CGM session end | When the last sensor session ended ("Sensor Session Ended"). Attributes: `cause`, `stop_reason`, raw stop codes, `sensor_wear_hours`, `ended_early`, `replacement_eligible` (Dexcom: failed before 10 days of wear), `recent` (last 10) |
 
 ### Pump Status (11)
 | Sensor | Description |

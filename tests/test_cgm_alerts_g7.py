@@ -357,3 +357,80 @@ async def test_get_pump_events_logs_unmapped_codes(caplog):
         events = await client.get_pump_events("dev", "2026-09-26", "2026-09-26")
     assert [e["event_id"] for e in events] == [369]
     assert "Unmapped pump-logs event codes {code: count}: {8: 2}" in caplog.text
+
+
+# ── Rated life, G7 grace window and the Dexcom replacement rule ───────────
+
+
+class TestSensorLifeRules:
+    """Rated life comes from the session (10 or 15 days); G7 adds a 12 h grace window;
+    Dexcom replaces any sensor that fails before 10 days of wear, whatever its rating."""
+
+    async def _run(self, hass, events):
+        from freezegun import freeze_time
+
+        with freeze_time(BASE_TS + timedelta(minutes=1)):
+            return await _setup_coordinator(hass, _make_pump_events_data(events))
+
+    async def test_g7_in_grace_window_stays_current(self, hass: HomeAssistant):
+        events = [
+            _g7_reading(1, 120, 32, minutes_ago=5),
+            # 10 days + 6 h into a 10-day session → inside the 12 h grace window.
+            _make_session_event(2, name="CGMSessionJoin", event_id=213, ct=10 * _DAY + 6 * 3600, sst=0, dur=10),
+        ]
+        coordinator = await self._run(hass, events)
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] == 0.0
+        attrs = coordinator.data[f"{TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY}_attributes"]
+        assert attrs["sensor"] == "G7"
+        assert attrs["grace_period_hours"] == 12
+        assert attrs["in_grace_period"] is True
+
+    async def test_g7_past_grace_window_unavailable(self, hass: HomeAssistant):
+        events = [
+            _g7_reading(1, 120, 32, minutes_ago=5),
+            _make_session_event(2, name="CGMSessionJoin", event_id=213, ct=10 * _DAY + 13 * 3600, sst=0, dur=10),
+        ]
+        coordinator = await self._run(hass, events)
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] is UNAVAILABLE
+
+    async def test_g6_has_no_grace_window(self, hass: HomeAssistant):
+        events = [
+            _make_cgm_event(1, 120, minutes_ago=5),
+            _make_session_event(2, name="CGMSessionJoin", event_id=213, ct=10 * _DAY + 1 * 3600, sst=0, dur=10),
+        ]
+        coordinator = await self._run(hass, events)
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] is UNAVAILABLE
+
+    async def test_15_day_g7_active_on_day_12(self, hass: HomeAssistant):
+        events = [
+            _g7_reading(1, 120, 32, minutes_ago=5),
+            _make_session_event(2, name="CGMSessionJoin", event_id=213, ct=12 * _DAY, sst=0, dur=15),
+        ]
+        coordinator = await self._run(hass, events)
+        assert 2.9 < coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] < 3.1
+        assert coordinator.data[f"{TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY}_attributes"]["in_grace_period"] is False
+
+    async def test_15_day_g7_failing_at_11_days_not_replaceable(self, hass: HomeAssistant):
+        stop = _make_session_event(
+            3, name="CGMSessionStop", event_id=447, ct=12 * _DAY, sst=_DAY, stop_time=12 * _DAY, dur=15
+        )
+        events = [_g7_reading(1, 0, 35, minutes_ago=2), stop]
+        coordinator = await self._run(hass, events)
+        attrs = coordinator.data[f"{TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END}_attributes"]
+        assert attrs["sensor"] == "G7"
+        assert attrs["sensor_wear_days"] == 11.0
+        assert attrs["ended_early"] is True  # before its 15-day rating
+        assert attrs["replacement_eligible"] is False  # but past the 10-day threshold
+        assert attrs["wear_pct_of_rated"] == 73.3
+
+    async def test_g6_failing_at_2_days_replaceable(self, hass: HomeAssistant):
+        events = [
+            _make_session_event(1, name="CGMSessionJoin", event_id=213, ct=2 * _DAY, sst=0, minutes_ago=60),
+            _make_cgm_event(2, 150, minutes_ago=30),
+            _make_session_event(3, name="CGMSessionStop", event_id=214, ct=0, sst=0xFFFFFFFF, stop_time=0, reason=4),
+        ]
+        coordinator = await self._run(hass, events)
+        attrs = coordinator.data[f"{TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END}_attributes"]
+        assert attrs["sensor"] == "G6"
+        assert attrs["grace_period_hours"] == 0
+        assert attrs["replacement_eligible"] is True

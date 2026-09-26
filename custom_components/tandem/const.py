@@ -219,6 +219,14 @@ CGM_ALGORITHM_STATE_MAP_FSL2: dict[int, str] = {
     105: "Invalid Data",
     106: "Other",
 }
+# Dexcom replaces a sensor that fails before this many days of wear, whatever its
+# rated life (a 15-day G7 is still only covered below 10 days).
+DEXCOM_REPLACEMENT_THRESHOLD_DAYS = 10
+# Post-expiry grace window during which the sensor keeps reading, by sensor model.
+# G7 has 12 h; G6 has none. The rated life itself comes from the session event
+# (``sessionDuration``: 10 for G6/G7, 15 for G7 15 Day).
+CGM_GRACE_PERIOD_HOURS: dict[str, int] = {"G6": 0, "G7": 12}
+
 # G7 algorithm states that mean the sensor session has ended.
 CGM_ALGORITHM_STATES_SESSION_STOPPED_G7 = frozenset(range(34, 40))
 

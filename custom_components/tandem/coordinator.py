@@ -73,10 +73,12 @@ from .tandem_api import (
 from .exceptions import TandemApiError, TandemAuthError
 from .const import (
     CGM_ALERT_SENSOR_TYPE_MAP,
+    CGM_GRACE_PERIOD_HOURS,
     CGM_ALGORITHM_STATE_MAP_FSL2,
     CGM_ALGORITHM_STATE_MAP_G7,
     CGM_ALGORITHM_STATES_SESSION_STOPPED_G7,
     CGM_SESSION_REASON_MAP,
+    DEXCOM_REPLACEMENT_THRESHOLD_DAYS,
     CGM_GLUCOSE_MGDL_MAX,
     CGM_GLUCOSE_MGDL_MIN,
     CGM_STATUS_HIGH,
@@ -204,6 +206,20 @@ def _cgm_algorithm_state(evt: dict[str, Any]) -> tuple[int, str] | None:
     else:
         return None
     return code, state_map.get(code, f"State {code}")
+
+
+_CGM_MODEL_BY_EVENT: dict[Any, str] = {EVT_CGM_DATA_GXB: "G6", EVT_CGM_DATA_G7: "G7", EVT_CGM_DATA_FSL2: "Libre 2"}
+
+
+def _cgm_model_at(cgm_readings: list[dict[str, Any]], when: datetime) -> str | None:
+    """Sensor model ("G6" / "G7" / "Libre 2") from the CGM data nearest before ``when``.
+
+    Falls back to the first reading after ``when``; None when there are no readings.
+    Needed because the GX session events (212–214) do not say which sensor they are.
+    """
+    before = [r for r in cgm_readings if r["timestamp"] <= when]
+    reading = before[-1] if before else next(iter(cgm_readings), None)
+    return _CGM_MODEL_BY_EVENT.get(reading.get("event_id")) if reading else None
 
 
 def _is_g7_session_stopped(evt: dict[str, Any]) -> bool:
@@ -1676,7 +1692,12 @@ class TandemCoordinator(DataUpdateCoordinator):
         if cgm_readings and not stopped_after:
             latest_reading = cgm_readings[-1]
             stopped_after = latest_reading["timestamp"] > anchor["timestamp"] and _is_g7_session_stopped(latest_reading)
-        if stopped_after or expiry_wall <= now:
+        # A G7 keeps reading for a 12 h grace window after its rated expiry, so the
+        # session stays current until then (days remaining holds at 0).
+        model = _cgm_model_at(cgm_readings or [], anchor["timestamp"])
+        grace_hours = CGM_GRACE_PERIOD_HOURS.get(model, 0) if model else 0
+        grace_end = expiry_wall + timedelta(hours=grace_hours)
+        if stopped_after or grace_end <= now:
             for key in keys:
                 data[key] = UNAVAILABLE
             return
@@ -1684,9 +1705,16 @@ class TandemCoordinator(DataUpdateCoordinator):
         reason_id = anchor.get("session_reason")
         data[TANDEM_SENSOR_KEY_CGM_SESSION_START] = start_wall
         data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] = expiry_wall
-        data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] = round((expiry_wall - now).total_seconds() / 86400.0, 2)
+        data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] = max(
+            0.0, round((expiry_wall - now).total_seconds() / 86400.0, 2)
+        )
         data[f"{TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY}_attributes"] = {
+            "sensor": model,
             "session_duration_days": duration_days,
+            "grace_period_hours": grace_hours,
+            "grace_period_end": grace_end.isoformat() if grace_hours else None,
+            "in_grace_period": expiry_wall <= now,
+            "replacement_threshold": (start_wall + timedelta(days=DEXCOM_REPLACEMENT_THRESHOLD_DAYS)).isoformat(),
             "session_started_via": (
                 CGM_SESSION_REASON_MAP.get(reason_id, f"Reason {reason_id}") if reason_id is not None else None
             ),
@@ -1845,10 +1873,15 @@ class TandemCoordinator(DataUpdateCoordinator):
             else None
         )
         wear_hours = round(wear_seconds / 3600.0, 1) if wear_seconds is not None else None
-        ended_early = (
-            wear_seconds < duration_days * 86400
-            if wear_seconds is not None and isinstance(duration_days, (int, float)) and duration_days > 0
-            else None
+        rated_seconds = (
+            float(duration_days) * 86400 if isinstance(duration_days, (int, float)) and duration_days > 0 else None
+        )
+        ended_early = wear_seconds < rated_seconds if wear_seconds is not None and rated_seconds else None
+        model = "G7" if is_g7_stop else _cgm_model_at(cgm_readings, stop["timestamp"])
+        # Stops come only from Dexcom session events (214 / 447), so the Dexcom
+        # replacement rule applies: failed before 10 days of wear, whatever the rating.
+        replacement_eligible = (
+            wear_seconds < DEXCOM_REPLACEMENT_THRESHOLD_DAYS * 86400 if wear_seconds is not None else None
         )
         return {
             "timestamp": end_wall,
@@ -1857,10 +1890,16 @@ class TandemCoordinator(DataUpdateCoordinator):
             "stop_reason_code": reason_code,
             "stop_session_code": stop.get("stop_session_code"),
             "source_event": stop.get("event_id"),
+            "sensor": model,
             "session_duration_days": duration_days,
+            "grace_period_hours": CGM_GRACE_PERIOD_HOURS.get(model, 0) if model else None,
             "sensor_wear_hours": wear_hours,
             "sensor_wear_days": round(wear_seconds / 86400.0, 2) if wear_seconds is not None else None,
+            "wear_pct_of_rated": (
+                round(100.0 * wear_seconds / rated_seconds, 1) if wear_seconds is not None and rated_seconds else None
+            ),
             "ended_early": ended_early,
+            "replacement_eligible": replacement_eligible,
         }
 
     def _parse_cgm_session_end(

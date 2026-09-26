@@ -7,7 +7,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, UnitOfElectricPotential, UnitOfMass
+from homeassistant.const import EntityCategory, UnitOfMass, UnitOfTime
 
 from .const import (
     ICON_ALERT_CIRCLE_OUTLINE,
@@ -25,16 +25,17 @@ from .const import (
     TANDEM_SENSOR_KEY_BASAL_LIMIT,
     TANDEM_SENSOR_KEY_BASAL_RATE,
     TANDEM_SENSOR_KEY_BATTERY_PERCENT,
-    TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH,
-    TANDEM_SENSOR_KEY_BATTERY_VOLTAGE,
     TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN,
     TANDEM_SENSOR_KEY_CGM_HIGH_ALERT,
     TANDEM_SENSOR_KEY_CGM_LOW_ALERT,
     TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE,
+    TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING,
     TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE,
+    TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY,
+    TANDEM_SENSOR_KEY_CGM_SESSION_START,
     TANDEM_SENSOR_KEY_CGM_STATUS,
     TANDEM_SENSOR_KEY_CGM_USAGE,
-    TANDEM_SENSOR_KEY_CHARGING_STATUS,
+    TANDEM_SENSOR_KEY_CLOSED_LOOP_PREFERRED,
     TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED,
     TANDEM_SENSOR_KEY_CONTROL_IQ_MODE,
     TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS,
@@ -49,6 +50,8 @@ from .const import (
     TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV,
     TANDEM_SENSOR_KEY_GMI,
     TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD,
+    TANDEM_SENSOR_KEY_IOB_HOURS,
+    TANDEM_SENSOR_KEY_IOB_MINUTES,
     TANDEM_SENSOR_KEY_LASTSG_MGDL,
     TANDEM_SENSOR_KEY_LASTSG_MMOL,
     TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
@@ -77,6 +80,7 @@ from .const import (
     TANDEM_SENSOR_KEY_PUMP_SERIAL_INFO,
     TANDEM_SENSOR_KEY_PUMP_SUSPENDED,
     TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON,
+    TANDEM_SENSOR_KEY_RSSI,
     TANDEM_SENSOR_KEY_SG_DELTA,
     TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
     TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE,
@@ -118,7 +122,6 @@ TANDEM_SENSORS_ALWAYS_AVAILABLE = (
     TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD,
     TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT,
     TANDEM_SENSOR_KEY_BATTERY_PERCENT,
-    TANDEM_SENSOR_KEY_CHARGING_STATUS,
     TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE,
 )
 
@@ -677,7 +680,7 @@ TANDEM_SENSORS = (
         entity_category=None,
         suggested_display_precision=0,
     ),
-    # ── Battery monitoring sensors (Phase 1) ────────────────────────────
+    # ── Battery monitoring sensor (Phase 1 — level from events 9/34/35) ──
     SensorEntityDescription(
         key=TANDEM_SENSOR_KEY_BATTERY_PERCENT,
         name="Pump battery level",
@@ -686,35 +689,49 @@ TANDEM_SENSORS = (
         device_class=SensorDeviceClass.BATTERY,
         icon="mdi:battery",
         entity_category=EntityCategory.DIAGNOSTIC,
-        suggested_display_precision=1,
-    ),
-    SensorEntityDescription(
-        key=TANDEM_SENSOR_KEY_BATTERY_VOLTAGE,
-        name="Pump battery voltage",
-        native_unit_of_measurement=UnitOfElectricPotential.MILLIVOLT,
-        state_class=SensorStateClass.MEASUREMENT,
-        device_class=SensorDeviceClass.VOLTAGE,
-        icon="mdi:flash",
-        entity_category=EntityCategory.DIAGNOSTIC,
         suggested_display_precision=0,
     ),
+    # ── Cheap wins: one-line reads of fields already on existing events ──
     SensorEntityDescription(
-        key=TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH,
-        name="Pump battery remaining",
-        native_unit_of_measurement="mAh",
+        # CGM transmitter signal strength (event 256 / 399). Raw pump value; the
+        # unit/scale is not documented by Tandem, so no device_class/unit is claimed.
+        key=TANDEM_SENSOR_KEY_RSSI,
+        name="CGM signal strength",
+        native_unit_of_measurement=None,
         state_class=SensorStateClass.MEASUREMENT,
         device_class=None,
-        icon="mdi:battery-charging",
+        icon="mdi:signal",
         entity_category=EntityCategory.DIAGNOSTIC,
         suggested_display_precision=0,
     ),
     SensorEntityDescription(
-        key=TANDEM_SENSOR_KEY_CHARGING_STATUS,
-        name="Pump charging status",
+        key=TANDEM_SENSOR_KEY_IOB_HOURS,
+        name="Insulin on board (hours)",
+        native_unit_of_measurement=UnitOfTime.HOURS,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:timer-sand",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=0,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_IOB_MINUTES,
+        name="Insulin on board (minutes)",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=None,
+        icon="mdi:timer-sand",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=0,
+    ),
+    SensorEntityDescription(
+        # Control-IQ setting: whether closed-loop is preferred (bool True/False).
+        key=TANDEM_SENSOR_KEY_CLOSED_LOOP_PREFERRED,
+        name="Closed loop preferred",
         native_unit_of_measurement=None,
         state_class=None,
         device_class=None,
-        icon="mdi:power-plug",
+        icon="mdi:robot",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     # ── Phase 3: CGM sensor type (from event 313 AA_DAILY_STATUS) ────
@@ -726,6 +743,36 @@ TANDEM_SENSORS = (
         device_class=None,
         icon="mdi:chip",
         entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # ── Phase 7: CGM sensor session / expiry (from events 212, 213, 214) ─
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CGM_SESSION_START,
+        name="CGM sensor session start",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:play-circle-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY,
+        name="CGM sensor session expiry",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:calendar-clock",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        key=TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING,
+        name="CGM sensor days remaining",
+        native_unit_of_measurement="d",
+        # Intermittently unavailable between sensor sessions — a MEASUREMENT
+        # state_class with gaps causes LTS holes, so leave it None.
+        state_class=None,
+        device_class=None,
+        icon="mdi:timer-sand",
+        entity_category=None,
     ),
     # ── Phase 4: Bolus Calculator (from events 64, 65, 66) ────────
     SensorEntityDescription(

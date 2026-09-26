@@ -43,11 +43,12 @@ from custom_components.tandem.const import (
     TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT,
     TANDEM_SENSOR_KEY_DAILY_CARBS,
     TANDEM_SENSOR_KEY_DAILY_BOLUS_COUNT,
-    # Battery sensors
+    # Battery sensor
     TANDEM_SENSOR_KEY_BATTERY_PERCENT,
-    TANDEM_SENSOR_KEY_BATTERY_VOLTAGE,
-    TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH,
-    TANDEM_SENSOR_KEY_CHARGING_STATUS,
+    # CGM sensor session (Phase 7)
+    TANDEM_SENSOR_KEY_CGM_SESSION_START,
+    TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY,
+    TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING,
     # Alert & Alarm sensors (Phase 2)
     TANDEM_SENSOR_KEY_LAST_ALERT,
     TANDEM_SENSOR_KEY_LAST_ALARM,
@@ -914,198 +915,89 @@ class TestBatteryEventDecoders:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _make_daily_basal_event(
-    seq: int,
-    battery_pct_msb: int = 16,
-    battery_pct_lsb: int = 128,
-    minutes_ago: int = 0,
-) -> dict:
-    """Create a pre-decoded DailyBasal event dict (as coordinator receives it).
+def _make_status_event(seq: int, battery_pct: int = 96, minutes_ago: int = 0) -> dict:
+    """Create a pre-decoded pump-status event (id 9) as the coordinator receives it.
 
-    DailyBasal no longer includes battery_voltage_mv — the raw value at
-    offset 14 is not actual millivolts.  Voltage comes from ShelfMode only.
+    Under the BFF API the battery level comes from the status / battery-detail
+    events (9 / 34 / 35); ``battery_percent`` is mapped from their ``abc`` (actual
+    battery charge) field — the value behind the pump's on-screen battery icon.
     """
     ts = BASE_TS - timedelta(minutes=minutes_ago)
-    battery_pct = min(100, max(0, round((256 * (battery_pct_msb - 14) + battery_pct_lsb) / (3 * 256) * 100, 1)))
     return {
-        "event_id": 81,
-        "event_name": "DailyBasal",
+        "event_id": 9,
+        "event_name": "PumpStatus",
         "seq": seq,
         "timestamp": ts,
-        "daily_total_basal": 20.0,
-        "last_basal_rate": 0.8,
-        "iob": 2.5,
         "battery_percent": battery_pct,
-    }
-
-
-def _make_shelf_mode_event(
-    seq: int,
-    battery_pct: int = 75,
-    battery_mv: int = 3850,
-    battery_mah: int = 280,
-    minutes_ago: int = 0,
-) -> dict:
-    ts = BASE_TS - timedelta(minutes=minutes_ago)
-    return {
-        "event_id": 53,
-        "event_name": "ShelfMode",
-        "seq": seq,
-        "timestamp": ts,
-        "msec_since_reset": 12345,
-        "battery_percent": battery_pct,
-        "battery_percent_alt": battery_pct - 2,
-        "battery_current_ma": -50,
-        "battery_remaining_mah": battery_mah,
-        "battery_voltage_mv": battery_mv,
-    }
-
-
-def _make_usb_connected_event(seq: int, minutes_ago: int = 0) -> dict:
-    ts = BASE_TS - timedelta(minutes=minutes_ago)
-    return {
-        "event_id": 36,
-        "event_name": "USBConnected",
-        "seq": seq,
-        "timestamp": ts,
-        "negotiated_current_ma": 500.0,
-    }
-
-
-def _make_usb_disconnected_event(seq: int, minutes_ago: int = 0) -> dict:
-    ts = BASE_TS - timedelta(minutes=minutes_ago)
-    return {
-        "event_id": 37,
-        "event_name": "USBDisconnected",
-        "seq": seq,
-        "timestamp": ts,
-        "negotiated_current_ma": 0.0,
     }
 
 
 class TestBatterySensorPopulation:
-    """Test coordinator battery sensor population from events 36, 37, 53, 81."""
+    """Test coordinator battery-level population from status events 9/34/35 (BFF)."""
 
-    async def test_daily_basal_provides_battery(self, hass: HomeAssistant):
-        """DailyBasal event populates battery % but not voltage."""
+    async def test_status_event_provides_battery_level(self, hass: HomeAssistant):
+        """A pump-status event (id 9) populates the battery level from `abc`."""
         events = [
             _make_cgm_event(1, 120),
-            _make_daily_basal_event(2, battery_pct_msb=16, battery_pct_lsb=128),
+            _make_status_event(2, battery_pct=96),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
 
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 83.3
-        # Voltage only comes from ShelfMode (DailyBasal raw value is not mV)
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] is UNAVAILABLE
-        # mAh only comes from ShelfMode
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 96
 
-    async def test_shelf_mode_provides_full_battery(self, hass: HomeAssistant):
-        """ShelfMode event populates battery %, voltage, and mAh."""
+    async def test_latest_status_event_wins(self, hass: HomeAssistant):
+        """The most recent status event determines the battery level."""
         events = [
             _make_cgm_event(1, 120),
-            _make_shelf_mode_event(2, battery_pct=75, battery_mv=3850, battery_mah=280),
+            _make_status_event(2, battery_pct=90, minutes_ago=30),
+            _make_status_event(3, battery_pct=85, minutes_ago=5),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
 
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 75
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3850
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] == 280
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 85
 
-    async def test_shelf_mode_newer_overrides_daily_basal(self, hass: HomeAssistant):
-        """When ShelfMode is newer than DailyBasal, ShelfMode values win."""
+    async def test_battery_level_rounded_to_int(self, hass: HomeAssistant):
+        """A fractional charge value is rounded to a whole percent."""
         events = [
             _make_cgm_event(1, 120),
-            _make_daily_basal_event(2, battery_pct_msb=16, battery_pct_lsb=128, minutes_ago=30),
-            _make_shelf_mode_event(3, battery_pct=72, battery_mv=3800, battery_mah=260, minutes_ago=5),
+            _make_status_event(2, battery_pct=95.6),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
 
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 72
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3800
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] == 260
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 96
 
-    async def test_daily_basal_newer_keeps_daily_basal_pct(self, hass: HomeAssistant):
-        """When DailyBasal is newer than ShelfMode, DailyBasal % wins, voltage from ShelfMode."""
+    async def test_battery_out_of_range_ignored(self, hass: HomeAssistant):
+        """An out-of-range charge value is dropped rather than shown (null-not-guess)."""
         events = [
             _make_cgm_event(1, 120),
-            _make_shelf_mode_event(2, battery_pct=80, battery_mv=3900, battery_mah=300, minutes_ago=60),
-            _make_daily_basal_event(3, battery_pct_msb=16, battery_pct_lsb=128, minutes_ago=5),
+            _make_status_event(2, battery_pct=150),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
 
-        # DailyBasal is newer → its % used
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 83.3
-        # Voltage always from ShelfMode (DailyBasal raw value is not mV)
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3900
-        # mAh still comes from ShelfMode (only source)
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] == 300
+        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] is UNAVAILABLE
 
-    async def test_usb_connected_shows_charging(self, hass: HomeAssistant):
-        """USB connected event sets charging status to 'Charging'."""
-        events = [
-            _make_cgm_event(1, 120),
-            _make_usb_connected_event(2),
-        ]
-        data = _make_pump_events_data(events)
-        coordinator = await _setup_coordinator(hass, data)
-
-        assert coordinator.data[TANDEM_SENSOR_KEY_CHARGING_STATUS] == "Charging"
-
-    async def test_usb_disconnected_shows_not_charging(self, hass: HomeAssistant):
-        """USB disconnected event sets charging status to 'Not Charging'."""
-        events = [
-            _make_cgm_event(1, 120),
-            _make_usb_disconnected_event(2),
-        ]
-        data = _make_pump_events_data(events)
-        coordinator = await _setup_coordinator(hass, data)
-
-        assert coordinator.data[TANDEM_SENSOR_KEY_CHARGING_STATUS] == "Not Charging"
-
-    async def test_usb_connect_then_disconnect(self, hass: HomeAssistant):
-        """Latest USB event determines charging status."""
-        events = [
-            _make_cgm_event(1, 120),
-            _make_usb_connected_event(2, minutes_ago=10),
-            _make_usb_disconnected_event(3, minutes_ago=5),
-        ]
-        data = _make_pump_events_data(events)
-        coordinator = await _setup_coordinator(hass, data)
-
-        assert coordinator.data[TANDEM_SENSOR_KEY_CHARGING_STATUS] == "Not Charging"
-
-    async def test_no_battery_events_all_unavailable(self, hass: HomeAssistant):
-        """No battery events → all battery sensors UNAVAILABLE."""
+    async def test_no_battery_events_unavailable(self, hass: HomeAssistant):
+        """No battery events → battery level UNAVAILABLE."""
         events = [_make_cgm_event(1, 120)]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
 
         assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] is UNAVAILABLE
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] is UNAVAILABLE
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] is UNAVAILABLE
-        assert coordinator.data[TANDEM_SENSOR_KEY_CHARGING_STATUS] is UNAVAILABLE
 
-    async def test_all_battery_events_combined(self, hass: HomeAssistant):
-        """All battery event types present — most recent values used."""
+    async def test_status_event_level_only(self, hass: HomeAssistant):
+        """A status event sets the battery level (the only surfaced battery sensor)."""
         events = [
             _make_cgm_event(1, 120),
-            _make_daily_basal_event(2, battery_pct_msb=16, battery_pct_lsb=128, minutes_ago=60),
-            _make_shelf_mode_event(3, battery_pct=70, battery_mv=3800, battery_mah=250, minutes_ago=30),
-            _make_usb_connected_event(4, minutes_ago=10),
+            _make_status_event(2, battery_pct=70),
         ]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
 
-        # ShelfMode is newer than DailyBasal
         assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] == 70
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] == 3800
-        assert coordinator.data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] == 250
-        assert coordinator.data[TANDEM_SENSOR_KEY_CHARGING_STATUS] == "Charging"
 
 
 # ── Alert / Alarm helpers ─────────────────────────────────────────────────
@@ -1386,6 +1278,106 @@ class TestAlertAlarmCoordinator:
         coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALERT] is UNAVAILABLE
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALARM] == "Empty Cartridge"
+
+
+# ── Helpers + tests: Phase 7 (CGM sensor session / expiry) ──────────────
+
+_DAY_SECONDS = 86400
+
+
+def _make_session_event(
+    seq: int,
+    *,
+    name: str,
+    event_id: int,
+    ct: int,
+    sst: int,
+    dur: int = 10,
+    minutes_ago: int = 0,
+    stop_time=None,
+    reason: int = 0,
+) -> dict:
+    """Build a decoded CGM-session event (212/213/214) as the mapper emits it."""
+    return {
+        "event_id": event_id,
+        "event_name": name,
+        "seq": seq,
+        "timestamp": BASE_TS - timedelta(minutes=minutes_ago),
+        "current_transmitter_time": ct,
+        "session_start_time": sst,
+        "session_duration_days": dur,
+        "session_stop_time": stop_time,
+        "session_reason": reason,
+    }
+
+
+class TestCgmSessionCoordinator:
+    """CGM sensor-session expiry sensors from events 212/213/214.
+
+    start_wall = anchor.timestamp - (ct - sst); expiry = start + duration days.
+    ct/sst are chosen so expiry lands a deterministic number of days from now.
+    """
+
+    async def test_active_session_populates(self, hass: HomeAssistant):
+        """Valid join, expiry in the future → start/expiry/days populated."""
+        events = [
+            _make_cgm_event(1, 100),
+            # ct-sst = 2 days elapsed since session start → expiry 8 days out.
+            _make_session_event(2, name="CGMSessionJoin", event_id=213, ct=2 * _DAY_SECONDS, sst=0, dur=10, reason=0),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        start = coordinator.data[TANDEM_SENSOR_KEY_CGM_SESSION_START]
+        expiry = coordinator.data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY]
+        days = coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING]
+        assert isinstance(start, datetime)
+        assert isinstance(expiry, datetime)
+        assert (expiry - start) == timedelta(days=10)
+        assert 7.0 < days < 9.0
+        attrs = coordinator.data.get(f"{TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY}_attributes", {})
+        assert attrs["session_duration_days"] == 10
+        assert attrs["session_started_via"] == "User"  # reason 0
+
+    async def test_no_session_events_unavailable(self, hass: HomeAssistant):
+        """No session events → all three sensors UNAVAILABLE."""
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data([_make_cgm_event(1, 100)]))
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SESSION_START] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] is UNAVAILABLE
+
+    async def test_stop_after_join_unavailable(self, hass: HomeAssistant):
+        """A stop newer than the join → session ended → UNAVAILABLE."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_session_event(
+                2, name="CGMSessionJoin", event_id=213, ct=2 * _DAY_SECONDS, sst=0, dur=10, minutes_ago=60
+            ),
+            _make_session_event(
+                3, name="CGMSessionStop", event_id=214, ct=3 * _DAY_SECONDS, sst=0xFFFFFFFF, stop_time=0, reason=6
+            ),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] is UNAVAILABLE
+
+    async def test_expired_session_unavailable(self, hass: HomeAssistant):
+        """Anchor whose expiry is already in the past → UNAVAILABLE."""
+        events = [
+            _make_cgm_event(1, 100),
+            # 11 days elapsed on a 10-day session → expired 1 day ago.
+            _make_session_event(2, name="CGMSessionJoin", event_id=213, ct=11 * _DAY_SECONDS, sst=0, dur=10),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] is UNAVAILABLE
+
+    async def test_only_stop_event_unavailable(self, hass: HomeAssistant):
+        """A stop event's sentinel start time is not a valid anchor → UNAVAILABLE."""
+        events = [
+            _make_cgm_event(1, 100),
+            _make_session_event(
+                2, name="CGMSessionStop", event_id=214, ct=3 * _DAY_SECONDS, sst=0xFFFFFFFF, stop_time=0, reason=6
+            ),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SESSION_START] is UNAVAILABLE
 
 
 # ── Helpers: Phase 3 (CGM G7 / Libre 2 / Daily Status) ──────────────────

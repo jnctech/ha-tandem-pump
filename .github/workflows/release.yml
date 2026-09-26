@@ -3,6 +3,14 @@ name: Release
 on:
   release:
     types: [published]
+  # Reusable: the Pre-release workflow publishes with GITHUB_TOKEN, which does not fire
+  # `release: published`, so it calls this workflow directly for the tag it created.
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to build and attach assets to
+        type: string
+        required: true
 
 permissions: {}
 
@@ -14,6 +22,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Get version from manifest
         id: version
@@ -37,7 +47,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: tandem.zip
           asset_name: tandem-${{ steps.version.outputs.version }}.zip
-          tag: ${{ github.ref }}
+          tag: ${{ inputs.tag || github.ref }}
           overwrite: true
 
       - name: Upload SBOM artifact

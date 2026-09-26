@@ -10,10 +10,23 @@ import pytest
 
 from custom_components.tandem.tandem_api import (
     EVT_AA_DAILY_STATUS,
+    EVT_AA_PCM_CHANGE,
+    EVT_ALARM_ACTIVATED,
+    EVT_ALARM_CLEARED,
+    EVT_ALERT_ACTIVATED,
+    EVT_ALERT_CLEARED,
+    EVT_CGM_DATA_G7,
+    EVT_CGM_DATA_GXB,
+    EVT_CGM_SESSION_JOIN,
+    EVT_CGM_SESSION_START,
+    EVT_CGM_SESSION_STOP,
+    EVT_MALFUNCTION_ACTIVATED,
     EVT_BOLUS_REQUESTED_MSG1,
     EVT_BOLUS_REQUESTED_MSG2,
     EVT_BOLUS_REQUESTED_MSG3,
+    EVT_BATTERY_1,
     EVT_DAILY_BASAL,
+    EVT_STATUS,
     TandemSourceClient,
     TandemAuthError,
     TandemApiError,
@@ -899,6 +912,217 @@ class TestMapPumpLogEventDailyStatus:
     def test_sensor_type_unknown_code(self):
         evt = map_pump_log_event(self._event({"sensorType": 9}))
         assert evt["sensor_type"] == "Unknown (9)"
+
+
+class TestMapPumpLogEventBattery:
+    """Pump-status / battery events (9/34/35) supply the battery level from `abc`."""
+
+    def _event(self, code, props):
+        return {
+            "eventCode": code,
+            "pumpDateTime": "2026-09-06T13:04:00",
+            "sequenceNumber": 3,
+            "eventProperties": props,
+        }
+
+    def test_status_event_battery_from_abc(self):
+        # `abc` (actual battery charge) is the display %, not `ibc` (reads ceilinged).
+        evt = map_pump_log_event(self._event(EVT_STATUS, {"abc": 96, "ibc": 100}))
+        assert evt is not None
+        assert evt["event_id"] == EVT_STATUS
+        assert evt["event_name"] == "PumpStatus"
+        assert evt["battery_percent"] == 96
+
+    def test_battery_detail_event_named_battery(self):
+        evt = map_pump_log_event(self._event(EVT_BATTERY_1, {"abc": 88}))
+        assert evt["event_name"] == "Battery"
+        assert evt["battery_percent"] == 88
+
+    def test_missing_abc_is_none(self):
+        evt = map_pump_log_event(self._event(EVT_STATUS, {"ibc": 100}))
+        assert evt["battery_percent"] is None
+
+    def test_status_event_iob_duration(self):
+        # Insulin-on-board remaining duration is read from the status event (9).
+        evt = map_pump_log_event(self._event(EVT_STATUS, {"abc": 96, "iobHours": 2, "iobMinutes": 45}))
+        assert evt["iob_hours"] == 2
+        assert evt["iob_minutes"] == 45
+
+    def test_missing_iob_duration_is_none(self):
+        evt = map_pump_log_event(self._event(EVT_STATUS, {"abc": 96}))
+        assert evt["iob_hours"] is None
+        assert evt["iob_minutes"] is None
+
+    def test_battery_detail_event_has_no_iob(self):
+        # Battery-detail events (34/35) carry no IOB fields.
+        evt = map_pump_log_event(self._event(EVT_BATTERY_1, {"abc": 88}))
+        assert evt["iob_hours"] is None
+        assert evt["iob_minutes"] is None
+
+
+class TestMapPumpLogEventCgm:
+    """CGM data events (256/399) supply glucose plus transmitter signal strength."""
+
+    def _event(self, code, props):
+        return {
+            "eventCode": code,
+            "pumpDateTime": "2026-09-06T13:04:00",
+            "sequenceNumber": 7,
+            "eventProperties": props,
+        }
+
+    def test_cgm_gxb_event_reads_rssi(self):
+        evt = map_pump_log_event(self._event(EVT_CGM_DATA_GXB, {"currentGlucoseDisplayValue": 120, "rssi": -62}))
+        assert evt["event_name"] == "CGM"
+        assert evt["glucose_mgdl"] == 120
+        assert evt["rssi"] == -62
+
+    def test_cgm_g7_event_reads_rssi(self):
+        evt = map_pump_log_event(self._event(EVT_CGM_DATA_G7, {"currentGlucoseDisplayValue": 110, "rssi": -70}))
+        assert evt["rssi"] == -70
+
+    def test_cgm_missing_rssi_is_none(self):
+        evt = map_pump_log_event(self._event(EVT_CGM_DATA_G7, {"currentGlucoseDisplayValue": 110}))
+        assert evt["rssi"] is None
+
+
+class TestMapPumpLogEventPcm:
+    """PCM change events (230) carry the Control-IQ closed-loop-preferred setting."""
+
+    def _event(self, props):
+        return {
+            "eventCode": EVT_AA_PCM_CHANGE,
+            "pumpDateTime": "2026-09-06T13:04:00",
+            "sequenceNumber": 11,
+            "eventProperties": props,
+        }
+
+    def test_pcm_event_reads_closed_loop_preferred_true(self):
+        evt = map_pump_log_event(self._event({"currentPcm": 1, "closedLoopPreferred": True}))
+        assert evt["event_name"] == "PCMChange"
+        assert evt["closed_loop_preferred"] is True
+
+    def test_pcm_event_reads_closed_loop_preferred_false(self):
+        evt = map_pump_log_event(self._event({"currentPcm": 0, "closedLoopPreferred": False}))
+        assert evt["closed_loop_preferred"] is False
+
+    def test_pcm_missing_closed_loop_preferred_is_none(self):
+        evt = map_pump_log_event(self._event({"currentPcm": 1}))
+        assert evt["closed_loop_preferred"] is None
+
+
+class TestMapPumpLogEventAlertsAlarms:
+    """Alert/alarm lifecycle events (4/5/6/26/28) map to the parser contract.
+
+    The coordinator's ``_parse_alert_alarm_events`` reads ``event_name`` plus a
+    single ``alert_id`` key for both alerts and alarms, so the mapper stores the
+    id there regardless of the BFF field name (alertId / alarmId / malfId).
+    """
+
+    def _event(self, code, props):
+        return {
+            "eventCode": code,
+            "pumpDateTime": "2026-09-06T13:04:00",
+            "sequenceNumber": 9,
+            "eventProperties": props,
+        }
+
+    def test_alert_activated(self):
+        evt = map_pump_log_event(self._event(EVT_ALERT_ACTIVATED, {"alertId": 22}))
+        assert evt is not None
+        assert evt["event_name"] == "AlertActivated"
+        assert evt["alert_id"] == 22
+
+    def test_alert_cleared(self):
+        evt = map_pump_log_event(self._event(EVT_ALERT_CLEARED, {"alertId": 22}))
+        assert evt["event_name"] == "AlertCleared"
+        assert evt["alert_id"] == 22
+
+    def test_alarm_activated_uses_alarmid(self):
+        evt = map_pump_log_event(self._event(EVT_ALARM_ACTIVATED, {"alarmId": 5}))
+        assert evt["event_name"] == "AlarmActivated"
+        assert evt["alert_id"] == 5
+
+    def test_malfunction_uses_malfid(self):
+        # Event 6 carries malfId (not alarmId) per tconnectsync events.json.
+        evt = map_pump_log_event(self._event(EVT_MALFUNCTION_ACTIVATED, {"malfId": 7}))
+        assert evt["event_name"] == "MalfunctionActivated"
+        assert evt["alert_id"] == 7
+
+    def test_alarm_cleared_uses_alarmid(self):
+        evt = map_pump_log_event(self._event(EVT_ALARM_CLEARED, {"alarmId": 5}))
+        assert evt["event_name"] == "AlarmCleared"
+        assert evt["alert_id"] == 5
+
+
+class TestMapPumpLogEventCgmSession:
+    """CGM session events (212/213/214) expose the raw transmitter-clock fields.
+
+    The coordinator derives wall-clock start/expiry from these; the mapper only
+    forwards the values (sessionStartTime/currentTransmitterTime seconds,
+    sessionDuration days) plus the session reason.
+    """
+
+    def _event(self, code, props):
+        return {
+            "eventCode": code,
+            "pumpDateTime": "2026-09-05T16:13:46",
+            "sequenceNumber": 4,
+            "eventProperties": props,
+        }
+
+    def test_session_join_fields(self):
+        evt = map_pump_log_event(
+            self._event(
+                EVT_CGM_SESSION_JOIN,
+                {
+                    "currentTransmitterTime": 1673785,
+                    "sessionStartTime": 905139,
+                    "sessionDuration": 10,
+                    "sessionJoinReason": 0,
+                },
+            )
+        )
+        assert evt is not None
+        assert evt["event_name"] == "CGMSessionJoin"
+        assert evt["current_transmitter_time"] == 1673785
+        assert evt["session_start_time"] == 905139
+        assert evt["session_duration_days"] == 10
+        assert evt["session_reason"] == 0
+
+    def test_session_start_fields(self):
+        evt = map_pump_log_event(
+            self._event(
+                EVT_CGM_SESSION_START,
+                {
+                    "currentTransmitterTime": 382,
+                    "sessionStartTime": 300,
+                    "sessionDuration": 10,
+                    "sessionStartReason": 0,
+                },
+            )
+        )
+        assert evt["event_name"] == "CGMSessionStart"
+        assert evt["session_duration_days"] == 10
+
+    def test_session_stop_carries_sentinel_start(self):
+        # Stop events carry the 0xFFFFFFFF sentinel for sessionStartTime.
+        evt = map_pump_log_event(
+            self._event(
+                EVT_CGM_SESSION_STOP,
+                {
+                    "currentTransmitterTime": 1769181,
+                    "sessionStartTime": 4294967295,
+                    "sessionStopTime": 0,
+                    "sessionDuration": 10,
+                    "sessionStopReason": 6,
+                },
+            )
+        )
+        assert evt["event_name"] == "CGMSessionStop"
+        assert evt["session_start_time"] == 4294967295
+        assert evt["session_stop_time"] == 0
+        assert evt["session_reason"] == 6
 
 
 class TestMapPumpLogEventBoundaries:

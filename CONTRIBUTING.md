@@ -89,6 +89,26 @@ We follow [Git Flow](https://nvie.com/posts/a-successful-git-branching-model/):
 | `feature/*` | New features |
 | `bugfix/*` | Bug fixes |
 | `release/*` | Release preparation |
+| `chore/release-*` | Release commits created by the Pre-release workflow |
+
+### Releasing
+
+Releases are cut by the **Pre-release** workflow (Actions → Pre-release → Run workflow), not by hand:
+
+| Input | Meaning |
+|-------|---------|
+| `version` | `X.Y.Z` the release ships (the manifest version) |
+| `source` | `develop`, or a feature branch for early rc testing (must contain `develop`) |
+| `kind` | `rc` → next `vX.Y.Z-rc.N` pre-release; `final` → `vX.Y.Z` (from `develop` only) |
+| `dry_run` | default **on**: plans, bumps and runs the full CI suite, pushes and publishes nothing |
+
+A real run bumps `manifest.json`, moves the CHANGELOG `[Unreleased]` entries into the new release
+section, pushes `chore/release-<version>`, runs the full CI suite on that exact commit, publishes the
+GitHub release (notes from the CHANGELOG) with `tandem-<version>.zip` attached, and opens the
+follow-up PR into `develop` (and into `master` for a final release). Keep `[Unreleased]` in
+CHANGELOG.md current as you merge: an rc with nothing under it is refused.
+
+The logic is in `scripts/release_tool.py`, tested by `tests/test_release_tool.py`.
 
 ```bash
 git checkout develop

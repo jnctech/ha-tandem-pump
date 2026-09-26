@@ -33,6 +33,8 @@ from .tandem_api import (
     EVT_ALERT_CLEARED,
     EVT_BASAL_DELIVERY,
     EVT_BASAL_RATE_CHANGE,
+    EVT_BATTERY_1,
+    EVT_BATTERY_2,
     EVT_BG_READING_TAKEN,
     EVT_BOLEX_COMPLETED,
     EVT_BOLUS_COMPLETED,
@@ -46,6 +48,9 @@ from .tandem_api import (
     EVT_CGM_DATA_FSL2,
     EVT_CGM_DATA_G7,
     EVT_CGM_DATA_GXB,
+    EVT_CGM_SESSION_JOIN,
+    EVT_CGM_SESSION_START,
+    EVT_CGM_SESSION_STOP,
     EVT_DAILY_BASAL,
     EVT_MALFUNCTION_ACTIVATED,
     EVT_NEW_DAY,
@@ -53,14 +58,18 @@ from .tandem_api import (
     EVT_PUMPING_RESUMED,
     EVT_PUMPING_SUSPENDED,
     EVT_SHELF_MODE,
+    EVT_STATUS,
     EVT_TUBING_FILLED,
-    EVT_USB_CONNECTED,
-    EVT_USB_DISCONNECTED,
     TandemSourceClient,
     parse_dotnet_date,
 )
 from .exceptions import TandemApiError, TandemAuthError
 from .const import (
+    CGM_SESSION_REASON_MAP,
+    CGM_GLUCOSE_MGDL_MAX,
+    CGM_GLUCOSE_MGDL_MIN,
+    CGM_STATUS_HIGH,
+    CGM_STATUS_LOW,
     CGM_STATUS_MAP,
     DEVICE_PUMP_MANUFACTURER,
     DEVICE_PUMP_MODEL,
@@ -80,17 +89,18 @@ from .const import (
     TANDEM_SENSOR_KEY_BASAL_LIMIT,
     TANDEM_SENSOR_KEY_BASAL_RATE,
     TANDEM_SENSOR_KEY_BATTERY_PERCENT,
-    TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH,
-    TANDEM_SENSOR_KEY_BATTERY_VOLTAGE,
     TANDEM_SENSOR_KEY_BOLUS_CALC_ATTRS,
     TANDEM_SENSOR_KEY_CARTRIDGE_INSULIN,
     TANDEM_SENSOR_KEY_CGM_HIGH_ALERT,
     TANDEM_SENSOR_KEY_CGM_LOW_ALERT,
     TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE,
+    TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING,
     TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE,
+    TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY,
+    TANDEM_SENSOR_KEY_CGM_SESSION_START,
     TANDEM_SENSOR_KEY_CGM_STATUS,
     TANDEM_SENSOR_KEY_CGM_USAGE,
-    TANDEM_SENSOR_KEY_CHARGING_STATUS,
+    TANDEM_SENSOR_KEY_CLOSED_LOOP_PREFERRED,
     TANDEM_SENSOR_KEY_CONTROL_IQ_ENABLED,
     TANDEM_SENSOR_KEY_CONTROL_IQ_MODE,
     TANDEM_SENSOR_KEY_CONTROL_IQ_STATUS,
@@ -105,6 +115,8 @@ from .const import (
     TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV,
     TANDEM_SENSOR_KEY_GMI,
     TANDEM_SENSOR_KEY_HIGH_BG_THRESHOLD,
+    TANDEM_SENSOR_KEY_IOB_HOURS,
+    TANDEM_SENSOR_KEY_IOB_MINUTES,
     TANDEM_SENSOR_KEY_LASTSG_MGDL,
     TANDEM_SENSOR_KEY_LASTSG_MMOL,
     TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
@@ -135,6 +147,7 @@ from .const import (
     TANDEM_SENSOR_KEY_PUMP_SERIAL_INFO,
     TANDEM_SENSOR_KEY_PUMP_SUSPENDED,
     TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON,
+    TANDEM_SENSOR_KEY_RSSI,
     TANDEM_SENSOR_KEY_SG_DELTA,
     TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
     TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE,
@@ -145,6 +158,71 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+_CGM_SESSION_TIME_SENTINEL = 0xFFFFFFFF  # uint32 max — "no valid time" marker
+
+
+def _valid_session_seconds(value: Any) -> bool:
+    """True when a CGM-session transmitter-clock field holds a real second count.
+
+    Stop events (214) and absent fields use the uint32 sentinel 0xFFFFFFFF (or
+    None), which must not be treated as a real transmitter time.
+    """
+    return isinstance(value, (int, float)) and 0 <= value < _CGM_SESSION_TIME_SENTINEL
+
+
+def _clamp_cgm_over_range(evt: dict[str, Any]) -> None:
+    """Clamp an out-of-range CGM reading to the sensor's reportable bound, in place.
+
+    When the CGM reports High/Low (``glucoseValueStatus`` 1/2) the numeric
+    ``currentGlucoseDisplayValue`` is not a valid display reading: G7 (event 399)
+    sends a large raw estimate (observed 400–1200 mg/dL at status=High), while G6
+    (event 256) sends a ~0 sentinel. The physical sensor pegs at its reportable
+    bound and shows HIGH/LOW, so we clamp ``glucose_mgdl`` to that bound instead of
+    surfacing a fabricated extreme as a decision-input (ADR-008 fail-visible /
+    null-not-guess). Confirmed 2026-09-08 via a live event-399 probe.
+
+    Applied at the single point every CGM event enters the pipeline, so ALL
+    consumers see the bounded value — the latest-glucose sensor, ``_compute_cgm_summary``
+    (avg/TIR/GMI/SD), the history attributes, and the LTS statistics import (a
+    separate task that reads these same in-place-mutated event dicts). A future
+    refactor that deep-copies events before the import would need to clamp there too.
+
+    Trade-off: the summary stats then cannot tell a pegged bound from a genuine
+    reading at that bound (mirrors the physical sensor); an over-range counter could
+    restore that distinction — see ISS-260908.
+
+    Fail-visible: every clamp is logged with the raw value. A raw value OUTSIDE the
+    expected over-range signature (High → large, Low → ~0), or an out-of-band
+    magnitude carrying no High/Low status at all, is logged at WARNING — that is the
+    signature of a decode fault rather than a legitimately pegged sensor, and is the
+    case most worth surfacing. ``CGM_GLUCOSE_MGDL_MAX`` is the Dexcom G6/G7 ceiling; a
+    FreeStyle Libre (event 372) ceiling differs, but any clamp still beats a raw extreme.
+    """
+    raw = evt.get("glucose_mgdl")
+    try:
+        status = int(evt["status"]) if evt.get("status") is not None else None
+    except (TypeError, ValueError):
+        status = None
+
+    clamped: int | None = None
+    expected = False
+    if status == CGM_STATUS_HIGH:
+        clamped = CGM_GLUCOSE_MGDL_MAX
+        expected = isinstance(raw, (int, float)) and raw >= CGM_GLUCOSE_MGDL_MAX
+    elif status == CGM_STATUS_LOW:
+        clamped = CGM_GLUCOSE_MGDL_MIN
+        expected = isinstance(raw, (int, float)) and 0 <= raw <= CGM_GLUCOSE_MGDL_MIN
+    elif isinstance(raw, (int, float)) and raw > CGM_GLUCOSE_MGDL_MAX:
+        # Out-of-band magnitude with no High status: missing/malformed status or a
+        # decode fault. Never surface it raw; clamp defensively and warn.
+        clamped = CGM_GLUCOSE_MGDL_MAX
+
+    if clamped is None or clamped == raw:
+        return
+    log = _LOGGER.debug if expected else _LOGGER.warning
+    log("Tandem: CGM over-range clamp (status=%r raw=%r -> %s mg/dL)", evt.get("status"), raw, clamped)
+    evt["glucose_mgdl"] = clamped
 
 
 @dataclass
@@ -407,13 +485,17 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_FILL] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_PUMP_SUSPEND_REASON] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] = UNAVAILABLE
-        data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] = UNAVAILABLE
-        data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] = UNAVAILABLE
-        data[TANDEM_SENSOR_KEY_CHARGING_STATUS] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_RSSI] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_IOB_HOURS] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_IOB_MINUTES] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_CLOSED_LOOP_PREFERRED] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_ALERT] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_ALARM] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_CGM_SESSION_START] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION] = UNAVAILABLE
@@ -628,7 +710,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         pcm_changes: list[dict[str, Any]] = []
         daily_basal_events: list[dict[str, Any]] = []
         shelf_mode_events: list[dict[str, Any]] = []
-        usb_events: list[dict[str, Any]] = []
+        battery_status_events: list[dict[str, Any]] = []
         alert_events: list[dict[str, Any]] = []
         alarm_events: list[dict[str, Any]] = []
         daily_status_events: list[dict[str, Any]] = []
@@ -637,10 +719,14 @@ class TandemCoordinator(DataUpdateCoordinator):
         bolus_req_msg3: list[dict[str, Any]] = []
         plgs_events: list[dict[str, Any]] = []
         new_day_events: list[dict[str, Any]] = []
+        cgm_session_events: list[dict[str, Any]] = []
 
         for evt in pump_events:
             eid = evt.get("event_id")
             if eid in (EVT_CGM_DATA_GXB, EVT_CGM_DATA_G7, EVT_CGM_DATA_FSL2):
+                # Safety: clamp out-of-range readings before ANY consumer sees them
+                # (over-range G7 sends a fabricated 400–1200 mg/dL). See helper docstring.
+                _clamp_cgm_over_range(evt)
                 cgm_readings.append(evt)
             elif eid == EVT_BOLUS_COMPLETED:
                 bolus_completed.append(evt)
@@ -672,8 +758,8 @@ class TandemCoordinator(DataUpdateCoordinator):
                 daily_basal_events.append(evt)
             elif eid == EVT_SHELF_MODE:
                 shelf_mode_events.append(evt)
-            elif eid in (EVT_USB_CONNECTED, EVT_USB_DISCONNECTED):
-                usb_events.append(evt)
+            elif eid in (EVT_STATUS, EVT_BATTERY_1, EVT_BATTERY_2):
+                battery_status_events.append(evt)
             elif eid in (EVT_ALERT_ACTIVATED, EVT_ALERT_CLEARED):
                 alert_events.append(evt)
             elif eid in (EVT_ALARM_ACTIVATED, EVT_MALFUNCTION_ACTIVATED, EVT_ALARM_CLEARED):
@@ -690,13 +776,15 @@ class TandemCoordinator(DataUpdateCoordinator):
                 plgs_events.append(evt)
             elif eid == EVT_NEW_DAY:
                 new_day_events.append(evt)
+            elif eid in (EVT_CGM_SESSION_START, EVT_CGM_SESSION_JOIN, EVT_CGM_SESSION_STOP):
+                cgm_session_events.append(evt)
 
         _LOGGER.debug(
             "Tandem: Events - CGM: %d, BolusCompleted: %d, BolexCompleted: %d, "
             "BolusDelivery: %d, BasalChange: %d, BasalDelivery: %d, "
             "Suspend/Resume: %d, BG: %d, Cartridge: %d, Carbs: %d, "
             "Cannula: %d, Tubing: %d, UserMode: %d, PCM: %d, "
-            "DailyBasal: %d, ShelfMode: %d, USB: %d, "
+            "DailyBasal: %d, ShelfMode: %d, "
             "Alert: %d, Alarm: %d, DailyStatus: %d, "
             "BolusReqMsg1: %d, BolusReqMsg2: %d, BolusReqMsg3: %d, "
             "PLGS: %d, NewDay: %d",
@@ -716,7 +804,6 @@ class TandemCoordinator(DataUpdateCoordinator):
             len(pcm_changes),
             len(daily_basal_events),
             len(shelf_mode_events),
-            len(usb_events),
             len(alert_events),
             len(alarm_events),
             len(daily_status_events),
@@ -750,7 +837,6 @@ class TandemCoordinator(DataUpdateCoordinator):
         pcm_changes.sort(key=lambda e: e["timestamp"])
         daily_basal_events.sort(key=lambda e: e["timestamp"])
         shelf_mode_events.sort(key=lambda e: e["timestamp"])
-        usb_events.sort(key=lambda e: e["timestamp"])
         alert_events.sort(key=lambda e: e["timestamp"])
         alarm_events.sort(key=lambda e: e["timestamp"])
         daily_status_events.sort(key=lambda e: e["timestamp"])
@@ -760,6 +846,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         plgs_events.sort(key=lambda e: e["timestamp"])
         # NewDay events decoded for diagnostics logging (Phase 5).
         new_day_events.sort(key=lambda e: e["timestamp"])
+        cgm_session_events.sort(key=lambda e: e["timestamp"])
 
         # ── Populate current sensor values from latest events ────────
 
@@ -768,6 +855,11 @@ class TandemCoordinator(DataUpdateCoordinator):
             if cgm_readings:
                 latest = cgm_readings[-1]
                 sg_mgdl = latest.get("glucose_mgdl", 0)
+
+                # Signal strength is independent of glucose validity — surface it
+                # whenever a reading exists (absent on some transmitters -> unavailable).
+                rssi_val = latest.get("rssi")
+                data[TANDEM_SENSOR_KEY_RSSI] = rssi_val if isinstance(rssi_val, (int, float)) else UNAVAILABLE
 
                 if sg_mgdl and sg_mgdl > 0:
                     data[TANDEM_SENSOR_KEY_LASTSG_MGDL] = int(sg_mgdl)
@@ -807,6 +899,7 @@ class TandemCoordinator(DataUpdateCoordinator):
                 data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
                 data[TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE] = UNAVAILABLE
                 data[TANDEM_SENSOR_KEY_CGM_STATUS] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_RSSI] = UNAVAILABLE
         except Exception as e:
             _LOGGER.warning("Error parsing CGM: %s", e, exc_info=True)
             data[TANDEM_SENSOR_KEY_LASTSG_MMOL] = UNAVAILABLE
@@ -815,6 +908,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_SG_DELTA] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CGM_STATUS] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_RSSI] = UNAVAILABLE
 
         # ── Store recent readings history as attributes ───────────────
         # Custom Lovelace cards (e.g. ApexCharts) can use these for
@@ -1014,8 +1108,11 @@ class TandemCoordinator(DataUpdateCoordinator):
         if pcm_changes:
             last_pcm = pcm_changes[-1]
             data[TANDEM_SENSOR_KEY_CONTROL_IQ_MODE] = last_pcm.get("current_pcm", UNAVAILABLE)
+            clp = last_pcm.get("closed_loop_preferred")
+            data[TANDEM_SENSOR_KEY_CLOSED_LOOP_PREFERRED] = clp if isinstance(clp, bool) else UNAVAILABLE
         else:
             data[TANDEM_SENSOR_KEY_CONTROL_IQ_MODE] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_CLOSED_LOOP_PREFERRED] = UNAVAILABLE
 
         # ── BG readings ────────────────────────────────────────────────
         if bg_readings:
@@ -1083,53 +1180,58 @@ class TandemCoordinator(DataUpdateCoordinator):
         else:
             data[TANDEM_SENSOR_KEY_LAST_TUBING_CHANGE] = UNAVAILABLE
 
-        # ── Battery monitoring (Phase 1) ─────────────────────────────────
-        # Battery data comes from two event types:
-        # - Event 81 (DailyBasal): battery % only (emitted daily)
-        # - Event 53 (ShelfMode): battery %, voltage, mAh, current (periodic)
-        # We prefer the most recent of either source for %,
-        # and only ShelfMode provides voltage and mAh.
+        # ── Battery level ─────────────────────────────────────────────────
+        # The pump's on-screen battery percentage, from the BFF pump-status /
+        # battery-detail events (9 / 34 / 35). Their `abc` (actual battery charge)
+        # field is the display percentage — validated 2026-09-06 against the physical
+        # charge ratio remainingChargeCapacity/fullChargeCapacity. The pre-BFF
+        # sources (DailyBasal 81 / ShelfMode 53) carry no battery data under the BFF,
+        # so the level comes solely from 9/34/35. Only the level is surfaced —
+        # voltage/mAh are not consumed.
         try:
             battery_pct = UNAVAILABLE
-            battery_mv = UNAVAILABLE
-            battery_mah = UNAVAILABLE
 
-            # DailyBasal provides battery % (voltage only from ShelfMode)
-            if daily_basal_events:
-                latest_db = daily_basal_events[-1]
-                battery_pct = latest_db.get("battery_percent", UNAVAILABLE)
-
-            # ShelfMode provides voltage and mAh (always used when available)
-            # and battery % (used if newer than DailyBasal)
-            if shelf_mode_events:
-                latest_sm = shelf_mode_events[-1]
-                sm_pct = latest_sm.get("battery_percent", UNAVAILABLE)
-                battery_mv = latest_sm.get("battery_voltage_mv", UNAVAILABLE)
-                battery_mah = latest_sm.get("battery_remaining_mah", UNAVAILABLE)
-
-                # Use ShelfMode % if no DailyBasal or if ShelfMode is newer
-                if not daily_basal_events or latest_sm["timestamp"] > daily_basal_events[-1]["timestamp"]:
-                    battery_pct = sm_pct
+            # Most-recent battery-percent-bearing status/battery event.
+            battery_pct_events = [e for e in battery_status_events if e.get("battery_percent") is not None]
+            if battery_pct_events:
+                latest_batt = max(battery_pct_events, key=lambda e: e["timestamp"])
+                raw_pct = latest_batt.get("battery_percent")
+                # `abc` is a 0-100 integer; guard against an unexpected scale rather
+                # than surfacing a misleading value (null-not-guess).
+                if isinstance(raw_pct, (int, float)) and 0 <= raw_pct <= 100:
+                    battery_pct = round(raw_pct)
+                else:
+                    _LOGGER.warning(
+                        "Tandem: battery_percent out of range (%r) — leaving unavailable",
+                        raw_pct,
+                    )
 
             data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] = battery_pct
-            data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] = battery_mv
-            data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] = battery_mah
-
-            # Charging status from USB connect/disconnect events
-            if usb_events:
-                latest_usb = usb_events[-1]
-                if latest_usb.get("event_name") == "USBConnected":
-                    data[TANDEM_SENSOR_KEY_CHARGING_STATUS] = "Charging"
-                else:
-                    data[TANDEM_SENSOR_KEY_CHARGING_STATUS] = "Not Charging"
-            else:
-                data[TANDEM_SENSOR_KEY_CHARGING_STATUS] = UNAVAILABLE
         except Exception as e:
             _LOGGER.warning("Error parsing battery data: %s", e, exc_info=True)
             data[TANDEM_SENSOR_KEY_BATTERY_PERCENT] = UNAVAILABLE
-            data[TANDEM_SENSOR_KEY_BATTERY_VOLTAGE] = UNAVAILABLE
-            data[TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH] = UNAVAILABLE
-            data[TANDEM_SENSOR_KEY_CHARGING_STATUS] = UNAVAILABLE
+
+        # ── Insulin-on-board remaining duration ────────────────────────
+        # From the status event (9) only — the battery-detail events (34/35)
+        # share the bucket but carry no IOB, so filter on iob_hours presence.
+        try:
+            iob_hours = UNAVAILABLE
+            iob_minutes = UNAVAILABLE
+            iob_events = [e for e in battery_status_events if e.get("iob_hours") is not None]
+            if iob_events:
+                latest_iob = max(iob_events, key=lambda e: e["timestamp"])
+                raw_h = latest_iob.get("iob_hours")
+                raw_m = latest_iob.get("iob_minutes")
+                if isinstance(raw_h, (int, float)) and raw_h >= 0:
+                    iob_hours = int(raw_h)
+                if isinstance(raw_m, (int, float)) and raw_m >= 0:
+                    iob_minutes = int(raw_m)
+            data[TANDEM_SENSOR_KEY_IOB_HOURS] = iob_hours
+            data[TANDEM_SENSOR_KEY_IOB_MINUTES] = iob_minutes
+        except Exception as e:
+            _LOGGER.warning("Error parsing IOB duration: %s", e, exc_info=True)
+            data[TANDEM_SENSOR_KEY_IOB_HOURS] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_IOB_MINUTES] = UNAVAILABLE
 
         # ── Alerts & Alarms (Phase 2) ─────────────────────────────────
         try:
@@ -1145,6 +1247,20 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_LAST_ALERT] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_LAST_ALARM] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = UNAVAILABLE
+
+        # ── CGM Sensor Session / expiry (Phase 7) ─────────────────────
+        try:
+            self._parse_cgm_session_events(cgm_session_events, data)
+        except Exception as e:
+            _LOGGER.error(
+                "Error parsing %d CGM session event(s): %s",
+                len(cgm_session_events),
+                e,
+                exc_info=True,
+            )
+            data[TANDEM_SENSOR_KEY_CGM_SESSION_START] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] = UNAVAILABLE
+            data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] = UNAVAILABLE
 
         # ── CGM Sensor Type (Phase 3) ────────────────────────────────
         try:
@@ -1389,6 +1505,82 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         # ── Active count (alerts + alarms combined) ───────────────────
         data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = len(active_alerts) + len(active_alarms)
+
+    def _parse_cgm_session_events(
+        self,
+        cgm_session_events: list[dict[str, Any]],
+        data: dict[str, Any],
+    ) -> None:
+        """Derive CGM sensor session start / expiry from events 212/213/214.
+
+        Events (tconnectsync LID_CGM_{START,JOIN,STOP}_SESSION_GX) carry, on the
+        transmitter clock in whole seconds (uint32): ``current_transmitter_time``
+        (the clock at the event) and ``session_start_time`` (the clock when the
+        session began). ``session_duration_days`` is the session length in whole
+        days (10 for a G7 sensor). The wall-clock session start is the event's
+        ``timestamp`` minus the transmitter seconds elapsed since the session
+        began, so the result needs no epoch assumption::
+
+            start_wall  = pumpDateTime - (current_transmitter_time - session_start_time)
+            expiry_wall = start_wall + session_duration_days
+
+        When the most recent session event is a stop (214), there is no active
+        sensor session, so the sensors go unavailable rather than report a stale
+        one (null-not-guess).
+        """
+        keys = (
+            TANDEM_SENSOR_KEY_CGM_SESSION_START,
+            TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY,
+            TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING,
+        )
+        # A session is anchored by a start/join (212/213) that carries a valid
+        # transmitter start time. Stop events (214) carry the sentinel
+        # 0xFFFFFFFF for sessionStartTime, so they cannot anchor a session.
+        starts = [
+            e
+            for e in cgm_session_events
+            if e.get("event_name") in ("CGMSessionStart", "CGMSessionJoin")
+            and _valid_session_seconds(e.get("session_start_time"))
+            and _valid_session_seconds(e.get("current_transmitter_time"))
+            and isinstance(e.get("session_duration_days"), (int, float))
+        ]
+        if not starts:
+            for key in keys:
+                data[key] = UNAVAILABLE
+            return
+
+        # Most recent valid start/join (list is pre-sorted by timestamp).
+        anchor = starts[-1]
+        ct = anchor["current_transmitter_time"]
+        sst = anchor["session_start_time"]
+        duration_days = anchor["session_duration_days"]
+        tz = ZoneInfo(self.timezone)
+        start_wall = anchor["timestamp"].replace(tzinfo=tz) - timedelta(seconds=ct - sst)
+        expiry_wall = start_wall + timedelta(days=duration_days)
+        now = datetime.now(tz)
+
+        # If a stop was logged after this start, or the session has already
+        # expired, the anchored sensor is no longer current and the current
+        # sensor's start has not uploaded yet — report unavailable rather than a
+        # stale/expired session (null-not-guess).
+        stopped_after = any(
+            e.get("event_name") == "CGMSessionStop" and e["timestamp"] > anchor["timestamp"] for e in cgm_session_events
+        )
+        if stopped_after or expiry_wall <= now:
+            for key in keys:
+                data[key] = UNAVAILABLE
+            return
+
+        reason_id = anchor.get("session_reason")
+        data[TANDEM_SENSOR_KEY_CGM_SESSION_START] = start_wall
+        data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] = expiry_wall
+        data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] = round((expiry_wall - now).total_seconds() / 86400.0, 2)
+        data[f"{TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY}_attributes"] = {
+            "session_duration_days": duration_days,
+            "session_started_via": (
+                CGM_SESSION_REASON_MAP.get(reason_id, f"Reason {reason_id}") if reason_id is not None else None
+            ),
+        }
 
     def _parse_dashboard_summary(self, summary: dict[str, Any] | None, data: dict[str, Any]) -> None:
         """Parse dashboard summary into sensor values."""

@@ -1,0 +1,223 @@
+# Home Assistant Integration Quality Scale — Tandem t:slim (domain: tandem)
+#
+# Target tier:      platinum (aspirational — see docs/quality-gates.md)
+# Declared tier:    bronze  (manifest.json `quality_scale: bronze`)
+# Statuses below are CODE-VERIFIED against the source as of v2.1.0.
+#
+# The maintainer deliberately UNDER-TIERS: the platinum technical trio
+# (async-dependency, inject-websession, strict-typing) is already met, but
+# several bronze/gold rules remain `todo`, so the manifest stays at bronze
+# until every rule at/below the claimed tier is genuinely satisfied.
+#
+# `done`   = verified present in the code/docs (cite in comment where useful)
+# `todo`   = genuinely not implemented
+# `exempt` = does not apply to a cloud_polling, single-account, single-device hub
+
+rules:
+  # ─── Bronze ────────────────────────────────────────────────────────────
+  action-setup:
+    status: todo
+    comment: >-
+      import_history / capture_diagnostics are registered in async_setup_entry
+      (__init__.py _register_services), not async_setup; the integration has no
+      async_setup, so actions are unavailable until an entry loads.
+  appropriate-polling:
+    status: done
+    comment: >-
+      DataUpdateCoordinator update_interval from user scan_interval (60-900s,
+      default 300); a maxDateWithEvents metadata check short-circuits the heavy
+      pumpevents fetch when nothing changed (coordinator.py).
+  brands:
+    status: todo
+    comment: >-
+      Not registered in home-assistant/brands (no icon/logo PR merged). Known
+      blocker for a hacs/default submission.
+  common-modules:
+    status: done
+    comment: coordinator.py (TandemCoordinator) and entity.py (TandemEntity) present.
+  config-flow-test-coverage:
+    status: done
+    comment: tests/test_tandem_config_flow.py (L2 flow tests via MockConfigEntry).
+  config-flow:
+    status: done
+    comment: config_flow.py ConfigFlow with async_step_user.
+  dependency-transparency:
+    status: done
+    comment: >-
+      manifest requirements pinned exactly (aiofiles==24.1.0, certifi==2024.12.14,
+      httpx==0.28.1); tandem_api client is in-repo.
+  docs-actions:
+    status: done
+    comment: services.yaml documents import_history and capture_diagnostics with fields.
+  docs-high-level-description:
+    status: done
+    comment: README.md top section describes what the integration does.
+  docs-installation-instructions:
+    status: done
+    comment: README "Add to HACS" flow + info.md install steps.
+  docs-removal-instructions:
+    status: todo
+    comment: >-
+      README/info.md cover migrating off the OLD carelink integration, but there
+      is no dedicated "removing this integration from Home Assistant" section.
+  entity-event-setup:
+    status: done
+    comment: >-
+      Entities extend CoordinatorEntity; updates are driven by the coordinator,
+      no manual event subscription that would need explicit teardown.
+  entity-unique-id:
+    status: done
+    comment: entity.py unique_id = f"{DOMAIN}_{entry_id}_{key}" (anchored on immutable entry_id).
+  has-entity-name:
+    status: done
+    comment: entity.py sets _attr_has_entity_name = True on TandemEntity.
+  runtime-data:
+    status: done
+    comment: >-
+      Typed TandemConfigEntry = ConfigEntry[TandemRuntimeData]; state stored on
+      entry.runtime_data, not hass.data.
+  test-before-configure:
+    status: done
+    comment: config_flow validate_tandem_input() performs a live login before creating the entry.
+  test-before-setup:
+    status: done
+    comment: >-
+      async_setup_entry runs async_config_entry_first_refresh; setup failures
+      raise ConfigEntryNotReady, auth failures raise ConfigEntryAuthFailed.
+  unique-config-entry:
+    status: done
+    comment: async_set_unique_id(tandem_<email>_<region>) + _abort_if_unique_id_configured().
+
+  # ─── Silver ────────────────────────────────────────────────────────────
+  action-exceptions:
+    status: todo
+    comment: >-
+      Service handlers (import_history / capture_diagnostics) log errors and
+      return instead of raising ServiceValidationError/HomeAssistantError, so
+      failures are not surfaced to the caller.
+  config-entry-unloading:
+    status: done
+    comment: >-
+      async_unload_entry unloads platforms, removes services, and closes the
+      httpx client (__init__.py).
+  docs-configuration-parameters:
+    status: done
+    comment: strings.json / translations document email, password, region, scan_interval; README covers them.
+  docs-installation-parameters:
+    status: done
+    comment: README + info.md list the credentials/region/scan-interval needed at install.
+  entity-unavailable:
+    status: done
+    comment: >-
+      TandemEntity.available gates on coordinator.last_update_success and marks
+      stale decision-input sensors unavailable (fail-visible, ADR-008).
+  integration-owner:
+    status: done
+    comment: manifest codeowners ["@jnctech"].
+  log-when-unavailable:
+    status: done
+    comment: >-
+      Coordinator raises UpdateFailed / ConfigEntryAuthFailed; HA's
+      DataUpdateCoordinator logs the unavailable->available transition once.
+  parallel-updates:
+    status: done
+    comment: >-
+      PARALLEL_UPDATES = 0 defined in entity.py and re-exported by sensor.py /
+      binary_sensor.py (coordinator centralises all I/O).
+  reauthentication-flow:
+    status: done
+    comment: config_flow async_step_reauth / async_step_reauth_confirm; coordinator raises ConfigEntryAuthFailed.
+  test-coverage:
+    status: done
+    comment: >-
+      L0/L1/L2 suite (logic, snapshot goldens, flow tests); coverage gate
+      fail_under=80 in CI. Note: below HA's 95%/100%-config-flow bar, but a real
+      enforced suite exists.
+
+  # ─── Gold ──────────────────────────────────────────────────────────────
+  devices:
+    status: done
+    comment: entity.py device_info -> pump_device_info() builds a single pump DeviceInfo.
+  diagnostics:
+    status: done
+    comment: diagnostics.py async_get_config_entry_diagnostics with async_redact_data + sanitize_for_logging.
+  discovery-update-info:
+    status: exempt
+    comment: Cloud account integration; no network-discovered device whose connection info could change.
+  discovery:
+    status: exempt
+    comment: Credentials-based cloud hub; nothing to discover on the local network.
+  docs-data-update:
+    status: done
+    comment: README/info.md document the cloud-poll data flow ("polls every 5 min") and staleness behaviour.
+  docs-examples:
+    status: done
+    comment: examples/ (simple-dashboard.yaml, template_sensors.yaml) referenced from README.
+  docs-known-limitations:
+    status: done
+    comment: >-
+      README medical disclaimer states the cloud-upload delay limitation;
+      TROUBLESHOOTING.md covers stale/missing-data cases.
+  docs-supported-devices:
+    status: done
+    comment: README names the supported device (Tandem t:slim X2).
+  docs-supported-functions:
+    status: done
+    comment: README "What you can do" + full 73-sensor breakdown.
+  docs-troubleshooting:
+    status: done
+    comment: TROUBLESHOOTING.md linked from README with a symptom/cause table.
+  docs-use-cases:
+    status: done
+    comment: README "What you can do" lists concrete automation use cases.
+  dynamic-devices:
+    status: exempt
+    comment: Exactly one fixed pump device per account; no devices are added at runtime.
+  entity-category:
+    status: done
+    comment: EntityCategory.DIAGNOSTIC set on settings/diagnostic sensors (sensor_types.py).
+  entity-device-class:
+    status: done
+    comment: >-
+      device_class set where applicable (BLOOD_GLUCOSE_CONCENTRATION, TIMESTAMP,
+      BATTERY, WEIGHT; binary_sensor PROBLEM).
+  entity-disabled-by-default:
+    status: todo
+    comment: >-
+      All 73 sensors are enabled by default; no noisy/rarely-used entities set
+      entity_registry_enabled_default=False.
+  entity-translations:
+    status: todo
+    comment: >-
+      translations/en.json / strings.json carry only the config flow — no
+      "entity" translation block. Named Gold gap in docs/quality-gates.md.
+  exception-translations:
+    status: todo
+    comment: Config-flow errors use HA common keys, but flow/service exceptions provide no translation_key.
+  icon-translations:
+    status: todo
+    comment: No icons.json; icons are set per-EntityDescription (icon=...) rather than via icon translations.
+  reconfiguration-flow:
+    status: done
+    comment: config_flow async_step_reconfigure (scan_interval; auth preserved).
+  repair-issues:
+    status: todo
+    comment: >-
+      No ir.async_create_issue usage. Actionable conditions are surfaced instead
+      via the reauth flow and binary_sensor.tandem_data_stale, not repair issues.
+  stale-devices:
+    status: exempt
+    comment: Single fixed pump device; no dynamic device set to prune.
+
+  # ─── Platinum ──────────────────────────────────────────────────────────
+  async-dependency:
+    status: done
+    comment: In-repo tandem_api.py is fully httpx-async (docs/quality-gates.md).
+  inject-websession:
+    status: done
+    comment: >-
+      HA's managed client injected via httpx_client.get_async_client(hass) in
+      config_flow and __init__; client only self-builds when none is injected.
+  strict-typing:
+    status: done
+    comment: All modules pass mypy --strict (pyproject strict=true; CI typecheck job) — docs/quality-gates.md.

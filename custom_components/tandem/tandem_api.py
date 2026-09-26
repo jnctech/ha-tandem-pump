@@ -74,6 +74,9 @@ EVT_MALFUNCTION_ACTIVATED = 6
 EVT_USB_CONNECTED = 36
 EVT_USB_DISCONNECTED = 37
 EVT_SHELF_MODE = 53
+EVT_STATUS = 9  # LID_STATUS — periodic pump status, carries battery charge (abc)
+EVT_BATTERY_1 = 34  # LID battery detail (carries abc battery charge)
+EVT_BATTERY_2 = 35  # LID battery detail (carries abc battery charge)
 EVT_ALERT_CLEARED = 26
 EVT_ALARM_CLEARED = 28
 EVT_DAILY_BASAL = 81
@@ -90,6 +93,9 @@ EVT_PLGS_PERIODIC = 140
 EVT_AA_DAILY_STATUS = 313
 EVT_CGM_DATA_FSL2 = 372
 EVT_CGM_DATA_G7 = 399
+EVT_CGM_SESSION_START = 212  # LID_CGM_START_SESSION_GX
+EVT_CGM_SESSION_JOIN = 213  # LID_CGM_JOIN_SESSION_GX
+EVT_CGM_SESSION_STOP = 214  # LID_CGM_STOP_SESSION_GX
 
 
 def _decode_cgm_gxb_layout(evt: dict[str, Any], payload: bytes) -> None:
@@ -568,12 +574,15 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
     ``timestamp`` naive-local, ``event_name`` + per-type payload fields), or
     ``None`` for event types the coordinator does not consume from this path.
 
-    NOTE (staged): core event types plus the bolus-calculator (64/65/66) and
-    Control-IQ daily status (313, CGM sensor type) are mapped. Still unmapped —
-    their sensors read unavailable (null-not-guess) until added: battery/status
-    (9/34/35/53), alerts/alarms (4/5/6/26/27/28), USB charging (36/37), daily
-    basal (81), new day (90), PLGS (140), CGM session (212/213/214). Live
-    eventProperties keys are recorded in .remember/BFF-LIVE-VALIDATION-2026-09-06.md.
+    NOTE (staged): core event types plus the bolus-calculator (64/65/66),
+    Control-IQ daily status (313, CGM sensor type), pump-status/battery
+    (9/34/35, battery level from ``abc``), alerts/alarms (4/5/6/26/28) and
+    CGM session (212/213/214) are mapped. Still unmapped — their sensors read
+    unavailable (null-not-guess) until added: ShelfMode (53), USB charging
+    (36/37), daily basal (81), new day (90), PLGS (140). Codes 8 and 27 appear
+    live but are absent from the tconnectsync event catalog, so they stay
+    unmapped pending identification. Live eventProperties keys are recorded in
+    .remember/BFF-LIVE-VALIDATION-2026-09-06.md.
     """
     event_id = event.get("eventCode")
     ts = _parse_pump_datetime(event.get("pumpDateTime"))
@@ -590,6 +599,9 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         rate = g("rate")
         evt["rate_of_change"] = round(rate * 0.1, 1) if isinstance(rate, (int, float)) else None
         evt["status"] = g("glucosevaluestatus")
+        # CGM transmitter signal strength. Confirmed present on event 256 (G6/GXB)
+        # in live validation; not confirmed on 399 (G7) — absent -> None (null-not-guess).
+        evt["rssi"] = g("rssi")
 
     elif event_id in (EVT_BOLUS_COMPLETED, EVT_BOLEX_COMPLETED):
         evt["event_name"] = "BolusCompleted" if event_id == EVT_BOLUS_COMPLETED else "BolexCompleted"
@@ -682,6 +694,8 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         previous = g("previouspcm")
         evt["current_pcm"] = _PCM_MAP.get(current, f"PCM_{current}")
         evt["previous_pcm"] = _PCM_MAP.get(previous, f"PCM_{previous}")
+        # Control-IQ setting: whether the user prefers closed-loop operation.
+        evt["closed_loop_preferred"] = _as_bool(g("closedlooppreferred"))
 
     elif event_id == EVT_BOLUS_REQUESTED_MSG1:
         # Bolus calculator message 1 — carbs/BG/IOB at request time. Joined with
@@ -724,6 +738,59 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         evt["sensor_type"] = _CGM_SENSOR_TYPE_MAP.get(sensor_type, f"Unknown ({sensor_type})")
         evt["user_mode"] = g("usermode")
         evt["pump_control_state"] = g("pumpcontrolstate")
+
+    elif event_id in (EVT_STATUS, EVT_BATTERY_1, EVT_BATTERY_2):
+        # Pump status / battery-detail events. `abc` (actual battery charge) is the
+        # display battery percentage (0-100) — the value behind the pump's on-screen
+        # battery icon. Live validation (2026-09-06, event 9): abc=96 matched the
+        # physical charge ratio remainingChargeCapacity/fullChargeCapacity
+        # (403/420 = 96%), while the sibling `ibc` read a ceilinged 100. Used
+        # directly (no scaling); only the level is surfaced (not voltage/capacity).
+        evt["event_name"] = "PumpStatus" if event_id == EVT_STATUS else "Battery"
+        evt["battery_percent"] = g("abc")
+        # Insulin-on-board remaining duration (hours + minutes). Present on the
+        # status event (9) only; the battery-detail events (34/35) carry no IOB,
+        # so these read None there (null-not-guess).
+        evt["iob_hours"] = g("iobhours")
+        evt["iob_minutes"] = g("iobminutes")
+
+    elif event_id in (EVT_ALERT_ACTIVATED, EVT_ALERT_CLEARED):
+        # Alert lifecycle (tconnectsync LID_ALERT_ACTIVATED/CLEARED). The
+        # coordinator replays activate/clear pairs keyed on evt["alert_id"].
+        evt["event_name"] = "AlertActivated" if event_id == EVT_ALERT_ACTIVATED else "AlertCleared"
+        evt["alert_id"] = g("alertid")
+
+    elif event_id in (EVT_ALARM_ACTIVATED, EVT_MALFUNCTION_ACTIVATED, EVT_ALARM_CLEARED):
+        # Alarm / malfunction lifecycle. The id field name differs per code
+        # (alarmId for 5/28, malfId for 6 — tconnectsync events.json); all are
+        # stored under evt["alert_id"], the single key the coordinator reads.
+        evt["event_name"] = {
+            EVT_ALARM_ACTIVATED: "AlarmActivated",
+            EVT_MALFUNCTION_ACTIVATED: "MalfunctionActivated",
+            EVT_ALARM_CLEARED: "AlarmCleared",
+        }[event_id]
+        evt["alert_id"] = g("malfid") if event_id == EVT_MALFUNCTION_ACTIVATED else g("alarmid")
+
+    elif event_id in (EVT_CGM_SESSION_START, EVT_CGM_SESSION_JOIN, EVT_CGM_SESSION_STOP):
+        # CGM sensor session lifecycle (tconnectsync LID_CGM_{START,JOIN,STOP}_SESSION_GX).
+        # Fields (events.json): sessionStartTime / currentTransmitterTime are uint32
+        # seconds on the transmitter clock (NOT wall-clock); sessionDuration is a
+        # uint8 count of DAYS (10 for a G7 sensor). The coordinator derives the
+        # wall-clock start as pumpDateTime - (currentTransmitterTime - sessionStartTime).
+        evt["event_name"] = {
+            EVT_CGM_SESSION_START: "CGMSessionStart",
+            EVT_CGM_SESSION_JOIN: "CGMSessionJoin",
+            EVT_CGM_SESSION_STOP: "CGMSessionStop",
+        }[event_id]
+        evt["current_transmitter_time"] = g("currenttransmittertime")
+        evt["session_start_time"] = g("sessionstarttime")
+        evt["session_duration_days"] = g("sessionduration")
+        evt["session_stop_time"] = g("sessionstoptime")
+        # First non-None reason (reason 0 = "User" is falsy — do not use ``or``).
+        evt["session_reason"] = next(
+            (r for r in (g("sessionstopreason"), g("sessionjoinreason"), g("sessionstartreason")) if r is not None),
+            None,
+        )
 
     else:
         return None

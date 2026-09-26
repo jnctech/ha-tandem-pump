@@ -6,7 +6,7 @@
 > This software is provided as-is with no warranty.
 
 The only Home Assistant integration for the **Tandem t:slim X2** insulin pump.
-Connect to your existing **Tandem Source** account and get **69 sensors** covering every
+Connect to your existing **Tandem Source** account and get **73 sensors** covering every
 metric your pump reports — glucose, insulin on board, Control-IQ status, battery, alerts, and more.
 
 **No extra hardware. No developer account. Just your Tandem Source login.**
@@ -21,8 +21,8 @@ Live CGM in mg/dL and mmol/L, rate of change, delta, time in range, GMI, SD, CV,
 **Insulin Delivery (14 sensors)**
 IOB, current basal rate, last bolus, TDI, daily totals, carb intake, bolus calculator details, estimated remaining insulin
 
-**Pump Battery (4 sensors)**
-Battery %, voltage (mV), remaining capacity (mAh), charging status
+**Pump Battery (1 sensor)**
+Battery level (%)
 
 **Alerts & Alarms (3 sensors)**
 Last alert, last alarm, active alert count — with human-readable names for ~65 alert/alarm types
@@ -76,11 +76,18 @@ The Tandem app uploads roughly once per hour when running unrestricted.
 
 ---
 
-## Upgrading from v1.3.x?
+## Upgrading from a pre-2.0 (`carelink`) release?
 
-Entity IDs now include a `tandem_` prefix (e.g. `sensor.tandem_last_glucose_level_mmol`).
-Update dashboards and automations after upgrading.
-Statistics Graph entities (`sensor.tandem_*`) are **not** affected.
+**v2.0.0 is a clean install, not an in-place upgrade.** The integration moved to
+the `tandem` domain and dropped the Medtronic CareLink path, so it does **not**
+migrate the old `carelink` config entry or its statistics history.
+
+1. Note your Tandem Source credentials (email, region, scan interval).
+2. Remove the old integration and delete the stale `config/custom_components/carelink/` folder.
+3. Install v2.0.0 and add **Tandem t:slim Pump** fresh.
+
+Entities are `sensor.tandem_*` — update any dashboards/automations that referenced the old ids.
+See the [README](https://github.com/jnctech/ha-tandem-pump#upgrading-from-the-old-carelink-domain-releases) for full details.
 
 ---
 

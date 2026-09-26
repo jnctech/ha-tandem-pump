@@ -721,6 +721,162 @@
     'state': 'unknown',
   })
 # ---
+# name: test_sensor_golden[sensor.tandem_cgm_sensor_days_remaining-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': set({
+    }),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': None,
+    'entity_id': 'sensor.tandem_cgm_sensor_days_remaining',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'CGM sensor days remaining',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:timer-sand',
+    'original_name': 'CGM sensor days remaining',
+    'platform': 'tandem',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_cgm_sensor_days_remaining',
+    'unit_of_measurement': 'd',
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_cgm_sensor_days_remaining-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'attribution': 'Data provided by Tandem Source',
+      'friendly_name': 'Tandem CGM sensor days remaining',
+      'icon': 'mdi:timer-sand',
+      'unit_of_measurement': 'd',
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.tandem_cgm_sensor_days_remaining',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'unknown',
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_cgm_sensor_session_expiry-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': set({
+    }),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': None,
+    'entity_id': 'sensor.tandem_cgm_sensor_session_expiry',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'CGM sensor session expiry',
+    'options': dict({
+    }),
+    'original_device_class': <SensorDeviceClass.TIMESTAMP: 'timestamp'>,
+    'original_icon': 'mdi:calendar-clock',
+    'original_name': 'CGM sensor session expiry',
+    'platform': 'tandem',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_cgm_session_expiry',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_cgm_sensor_session_expiry-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'attribution': 'Data provided by Tandem Source',
+      'device_class': 'timestamp',
+      'friendly_name': 'Tandem CGM sensor session expiry',
+      'icon': 'mdi:calendar-clock',
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.tandem_cgm_sensor_session_expiry',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'unknown',
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_cgm_sensor_session_start-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': set({
+    }),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'sensor.tandem_cgm_sensor_session_start',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'CGM sensor session start',
+    'options': dict({
+    }),
+    'original_device_class': <SensorDeviceClass.TIMESTAMP: 'timestamp'>,
+    'original_icon': 'mdi:play-circle-outline',
+    'original_name': 'CGM sensor session start',
+    'platform': 'tandem',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_cgm_session_start',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_cgm_sensor_session_start-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'attribution': 'Data provided by Tandem Source',
+      'device_class': 'timestamp',
+      'friendly_name': 'Tandem CGM sensor session start',
+      'icon': 'mdi:play-circle-outline',
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.tandem_cgm_sensor_session_start',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'unknown',
+  })
+# ---
 # name: test_sensor_golden[sensor.tandem_cgm_sensor_type-entry]
   EntityRegistryEntrySnapshot({
     'aliases': set({
@@ -766,6 +922,60 @@
     }),
     'context': <ANY>,
     'entity_id': 'sensor.tandem_cgm_sensor_type',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'unknown',
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_cgm_signal_strength-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': set({
+    }),
+    'area_id': None,
+    'capabilities': dict({
+      'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'sensor.tandem_cgm_signal_strength',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'CGM signal strength',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:signal',
+    'original_name': 'CGM signal strength',
+    'platform': 'tandem',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_rssi',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_cgm_signal_strength-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'attribution': 'Data provided by Tandem Source',
+      'friendly_name': 'Tandem CGM signal strength',
+      'icon': 'mdi:signal',
+      'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.tandem_cgm_signal_strength',
     'last_changed': <ANY>,
     'last_reported': <ANY>,
     'last_updated': <ANY>,
@@ -876,6 +1086,57 @@
     'last_reported': <ANY>,
     'last_updated': <ANY>,
     'state': '95.0',
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_closed_loop_preferred-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': set({
+    }),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'sensor.tandem_closed_loop_preferred',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Closed loop preferred',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:robot',
+    'original_name': 'Closed loop preferred',
+    'platform': 'tandem',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_closed_loop_preferred',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_closed_loop_preferred-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'attribution': 'Data provided by Tandem Source',
+      'friendly_name': 'Tandem Closed loop preferred',
+      'icon': 'mdi:robot',
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.tandem_closed_loop_preferred',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'unknown',
   })
 # ---
 # name: test_sensor_golden[sensor.tandem_control_iq_enabled-entry]
@@ -1616,6 +1877,116 @@
     'last_reported': <ANY>,
     'last_updated': <ANY>,
     'state': '214',
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_insulin_on_board_hours-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': set({
+    }),
+    'area_id': None,
+    'capabilities': dict({
+      'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'sensor.tandem_insulin_on_board_hours',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Insulin on board (hours)',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:timer-sand',
+    'original_name': 'Insulin on board (hours)',
+    'platform': 'tandem',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_iob_hours',
+    'unit_of_measurement': <UnitOfTime.HOURS: 'h'>,
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_insulin_on_board_hours-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'attribution': 'Data provided by Tandem Source',
+      'friendly_name': 'Tandem Insulin on board (hours)',
+      'icon': 'mdi:timer-sand',
+      'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
+      'unit_of_measurement': <UnitOfTime.HOURS: 'h'>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.tandem_insulin_on_board_hours',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'unknown',
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_insulin_on_board_minutes-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': set({
+    }),
+    'area_id': None,
+    'capabilities': dict({
+      'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
+    }),
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
+    'entity_id': 'sensor.tandem_insulin_on_board_minutes',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Insulin on board (minutes)',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:timer-sand',
+    'original_name': 'Insulin on board (minutes)',
+    'platform': 'tandem',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_iob_minutes',
+    'unit_of_measurement': <UnitOfTime.MINUTES: 'min'>,
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_insulin_on_board_minutes-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'attribution': 'Data provided by Tandem Source',
+      'friendly_name': 'Tandem Insulin on board (minutes)',
+      'icon': 'mdi:timer-sand',
+      'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
+      'unit_of_measurement': <UnitOfTime.MINUTES: 'min'>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.tandem_insulin_on_board_minutes',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'unknown',
   })
 # ---
 # name: test_sensor_golden[sensor.tandem_last_bg_reading-entry]
@@ -3107,171 +3478,6 @@
     }),
     'context': <ANY>,
     'entity_id': 'sensor.tandem_pump_battery_level',
-    'last_changed': <ANY>,
-    'last_reported': <ANY>,
-    'last_updated': <ANY>,
-    'state': 'unknown',
-  })
-# ---
-# name: test_sensor_golden[sensor.tandem_pump_battery_remaining-entry]
-  EntityRegistryEntrySnapshot({
-    'aliases': set({
-    }),
-    'area_id': None,
-    'capabilities': dict({
-      'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
-    }),
-    'config_entry_id': <ANY>,
-    'config_subentry_id': <ANY>,
-    'device_class': None,
-    'device_id': <ANY>,
-    'disabled_by': None,
-    'domain': 'sensor',
-    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
-    'entity_id': 'sensor.tandem_pump_battery_remaining',
-    'has_entity_name': True,
-    'hidden_by': None,
-    'icon': None,
-    'id': <ANY>,
-    'labels': set({
-    }),
-    'name': None,
-    'object_id_base': 'Pump battery remaining',
-    'options': dict({
-    }),
-    'original_device_class': None,
-    'original_icon': 'mdi:battery-charging',
-    'original_name': 'Pump battery remaining',
-    'platform': 'tandem',
-    'previous_unique_id': None,
-    'suggested_object_id': None,
-    'supported_features': 0,
-    'translation_key': None,
-    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_battery_remaining_mah',
-    'unit_of_measurement': 'mAh',
-  })
-# ---
-# name: test_sensor_golden[sensor.tandem_pump_battery_remaining-state]
-  StateSnapshot({
-    'attributes': ReadOnlyDict({
-      'attribution': 'Data provided by Tandem Source',
-      'friendly_name': 'Tandem Pump battery remaining',
-      'icon': 'mdi:battery-charging',
-      'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
-      'unit_of_measurement': 'mAh',
-    }),
-    'context': <ANY>,
-    'entity_id': 'sensor.tandem_pump_battery_remaining',
-    'last_changed': <ANY>,
-    'last_reported': <ANY>,
-    'last_updated': <ANY>,
-    'state': 'unknown',
-  })
-# ---
-# name: test_sensor_golden[sensor.tandem_pump_battery_voltage-entry]
-  EntityRegistryEntrySnapshot({
-    'aliases': set({
-    }),
-    'area_id': None,
-    'capabilities': dict({
-      'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
-    }),
-    'config_entry_id': <ANY>,
-    'config_subentry_id': <ANY>,
-    'device_class': None,
-    'device_id': <ANY>,
-    'disabled_by': None,
-    'domain': 'sensor',
-    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
-    'entity_id': 'sensor.tandem_pump_battery_voltage',
-    'has_entity_name': True,
-    'hidden_by': None,
-    'icon': None,
-    'id': <ANY>,
-    'labels': set({
-    }),
-    'name': None,
-    'object_id_base': 'Pump battery voltage',
-    'options': dict({
-      'sensor': dict({
-        'suggested_display_precision': 0,
-      }),
-    }),
-    'original_device_class': <SensorDeviceClass.VOLTAGE: 'voltage'>,
-    'original_icon': 'mdi:flash',
-    'original_name': 'Pump battery voltage',
-    'platform': 'tandem',
-    'previous_unique_id': None,
-    'suggested_object_id': None,
-    'supported_features': 0,
-    'translation_key': None,
-    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_battery_voltage',
-    'unit_of_measurement': <UnitOfElectricPotential.MILLIVOLT: 'mV'>,
-  })
-# ---
-# name: test_sensor_golden[sensor.tandem_pump_battery_voltage-state]
-  StateSnapshot({
-    'attributes': ReadOnlyDict({
-      'attribution': 'Data provided by Tandem Source',
-      'device_class': 'voltage',
-      'friendly_name': 'Tandem Pump battery voltage',
-      'icon': 'mdi:flash',
-      'state_class': <SensorStateClass.MEASUREMENT: 'measurement'>,
-      'unit_of_measurement': <UnitOfElectricPotential.MILLIVOLT: 'mV'>,
-    }),
-    'context': <ANY>,
-    'entity_id': 'sensor.tandem_pump_battery_voltage',
-    'last_changed': <ANY>,
-    'last_reported': <ANY>,
-    'last_updated': <ANY>,
-    'state': 'unknown',
-  })
-# ---
-# name: test_sensor_golden[sensor.tandem_pump_charging_status-entry]
-  EntityRegistryEntrySnapshot({
-    'aliases': set({
-    }),
-    'area_id': None,
-    'capabilities': None,
-    'config_entry_id': <ANY>,
-    'config_subentry_id': <ANY>,
-    'device_class': None,
-    'device_id': <ANY>,
-    'disabled_by': None,
-    'domain': 'sensor',
-    'entity_category': <EntityCategory.DIAGNOSTIC: 'diagnostic'>,
-    'entity_id': 'sensor.tandem_pump_charging_status',
-    'has_entity_name': True,
-    'hidden_by': None,
-    'icon': None,
-    'id': <ANY>,
-    'labels': set({
-    }),
-    'name': None,
-    'object_id_base': 'Pump charging status',
-    'options': dict({
-    }),
-    'original_device_class': None,
-    'original_icon': 'mdi:power-plug',
-    'original_name': 'Pump charging status',
-    'platform': 'tandem',
-    'previous_unique_id': None,
-    'suggested_object_id': None,
-    'supported_features': 0,
-    'translation_key': None,
-    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_charging_status',
-    'unit_of_measurement': None,
-  })
-# ---
-# name: test_sensor_golden[sensor.tandem_pump_charging_status-state]
-  StateSnapshot({
-    'attributes': ReadOnlyDict({
-      'attribution': 'Data provided by Tandem Source',
-      'friendly_name': 'Tandem Pump charging status',
-      'icon': 'mdi:power-plug',
-    }),
-    'context': <ANY>,
-    'entity_id': 'sensor.tandem_pump_charging_status',
     'last_changed': <ANY>,
     'last_reported': <ANY>,
     'last_updated': <ANY>,

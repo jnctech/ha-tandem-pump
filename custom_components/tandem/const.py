@@ -116,6 +116,11 @@ TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT = "tandem_active_alerts_count"
 # ── CGM sensor type key (Phase 3 — from event 313) ────────────────────
 TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE = "tandem_cgm_sensor_type"
 
+# ── CGM sensor session keys (Phase 7 — from events 212, 213, 214) ─────
+TANDEM_SENSOR_KEY_CGM_SESSION_START = "tandem_cgm_session_start"
+TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY = "tandem_cgm_session_expiry"
+TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING = "tandem_cgm_sensor_days_remaining"
+
 # ── Bolus Calculator keys (Phase 4 — from events 64, 65, 66) ─────────
 TANDEM_SENSOR_KEY_LAST_BOLUS_BG = "tandem_last_bolus_bg"
 TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS = "tandem_last_bolus_carbs_entered"
@@ -129,14 +134,44 @@ TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE = "tandem_predicted_glucose"
 # ── Estimated Remaining Insulin key (Phase 6 — computed) ──────────────
 TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING = "tandem_estimated_insulin_remaining"
 
-# ── Battery monitoring keys (Phase 1 — from events 81, 53, 36, 37) ────
+# ── Battery monitoring key (Phase 1 — from events 9, 34, 35) ────
 TANDEM_SENSOR_KEY_BATTERY_PERCENT = "tandem_battery_percent"
-TANDEM_SENSOR_KEY_BATTERY_VOLTAGE = "tandem_battery_voltage"
-TANDEM_SENSOR_KEY_BATTERY_REMAINING_MAH = "tandem_battery_remaining_mah"
-TANDEM_SENSOR_KEY_CHARGING_STATUS = "tandem_charging_status"
+
+# ── Cheap-win keys (one-line reads of fields already on existing events) ──
+# CGM transmitter signal strength (event 256 / 399, field `rssi`).
+TANDEM_SENSOR_KEY_RSSI = "tandem_rssi"
+# Insulin-on-board duration (event 9 status, fields `iobHours` / `iobMinutes`).
+TANDEM_SENSOR_KEY_IOB_HOURS = "tandem_iob_hours"
+TANDEM_SENSOR_KEY_IOB_MINUTES = "tandem_iob_minutes"
+# Control-IQ closed-loop-preferred setting (event 230 PCM, field `closedLoopPreferred`).
+TANDEM_SENSOR_KEY_CLOSED_LOOP_PREFERRED = "tandem_closed_loop_preferred"
 
 # ── Lookup maps for event-derived sensor values ───────────────────────
 CGM_STATUS_MAP: dict[int, str] = {0: "Normal", 1: "High", 2: "Low"}
+
+# glucoseValueStatus codes (from CGM_STATUS_MAP) used to gate the numeric reading.
+CGM_STATUS_HIGH = 1
+CGM_STATUS_LOW = 2
+
+# Dexcom G6/G7 reportable range (mg/dL). Above/below this the sensor reports HIGH/LOW
+# rather than a number, and the BFF's ``currentGlucoseDisplayValue`` then carries an
+# out-of-range placeholder that differs by sensor: G6 sends a ~0 sentinel, but G7 (event
+# 399) sends a LARGE raw estimate (observed 400–1200 mg/dL when glucoseValueStatus=High).
+# When the status is High/Low we clamp the reading to these bounds so a fabricated extreme
+# is never surfaced as a decision-input (see ADR-008 fail-visible / null-not-guess).
+# Confirmed 2026-09-08 via live event-399 probe (G7 High → 33–66 mmol/L before the clamp).
+CGM_GLUCOSE_MGDL_MAX = 400
+CGM_GLUCOSE_MGDL_MIN = 40
+
+# CGM session start/join/stop reason → name (tconnectsync DexblesReason enum).
+# Only the confirmed members are listed; others fall back to "Reason {id}".
+CGM_SESSION_REASON_MAP: dict[int, str] = {
+    0: "User",
+    1: "Unknown",
+    3: "Transmitter End of Life",
+    4: "Transmitter Error",
+    5: "Session Stop Success",
+}
 
 # Alert and alarm ID → human-readable name maps.
 # Sourced from tconnectsync static_dicts.py (jwoglom/tconnectsync).

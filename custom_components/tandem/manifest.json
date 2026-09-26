@@ -12,6 +12,6 @@
   "loggers": ["httpx"],
   "quality_scale": "bronze",
   "requirements": ["aiofiles==24.1.0", "certifi==2024.12.14", "httpx==0.28.1"],
-  "version": "2.0.0",
+  "version": "2.2.1",
   "zeroconf": []
 }

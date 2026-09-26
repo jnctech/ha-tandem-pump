@@ -7,6 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+## [2.2.1] - 2026-09-09
+
+### Fixed
+- **CGM glucose over-read on Dexcom G7 (safety).** When the CGM reports out of range
+  (`glucoseValueStatus` High/Low), the Source BFF `currentGlucoseDisplayValue` is not a valid
+  display reading — G7 (event 399) sends a large raw estimate (observed 400–1200 mg/dL at
+  status=High) while G6 (event 256) sends a ~0 sentinel. The integration surfaced that raw value
+  verbatim, so a genuine high could display as 33–66 mmol/L as a live reading (with
+  `data_stale` off). Glucose is now clamped to the sensor's reportable bound (High → 400 mg/dL /
+  22.2 mmol, Low → 40 mg/dL / 2.2 mmol) at the source, so the latest-glucose sensor **and** all
+  derived stats (average / TIR / GMI / SG-delta) use the bounded value; in-range (Normal)
+  readings are unchanged. Each clamp is logged, with a warning on a decode-fault signature. (#85)
+
+## [2.2.0] - 2026-09-07
+
+### Added
+- **Four new sensors** read from fields already present on existing pump events
+  (no extra API calls):
+  - **CGM signal strength** (`rssi`) from CGM events (256/399) — diagnostic. Confirmed
+    present on G6/GXB (256); may read unavailable on G7 (399) until confirmed live.
+  - **Insulin on board — hours** and **minutes** (`iobHours` / `iobMinutes`) from the
+    pump status event (9), giving the remaining IOB duration — diagnostic.
+  - **Closed loop preferred** (`closedLoopPreferred`) from the PCM event (230), the
+    Control-IQ closed-loop preference — diagnostic.
+  - Sensor count is now 73.
+
+## [2.1.1] - 2026-09-07
+
+### Added
+- **Local brand icon** — bundled `custom_components/tandem/brand/icon.png` so the
+  integration provides its own brand assets. Since Home Assistant 2026.3, custom
+  integrations serve brand images from a local `brand/` directory (brands proxy API),
+  which takes precedence over the `home-assistant/brands` repository. This satisfies the
+  HACS validation `brands` check without an external brands-repository PR, unblocking a
+  HACS default-store submission. No functional change to the integration.
+
+## [2.1.0] - 2026-09-07
+
+### Added
+- **CGM sensor session expiry** — three new sensors from the CGM session events
+  (212/213/214): `cgm_session_start`, `cgm_session_expiry` (session start + duration,
+  10 days on a G7), and `cgm_sensor_days_remaining`. Answers the "when does my sensor
+  expire" request (discussion #67). The wall-clock start is derived from the pump /
+  transmitter clock (`pumpDateTime - (currentTransmitterTime - sessionStartTime)`), so it
+  needs no epoch assumption. The sensors read unavailable between sessions and until the
+  active session's start event uploads (null-not-guess).
+- **Pump alert / alarm sensors now populate** — the BFF alert/alarm lifecycle events
+  (4/5/6/26/28) are now mapped, so `last_pump_alert`, `last_pump_alarm` and
+  `active_pump_alerts` report live values with human-readable names (previously always
+  unavailable). Event codes 8 and 27 appear live but are absent from the tconnectsync
+  catalog and remain unmapped pending identification.
+
+Sensor count is now 69.
+
+## [2.0.1] - 2026-09-06
+
+Battery-level fix and battery-sensor cleanup on top of the v2.0.0 BFF migration.
+
+### Fixed
+- **Pump battery level always "unavailable"** — the level was sourced from events 81
+  (DailyBasal) / 53 (ShelfMode), which carry no battery data under the BFF (81 has none;
+  53 is absent on current firmware). The level is now read from the pump-status /
+  battery-detail events (9 / 34 / 35) via their `abc` (actual battery charge) field,
+  validated live against the physical charge ratio. Value is guarded to 0-100.
+
+### Removed
+- **Pump battery voltage, remaining (mAh), and charging-status sensors** — these had no
+  populated source under the BFF and reported only "unavailable". Removed along with the
+  now-unused USB charge-event handling; the pump battery **level** sensor remains. Sensor
+  count is now 66.
+
+### Docs
+- Fixed the `info.md` "Upgrading from …" section to match the README's v2 clean-install model
+  (v2.0.0 is a clean install; it does not migrate the old `carelink` entry or its statistics).
+
 ## [2.0.0] - 2026-09-06
 
 First stable release of the Tandem-only v2 rewrite. Restores full sensor data after

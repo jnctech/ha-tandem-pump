@@ -7,7 +7,8 @@ name: Pre-release
 #   3. publish  - GitHub release at that commit (pre-release for rc), notes from the CHANGELOG
 #   4. assets   - release.yml builds and attaches tandem-<version>.zip
 #   5. PRs      - release branch -> develop (and -> master for a final release)
-# The logic lives in scripts/release_tool.py and is unit-tested by tests/test_release_tool.py.
+# The logic lives in scripts/release_tool.py (taken from this workflow's commit, not the source
+# branch) and is unit-tested by tests/test_release_tool.py.
 # Dry run (the default) does steps 1-2 on the source commit and pushes nothing.
 
 on:
@@ -62,6 +63,19 @@ jobs:
           ref: ${{ inputs.source }}
           fetch-depth: 0
 
+      # Release tooling comes from the workflow's own commit, so any source branch can be
+      # released even if it predates scripts/release_tool.py.
+      - name: Check out release tooling
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: scripts/release_tool.py
+          sparse-checkout-cone-mode: false
+
+      - name: Keep tooling out of the release commit
+        run: echo ".release-tools/" >> .git/info/exclude
+
       - name: Plan release
         id: plan
         run: |
@@ -73,7 +87,7 @@ jobs:
           if ! git merge-base --is-ancestor origin/develop HEAD; then
             echo "::error::$SOURCE does not contain the latest develop - merge develop into it first."; exit 1
           fi
-          TAG=$(git tag -l | python3 scripts/release_tool.py next-tag --version "$VERSION" --kind "$KIND")
+          TAG=$(git tag -l | python3 .release-tools/scripts/release_tool.py next-tag --version "$VERSION" --kind "$KIND")
           TAG_VERSION="${TAG#v}"
           BRANCH="chore/release-$TAG_VERSION"
           if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
@@ -92,10 +106,10 @@ jobs:
           TAG_VERSION: ${{ steps.plan.outputs.tag_version }}
         run: |
           set -euo pipefail
-          python3 scripts/release_tool.py bump --version "$VERSION"
+          python3 .release-tools/scripts/release_tool.py bump --version "$VERSION"
           allow_empty=()
           if [ "$KIND" = final ]; then allow_empty=(--allow-empty); fi
-          python3 scripts/release_tool.py cut-changelog --tag-version "$TAG_VERSION" --date "$(date -u +%F)" "${allow_empty[@]}"
+          python3 .release-tools/scripts/release_tool.py cut-changelog --tag-version "$TAG_VERSION" --date "$(date -u +%F)" "${allow_empty[@]}"
           {
             echo "## $TAG"
             echo
@@ -107,7 +121,7 @@ jobs:
             echo
             echo "### Release notes"
             echo
-            python3 scripts/release_tool.py notes --tag-version "$TAG_VERSION"
+            python3 .release-tools/scripts/release_tool.py notes --tag-version "$TAG_VERSION"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit and push release branch
@@ -157,10 +171,20 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
+      # Release tooling comes from the workflow's own commit, so any source branch can be
+      # released even if it predates scripts/release_tool.py.
+      - name: Check out release tooling
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: scripts/release_tool.py
+          sparse-checkout-cone-mode: false
+
       - name: Create GitHub release
         run: |
           set -euo pipefail
-          python3 scripts/release_tool.py notes --tag-version "$TAG_VERSION" > "$RUNNER_TEMP/notes.md"
+          python3 .release-tools/scripts/release_tool.py notes --tag-version "$TAG_VERSION" > "$RUNNER_TEMP/notes.md"
           if [ "$KIND" = rc ]; then
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$SHA" \
               --title "$TAG (pre-release)" --notes-file "$RUNNER_TEMP/notes.md" --prerelease

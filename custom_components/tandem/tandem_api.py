@@ -787,7 +787,8 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         # CGM sensor session lifecycle (tconnectsync LID_CGM_{START,JOIN,STOP}_SESSION_GX).
         # Fields (events.json): sessionStartTime / currentTransmitterTime are uint32
         # seconds on the transmitter clock (NOT wall-clock); sessionDuration is a
-        # uint8 count of DAYS (10 for a G7 sensor). The coordinator derives the
+        # uint8 count of DAYS (10 for G6). Live-validated on a G6 only — G7 is expected
+        # to log 394/447 instead (unconfirmed). The coordinator derives the
         # wall-clock start as pumpDateTime - (currentTransmitterTime - sessionStartTime).
         evt["event_name"] = {
             EVT_CGM_SESSION_START: "CGMSessionStart",

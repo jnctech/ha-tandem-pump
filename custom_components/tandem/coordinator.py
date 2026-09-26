@@ -1621,7 +1621,8 @@ class TandemCoordinator(DataUpdateCoordinator):
         transmitter clock in whole seconds (uint32): ``current_transmitter_time``
         (the clock at the event) and ``session_start_time`` (the clock when the
         session began). ``session_duration_days`` is the session length in whole
-        days (10 for a G7 sensor). The wall-clock session start is the event's
+        days (10 for G6; these GX events are live-validated on a G6 only). The
+        wall-clock session start is the event's
         ``timestamp`` minus the transmitter seconds elapsed since the session
         began, so the result needs no epoch assumption::
 

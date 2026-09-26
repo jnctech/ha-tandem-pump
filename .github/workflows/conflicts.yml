@@ -1,7 +1,10 @@
 name: Auto-label merge conflicts
 
-permissions:
-  pull-requests: write
+# Adds "has conflicts" to open PRs that conflict with their base, and removes it once
+# resolved. Replaces mschilde/auto-label-merge-conflicts, whose Docker build from
+# unpinned node:alpine broke when yarn was dropped from that image
+# (/bin/sh: yarn: not found, failing every run since at least 2026-09-08).
+# eps1lon/actions-label-merge-conflict is a plain JavaScript action (no image build).
 
 on:
   push:
@@ -9,13 +12,18 @@ on:
   pull_request:
     branches: [master, develop]
 
+permissions: {}
+
 jobs:
   conflicts:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - uses: mschilde/auto-label-merge-conflicts@591722e97f3c4142df3eca156ed0dcf2bcd362bd  # master
+      - uses: eps1lon/actions-label-merge-conflict@0273be72a0bbd58fcd71d0d6c02c209b50d1e5e1  # v3.1.0
         with:
-          CONFLICT_LABEL_NAME: "has conflicts"
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MAX_RETRIES: 5
-          WAIT_MS: 5000
+          dirtyLabel: "has conflicts"
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          retryMax: 5
+          retryAfter: 5

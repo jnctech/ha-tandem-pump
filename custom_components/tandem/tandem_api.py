@@ -96,6 +96,13 @@ EVT_CGM_DATA_G7 = 399
 EVT_CGM_SESSION_START = 212  # LID_CGM_START_SESSION_GX
 EVT_CGM_SESSION_JOIN = 213  # LID_CGM_JOIN_SESSION_GX
 EVT_CGM_SESSION_STOP = 214  # LID_CGM_STOP_SESSION_GX
+EVT_CGM_ALERT_ACTIVATED = 171  # LID_CGM_ALERT_ACTIVATED (legacy CGM alert family)
+EVT_CGM_ALERT_CLEARED = 172  # LID_CGM_ALERT_CLEARED
+EVT_CGM_ALERT_ACTIVATED_DEX = 369  # LID_CGM_ALERT_ACTIVATED_DEX (G6/G7 CGM alerts)
+EVT_CGM_ALERT_CLEARED_DEX = 370  # LID_CGM_ALERT_CLEARED_DEX
+EVT_CGM_ALERT_ACK_DEX = 371  # LID_CGM_ALERT_ACK_DEX
+EVT_CGM_SESSION_JOIN_G7 = 394  # LID_CGM_JOIN_SESSION_G7
+EVT_CGM_SESSION_STOP_G7 = 447  # LID_CGM_STOP_SESSION_G7
 
 
 def _decode_cgm_gxb_layout(evt: dict[str, Any], payload: bytes) -> None:
@@ -577,7 +584,8 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
     NOTE (staged): core event types plus the bolus-calculator (64/65/66),
     Control-IQ daily status (313, CGM sensor type), pump-status/battery
     (9/34/35, battery level from ``abc``), alerts/alarms (4/5/6/26/28) and
-    CGM session (212/213/214) are mapped. Still unmapped — their sensors read
+    CGM session (212/213/214, G7 394/447) and CGM alerts (171/172, 369/370/371)
+    are mapped. Still unmapped — their sensors read
     unavailable (null-not-guess) until added: ShelfMode (53), USB charging
     (36/37), daily basal (81), new day (90), PLGS (140). Codes 8 and 27 appear
     live but are absent from the tconnectsync event catalog, so they stay
@@ -602,6 +610,9 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         # CGM transmitter signal strength. Confirmed present on event 256 (G6/GXB)
         # in live validation; not confirmed on 399 (G7) — absent -> None (null-not-guess).
         evt["rssi"] = g("rssi")
+        # Sensor algorithm state (Warmup / In Session / Session Stopped (…)). Raw
+        # code only — the enum is sensor-specific, so the coordinator names it.
+        evt["algorithm_state"] = g("algorithmstate")
 
     elif event_id in (EVT_BOLUS_COMPLETED, EVT_BOLEX_COMPLETED):
         evt["event_name"] = "BolusCompleted" if event_id == EVT_BOLUS_COMPLETED else "BolexCompleted"
@@ -791,6 +802,48 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
             (r for r in (g("sessionstopreason"), g("sessionjoinreason"), g("sessionstartreason")) if r is not None),
             None,
         )
+
+    elif event_id == EVT_CGM_SESSION_STOP_G7:
+        # G7 session stop (tconnectsync LID_CGM_STOP_SESSION_G7). Same transmitter-clock
+        # fields as 214 plus ``stopSessionCode``; handled by the coordinator as a stop.
+        evt["event_name"] = "CGMSessionStop"
+        evt["current_transmitter_time"] = g("currenttransmittertime")
+        evt["session_start_time"] = g("sessionstarttime")
+        evt["session_duration_days"] = g("sessionduration")
+        evt["session_stop_time"] = g("sessionstoptime")
+        evt["session_reason"] = g("sessionstopreason")
+        evt["stop_session_code"] = g("stopsessioncode")
+
+    elif event_id == EVT_CGM_SESSION_JOIN_G7:
+        # G7 join (tconnectsync LID_CGM_JOIN_SESSION_G7): carries only cgmTimestamp /
+        # sessionSignature (no duration), so it is informational and never anchors
+        # the session-expiry calculation (null-not-guess).
+        evt["event_name"] = "CGMSessionJoinG7"
+        evt["cgm_timestamp"] = g("cgmtimestamp")
+        evt["session_signature"] = g("sessionsignature")
+
+    elif event_id in (
+        EVT_CGM_ALERT_ACTIVATED,
+        EVT_CGM_ALERT_CLEARED,
+        EVT_CGM_ALERT_ACTIVATED_DEX,
+        EVT_CGM_ALERT_CLEARED_DEX,
+        EVT_CGM_ALERT_ACK_DEX,
+    ):
+        # CGM alert lifecycle — "Failed Sensor", "Sensor Expired", "Out Of Range", CGM
+        # high/low … The pump logs these separately from pump alerts (4/26), keyed by
+        # ``dalertId``. The Dex variants (369–371) add ``sensorType`` (1=G6, 3=G7).
+        evt["event_name"] = {
+            EVT_CGM_ALERT_ACTIVATED: "CGMAlertActivated",
+            EVT_CGM_ALERT_ACTIVATED_DEX: "CGMAlertActivated",
+            EVT_CGM_ALERT_CLEARED: "CGMAlertCleared",
+            EVT_CGM_ALERT_CLEARED_DEX: "CGMAlertCleared",
+            EVT_CGM_ALERT_ACK_DEX: "CGMAlertAcknowledged",
+        }[event_id]
+        evt["cgm_alert_id"] = g("dalertid")
+        evt["sensor_type_id"] = g("sensortype")
+        if event_id == EVT_CGM_ALERT_ACK_DEX:
+            ack_source = g("acksource")
+            evt["ack_source"] = {0: "User", 1: "Software"}.get(ack_source) if ack_source is not None else None
 
     else:
         return None

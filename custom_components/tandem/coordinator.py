@@ -47,10 +47,17 @@ from .tandem_api import (
     EVT_CARTRIDGE_FILLED,
     EVT_CGM_DATA_FSL2,
     EVT_CGM_DATA_G7,
+    EVT_CGM_ALERT_ACK_DEX,
+    EVT_CGM_ALERT_ACTIVATED,
+    EVT_CGM_ALERT_ACTIVATED_DEX,
+    EVT_CGM_ALERT_CLEARED,
+    EVT_CGM_ALERT_CLEARED_DEX,
     EVT_CGM_DATA_GXB,
     EVT_CGM_SESSION_JOIN,
+    EVT_CGM_SESSION_JOIN_G7,
     EVT_CGM_SESSION_START,
     EVT_CGM_SESSION_STOP,
+    EVT_CGM_SESSION_STOP_G7,
     EVT_DAILY_BASAL,
     EVT_MALFUNCTION_ACTIVATED,
     EVT_NEW_DAY,
@@ -65,6 +72,10 @@ from .tandem_api import (
 )
 from .exceptions import TandemApiError, TandemAuthError
 from .const import (
+    CGM_ALERT_SENSOR_TYPE_MAP,
+    CGM_ALGORITHM_STATE_MAP_FSL2,
+    CGM_ALGORITHM_STATE_MAP_G7,
+    CGM_ALGORITHM_STATES_SESSION_STOPPED_G7,
     CGM_SESSION_REASON_MAP,
     CGM_GLUCOSE_MGDL_MAX,
     CGM_GLUCOSE_MGDL_MIN,
@@ -78,6 +89,7 @@ from .const import (
     DOMAIN,
     TANDEM_ALARM_MAP,
     TANDEM_ALERT_MAP,
+    TANDEM_CGM_ALERT_MAP,
     TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT,
     TANDEM_SENSOR_KEY_ACTIVE_INSULIN,
     TANDEM_SENSOR_KEY_ACTIVE_PROFILE,
@@ -97,6 +109,7 @@ from .const import (
     TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING,
     TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE,
     TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY,
+    TANDEM_SENSOR_KEY_CGM_SENSOR_STATE,
     TANDEM_SENSOR_KEY_CGM_SESSION_START,
     TANDEM_SENSOR_KEY_CGM_STATUS,
     TANDEM_SENSOR_KEY_CGM_USAGE,
@@ -122,6 +135,8 @@ from .const import (
     TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
     TANDEM_SENSOR_KEY_LAST_ALARM,
     TANDEM_SENSOR_KEY_LAST_ALERT,
+    TANDEM_SENSOR_KEY_LAST_CGM_ALERT,
+    TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END,
     TANDEM_SENSOR_KEY_LAST_BG_READING,
     TANDEM_SENSOR_KEY_LAST_BOLUS_ATTRS,
     TANDEM_SENSOR_KEY_LAST_BOLUS_BG,
@@ -169,6 +184,33 @@ def _valid_session_seconds(value: Any) -> bool:
     None), which must not be treated as a real transmitter time.
     """
     return isinstance(value, (int, float)) and 0 <= value < _CGM_SESSION_TIME_SENTINEL
+
+
+def _cgm_algorithm_state(evt: dict[str, Any]) -> tuple[int, str] | None:
+    """Return ``(code, name)`` for a CGM event's sensor algorithm state, or None.
+
+    The enum is sensor-specific, so only G7 (399) and Libre 2 (372) are named; G6
+    (256) defines none and an absent field reads None (null-not-guess). An unknown
+    code on a known sensor surfaces as ``"State {code}"`` so it stays visible.
+    """
+    code = evt.get("algorithm_state")
+    if not isinstance(code, int) or isinstance(code, bool):
+        return None
+    eid = evt.get("event_id")
+    if eid == EVT_CGM_DATA_G7:
+        state_map = CGM_ALGORITHM_STATE_MAP_G7
+    elif eid == EVT_CGM_DATA_FSL2:
+        state_map = CGM_ALGORITHM_STATE_MAP_FSL2
+    else:
+        return None
+    return code, state_map.get(code, f"State {code}")
+
+
+def _is_g7_session_stopped(evt: dict[str, Any]) -> bool:
+    """True when a G7 CGM event reports a "Session Stopped (…)" algorithm state."""
+    return evt.get("event_id") == EVT_CGM_DATA_G7 and evt.get("algorithm_state") in (
+        CGM_ALGORITHM_STATES_SESSION_STOPPED_G7
+    )
 
 
 def _clamp_cgm_over_range(evt: dict[str, Any]) -> None:
@@ -496,6 +538,9 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[TANDEM_SENSOR_KEY_CGM_SESSION_START] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_CGM_ALERT] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_CGM_SENSOR_STATE] = UNAVAILABLE
+        data[TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_BOLUS_BG] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS] = UNAVAILABLE
         data[TANDEM_SENSOR_KEY_LAST_BOLUS_CORRECTION] = UNAVAILABLE
@@ -720,6 +765,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         plgs_events: list[dict[str, Any]] = []
         new_day_events: list[dict[str, Any]] = []
         cgm_session_events: list[dict[str, Any]] = []
+        cgm_alert_events: list[dict[str, Any]] = []
 
         for evt in pump_events:
             eid = evt.get("event_id")
@@ -776,8 +822,22 @@ class TandemCoordinator(DataUpdateCoordinator):
                 plgs_events.append(evt)
             elif eid == EVT_NEW_DAY:
                 new_day_events.append(evt)
-            elif eid in (EVT_CGM_SESSION_START, EVT_CGM_SESSION_JOIN, EVT_CGM_SESSION_STOP):
+            elif eid in (
+                EVT_CGM_SESSION_START,
+                EVT_CGM_SESSION_JOIN,
+                EVT_CGM_SESSION_STOP,
+                EVT_CGM_SESSION_JOIN_G7,
+                EVT_CGM_SESSION_STOP_G7,
+            ):
                 cgm_session_events.append(evt)
+            elif eid in (
+                EVT_CGM_ALERT_ACTIVATED,
+                EVT_CGM_ALERT_CLEARED,
+                EVT_CGM_ALERT_ACTIVATED_DEX,
+                EVT_CGM_ALERT_CLEARED_DEX,
+                EVT_CGM_ALERT_ACK_DEX,
+            ):
+                cgm_alert_events.append(evt)
 
         _LOGGER.debug(
             "Tandem: Events - CGM: %d, BolusCompleted: %d, BolexCompleted: %d, "
@@ -785,7 +845,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             "Suspend/Resume: %d, BG: %d, Cartridge: %d, Carbs: %d, "
             "Cannula: %d, Tubing: %d, UserMode: %d, PCM: %d, "
             "DailyBasal: %d, ShelfMode: %d, "
-            "Alert: %d, Alarm: %d, DailyStatus: %d, "
+            "Alert: %d, Alarm: %d, CGMAlert: %d, CGMSession: %d, DailyStatus: %d, "
             "BolusReqMsg1: %d, BolusReqMsg2: %d, BolusReqMsg3: %d, "
             "PLGS: %d, NewDay: %d",
             len(cgm_readings),
@@ -806,6 +866,8 @@ class TandemCoordinator(DataUpdateCoordinator):
             len(shelf_mode_events),
             len(alert_events),
             len(alarm_events),
+            len(cgm_alert_events),
+            len(cgm_session_events),
             len(daily_status_events),
             len(bolus_req_msg1),
             len(bolus_req_msg2),
@@ -847,6 +909,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         # NewDay events decoded for diagnostics logging (Phase 5).
         new_day_events.sort(key=lambda e: e["timestamp"])
         cgm_session_events.sort(key=lambda e: e["timestamp"])
+        cgm_alert_events.sort(key=lambda e: e["timestamp"])
 
         # ── Populate current sensor values from latest events ────────
 
@@ -909,6 +972,15 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CGM_STATUS] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_RSSI] = UNAVAILABLE
+
+        # ── CGM sensor algorithm state (G7 / Libre 2) ─────────────────
+        # Independent of glucose validity: a failed/ended sensor often sends no
+        # usable glucose, which is exactly when its state matters most.
+        try:
+            self._parse_cgm_sensor_state(cgm_readings, data)
+        except Exception as e:
+            _LOGGER.warning("Error parsing CGM sensor state: %s", e, exc_info=True)
+            data[TANDEM_SENSOR_KEY_CGM_SENSOR_STATE] = UNAVAILABLE
 
         # ── Store recent readings history as attributes ───────────────
         # Custom Lovelace cards (e.g. ApexCharts) can use these for
@@ -1248,9 +1320,31 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_LAST_ALARM] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = UNAVAILABLE
 
+        # ── CGM alerts ("Failed Sensor", "Sensor Expired", …) ─────────
+        try:
+            self._parse_cgm_alert_events(cgm_alert_events, data)
+        except Exception as e:
+            _LOGGER.error(
+                "Error parsing %d CGM alert event(s): %s",
+                len(cgm_alert_events),
+                e,
+                exc_info=True,
+            )
+            data[TANDEM_SENSOR_KEY_LAST_CGM_ALERT] = UNAVAILABLE
+
         # ── CGM Sensor Session / expiry (Phase 7) ─────────────────────
         try:
-            self._parse_cgm_session_events(cgm_session_events, data)
+            self._parse_cgm_session_end(cgm_session_events, cgm_readings, data)
+        except Exception as e:
+            _LOGGER.error(
+                "Error parsing CGM session end (%d session event(s)): %s",
+                len(cgm_session_events),
+                e,
+                exc_info=True,
+            )
+            data[TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END] = UNAVAILABLE
+        try:
+            self._parse_cgm_session_events(cgm_session_events, data, cgm_readings)
         except Exception as e:
             _LOGGER.error(
                 "Error parsing %d CGM session event(s): %s",
@@ -1480,14 +1574,23 @@ class TandemCoordinator(DataUpdateCoordinator):
             (e for e in reversed(alarm_events) if e["event_name"] in ("AlarmActivated", "MalfunctionActivated")),
             None,
         )
+
+        def _alarm_name(evt: dict[str, Any]) -> str:
+            # Malfunction (event 6) ids are their own code space (``malfId``), not
+            # alarm ids — never look them up in the alarm map (null-not-guess).
+            aid = evt["alert_id"]
+            if evt["event_name"] == "MalfunctionActivated":
+                return f"Malfunction {aid}"
+            return TANDEM_ALARM_MAP.get(aid, f"Alarm {aid}")
+
         if last_activated_alarm:
             aid = last_activated_alarm["alert_id"]
-            name = TANDEM_ALARM_MAP.get(aid, f"Alarm {aid}")
+            name = _alarm_name(last_activated_alarm)
             ts = last_activated_alarm["timestamp"].replace(tzinfo=tz)
             recent = [
                 {
                     "id": e["alert_id"],
-                    "name": TANDEM_ALARM_MAP.get(e["alert_id"], f"Alarm {e['alert_id']}"),
+                    "name": _alarm_name(e),
                     "timestamp": e["timestamp"].replace(tzinfo=tz).isoformat(),
                 }
                 for e in alarm_events
@@ -1510,6 +1613,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         self,
         cgm_session_events: list[dict[str, Any]],
         data: dict[str, Any],
+        cgm_readings: list[dict[str, Any]] | None = None,
     ) -> None:
         """Derive CGM sensor session start / expiry from events 212/213/214.
 
@@ -1524,9 +1628,11 @@ class TandemCoordinator(DataUpdateCoordinator):
             start_wall  = pumpDateTime - (current_transmitter_time - session_start_time)
             expiry_wall = start_wall + session_duration_days
 
-        When the most recent session event is a stop (214), there is no active
-        sensor session, so the sensors go unavailable rather than report a stale
-        one (null-not-guess).
+        When the most recent session event is a stop (214 / G7 447), or the latest
+        G7 reading reports a "Session Stopped (…)" algorithm state (e.g. a failed
+        sensor whose stop event has not uploaded yet), there is no active sensor
+        session, so the sensors go unavailable rather than report a stale one
+        (null-not-guess).
         """
         keys = (
             TANDEM_SENSOR_KEY_CGM_SESSION_START,
@@ -1566,6 +1672,9 @@ class TandemCoordinator(DataUpdateCoordinator):
         stopped_after = any(
             e.get("event_name") == "CGMSessionStop" and e["timestamp"] > anchor["timestamp"] for e in cgm_session_events
         )
+        if cgm_readings and not stopped_after:
+            latest_reading = cgm_readings[-1]
+            stopped_after = latest_reading["timestamp"] > anchor["timestamp"] and _is_g7_session_stopped(latest_reading)
         if stopped_after or expiry_wall <= now:
             for key in keys:
                 data[key] = UNAVAILABLE
@@ -1581,6 +1690,211 @@ class TandemCoordinator(DataUpdateCoordinator):
                 CGM_SESSION_REASON_MAP.get(reason_id, f"Reason {reason_id}") if reason_id is not None else None
             ),
         }
+
+    def _parse_cgm_sensor_state(self, cgm_readings: list[dict[str, Any]], data: dict[str, Any]) -> None:
+        """Surface the latest CGM reading's sensor algorithm state (G7 / Libre 2).
+
+        This is the pump-side view of the sensor lifecycle — Warmup, In Session, and
+        for G7 the "Session Stopped (…)" family whose "Sensor Failed" member is what
+        Tandem Source shows as "Failed Sensor".
+        """
+        state = _cgm_algorithm_state(cgm_readings[-1]) if cgm_readings else None
+        if state is None:
+            data[TANDEM_SENSOR_KEY_CGM_SENSOR_STATE] = UNAVAILABLE
+            return
+        code, name = state
+        latest = cgm_readings[-1]
+        data[TANDEM_SENSOR_KEY_CGM_SENSOR_STATE] = name
+        data[f"{TANDEM_SENSOR_KEY_CGM_SENSOR_STATE}_attributes"] = {
+            "algorithm_state_code": code,
+            "session_stopped": _is_g7_session_stopped(latest),
+            "timestamp": latest["timestamp"].replace(tzinfo=ZoneInfo(self.timezone)).isoformat(),
+        }
+
+    def _parse_cgm_alert_events(self, cgm_alert_events: list[dict[str, Any]], data: dict[str, Any]) -> None:
+        """Parse CGM alert events (171/172, 369/370/371) into the last-CGM-alert sensor.
+
+        CGM alerts ("Failed Sensor", "Sensor Expired", "Out Of Range", CGM high/low …)
+        are keyed by ``cgm_alert_id`` (``dalertId``) and replayed in time order like
+        pump alerts: an activation stays active until a matching clear. An
+        acknowledgement (371) is recorded but does not clear the alert.
+        """
+        tz = ZoneInfo(self.timezone)
+
+        def _name(alert_id: Any) -> str:
+            return TANDEM_CGM_ALERT_MAP.get(alert_id, f"CGM Alert {alert_id}")
+
+        active: dict[Any, dict[str, Any]] = {}
+        acknowledged: set[Any] = set()
+        for evt in cgm_alert_events:
+            aid = evt.get("cgm_alert_id")
+            name = evt.get("event_name")
+            if name == "CGMAlertActivated":
+                active[aid] = evt
+                acknowledged.discard(aid)
+            elif name == "CGMAlertCleared":
+                active.pop(aid, None)
+            elif name == "CGMAlertAcknowledged":
+                acknowledged.add(aid)
+
+        activations = [e for e in cgm_alert_events if e.get("event_name") == "CGMAlertActivated"]
+        if not activations:
+            data[TANDEM_SENSOR_KEY_LAST_CGM_ALERT] = UNAVAILABLE
+            return
+
+        # The pump may log one alert on both the legacy (171) and Dex (369) events;
+        # collapse identical (id, timestamp) pairs so the history is not doubled.
+        recent: list[dict[str, Any]] = []
+        seen: set[tuple[Any, datetime]] = set()
+        for e in activations:
+            key = (e.get("cgm_alert_id"), e["timestamp"])
+            if key in seen:
+                continue
+            seen.add(key)
+            recent.append(
+                {
+                    "id": e.get("cgm_alert_id"),
+                    "name": _name(e.get("cgm_alert_id")),
+                    "timestamp": e["timestamp"].replace(tzinfo=tz).isoformat(),
+                }
+            )
+
+        last = activations[-1]
+        aid = last.get("cgm_alert_id")
+        sensor_type_id = last.get("sensor_type_id")
+        data[TANDEM_SENSOR_KEY_LAST_CGM_ALERT] = _name(aid)
+        data[f"{TANDEM_SENSOR_KEY_LAST_CGM_ALERT}_attributes"] = {
+            "cgm_alert_id": aid,
+            "sensor_type": CGM_ALERT_SENSOR_TYPE_MAP.get(sensor_type_id) if sensor_type_id is not None else None,
+            "cleared": aid not in active,
+            "acknowledged": aid in acknowledged,
+            "timestamp": last["timestamp"].replace(tzinfo=tz).isoformat(),
+            "active_count": len(active),
+            "active": [_name(a) for a in active],
+            "recent": recent[-10:],
+        }
+
+    def _cgm_session_end_record(
+        self,
+        stop: dict[str, Any],
+        cgm_session_events: list[dict[str, Any]],
+        cgm_readings: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Describe one CGM session stop: when, why, and how long the sensor was worn.
+
+        Wear time comes from the stop's own transmitter-clock fields when valid
+        (``session_stop_time - session_start_time``, G7 447); otherwise from the
+        latest valid start/join before the stop (the 214 stop carries the sentinel
+        start time). The cause is the G7 "Session Stopped (…)" algorithm state seen
+        on the CGM data around the stop, when there is one.
+        """
+        tz = ZoneInfo(self.timezone)
+        end_wall = stop["timestamp"].replace(tzinfo=tz)
+        sst = stop.get("session_start_time")
+        stop_time = stop.get("session_stop_time")
+        duration_days = stop.get("session_duration_days")
+
+        wear_seconds: float | None = None
+        if (
+            isinstance(sst, (int, float))
+            and isinstance(stop_time, (int, float))
+            and _valid_session_seconds(sst)
+            and _valid_session_seconds(stop_time)
+            and stop_time > sst
+        ):
+            wear_seconds = float(stop_time - sst)
+        else:
+            anchors = [
+                e
+                for e in cgm_session_events
+                if e.get("event_name") in ("CGMSessionStart", "CGMSessionJoin")
+                and e["timestamp"] < stop["timestamp"]
+                and _valid_session_seconds(e.get("session_start_time"))
+                and _valid_session_seconds(e.get("current_transmitter_time"))
+            ]
+            if anchors:
+                anchor = anchors[-1]
+                start_wall = anchor["timestamp"].replace(tzinfo=tz) - timedelta(
+                    seconds=anchor["current_transmitter_time"] - anchor["session_start_time"]
+                )
+                wear_seconds = (end_wall - start_wall).total_seconds()
+                if not isinstance(duration_days, (int, float)):
+                    duration_days = anchor.get("session_duration_days")
+        if wear_seconds is not None and wear_seconds < 0:
+            wear_seconds = None
+
+        # G7 reports why the session stopped on its data events; take the nearest
+        # stopped-state reading from shortly before to shortly after the stop.
+        cause = None
+        window_start = stop["timestamp"] - timedelta(hours=6)
+        window_end = stop["timestamp"] + timedelta(minutes=30)
+        for reading in reversed(cgm_readings):
+            if window_start <= reading["timestamp"] <= window_end and _is_g7_session_stopped(reading):
+                state = _cgm_algorithm_state(reading)
+                cause = state[1] if state else None
+                break
+
+        reason_code = stop.get("session_reason")
+        is_g7_stop = stop.get("event_id") == EVT_CGM_SESSION_STOP_G7
+        # The 214 reason is the DEXBLES enum; the G7 447 reason is undocumented, so
+        # only its raw code is exposed (null-not-guess).
+        reason_name = (
+            CGM_SESSION_REASON_MAP.get(reason_code, f"Reason {reason_code}")
+            if reason_code is not None and not is_g7_stop
+            else None
+        )
+        wear_hours = round(wear_seconds / 3600.0, 1) if wear_seconds is not None else None
+        ended_early = (
+            wear_seconds < duration_days * 86400
+            if wear_seconds is not None and isinstance(duration_days, (int, float)) and duration_days > 0
+            else None
+        )
+        return {
+            "timestamp": end_wall,
+            "cause": cause,
+            "stop_reason": reason_name,
+            "stop_reason_code": reason_code,
+            "stop_session_code": stop.get("stop_session_code"),
+            "source_event": stop.get("event_id"),
+            "session_duration_days": duration_days,
+            "sensor_wear_hours": wear_hours,
+            "sensor_wear_days": round(wear_seconds / 86400.0, 2) if wear_seconds is not None else None,
+            "ended_early": ended_early,
+        }
+
+    def _parse_cgm_session_end(
+        self,
+        cgm_session_events: list[dict[str, Any]],
+        cgm_readings: list[dict[str, Any]],
+        data: dict[str, Any],
+    ) -> None:
+        """Populate the last-CGM-session-end sensor from stop events (214 / G7 447).
+
+        State is the wall-clock time the last session ended (Tandem Source's
+        "Sensor Session Ended"); attributes carry the cause, stop reason/codes,
+        sensor wear time and whether it ended before its rated duration, plus the
+        same record for up to 10 recent session ends.
+        """
+        # A G7 stop can be logged on both 214 and 447; collapse stops within a few
+        # minutes of each other, keeping the richer G7 (447) record.
+        stops: list[dict[str, Any]] = []
+        for e in cgm_session_events:
+            if e.get("event_name") != "CGMSessionStop":
+                continue
+            if stops and e["timestamp"] - stops[-1]["timestamp"] <= timedelta(minutes=5):
+                if e.get("event_id") == EVT_CGM_SESSION_STOP_G7:
+                    stops[-1] = e
+                continue
+            stops.append(e)
+        if not stops:
+            data[TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END] = UNAVAILABLE
+            return
+        records = [self._cgm_session_end_record(e, cgm_session_events, cgm_readings) for e in stops[-10:]]
+        last = records[-1]
+        data[TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END] = last["timestamp"]
+        attrs = {k: v for k, v in last.items() if k != "timestamp"}
+        attrs["recent"] = [{**r, "timestamp": r["timestamp"].isoformat()} for r in records]
+        data[f"{TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END}_attributes"] = attrs
 
     def _parse_dashboard_summary(self, summary: dict[str, Any] | None, data: dict[str, Any]) -> None:
         """Parse dashboard summary into sensor values."""

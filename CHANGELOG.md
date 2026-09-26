@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+### Added
+- **Dexcom G7 sensor events: Failed Sensor, Sensor Session Ended, CGM alerts.** The pump
+  logs CGM alerts and G7 session events as their own event families. Tandem Source shows
+  them, but the integration dropped them. Three new sensors (count is now 76):
+  - **Last CGM alert** from CGM alert events 171/172 and Dex 369/370/371 (`dalertId`):
+    CGM Sensor Failed, Sensor Expired, Out Of Range, CGM High/Low … with the raw id,
+    sensor type (G6/G7), cleared/acknowledged, active list and last-10 history.
+  - **CGM sensor state** from the G7 data event's `algorithmState` (399), e.g. Warmup,
+    In Session, or Session Stopped (Sensor Failed). It surfaces even when the failed sensor
+    sends no glucose. Libre 2 (372) states are named too. G6 defines no enum, so its state
+    stays unavailable.
+  - **Last CGM session end** from session stops 214 and G7 447: when the session ended,
+    the cause (G7 algorithm state), stop reason and raw codes, sensor wear time, whether it
+    ended before its rated duration, and the last 10 session ends.
+
+### Fixed
+- **Pump alert/alarm names.** `TANDEM_ALERT_MAP` / `TANDEM_ALARM_MAP` no longer matched
+  upstream (tconnectsync / pumpX2) from id 23 up. Several pump alerts were labelled as CGM
+  alerts, e.g. alert 24 showed "Sensor Failed" but is Device Connection Error, and alarm 22
+  showed "Insulin Expired" but is Stuck Button. Both maps are now aligned with upstream. Ids
+  that upstream leaves unnamed show as "Alert N" / "Alarm N" instead of a guessed name.
+- **Malfunctions** (event 6) no longer borrow alarm names. `malfId` is its own code space,
+  so they now show as "Malfunction N".
+- **CGM session expiry after a G7 failure.** A G7 stop (447), or a G7 reading that reports
+  Session Stopped, now ends the active session. Days-remaining and expiry no longer count
+  down on a failed sensor.
+
 ## [2.2.1] - 2026-09-09
 
 ### Fixed

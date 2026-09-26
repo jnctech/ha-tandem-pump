@@ -9,7 +9,7 @@
 > This software is provided as-is with no warranty. See [LICENSE](LICENSE).
 
 The only Home Assistant integration for the **Tandem t:slim X2** insulin pump.
-Get CGM readings, insulin on board, Control-IQ status, and 73 sensors —
+Get CGM readings, insulin on board, Control-IQ status, and 76 sensors —
 using your existing Tandem Source account. No extra hardware required.
 
 [![release](https://img.shields.io/github/v/release/jnctech/ha-tandem-pump)](https://github.com/jnctech/ha-tandem-pump/releases)
@@ -33,14 +33,14 @@ using your existing Tandem Source account. No extra hardware required.
 - Track time-in-range, GMI, and long-term insulin trends over weeks with the Statistics Graph card
 - Know your active basal profile, Control-IQ mode, and IOB — everything your pump reports, visible in your smart home
 
-## 73 sensors across 7 categories
+## 76 sensors across 7 categories
 
 | Category | Sensors | Highlights |
 |---|---|---|
 | Glucose Monitoring | 13 | CGM mg/dL + mmol/L, rate of change, TIR, GMI, SD, CV, predicted glucose (PLGS), CGM signal strength |
 | Insulin Delivery | 16 | IOB (units + remaining duration), basal rate, last bolus, TDI, daily totals, carbs, bolus calculator details, estimated remaining insulin |
 | Pump Battery | 1 | Battery level (%) |
-| Alerts & Alarms | 3 | Last alert, last alarm, active alert count |
+| Alerts & Alarms | 6 | Last pump alert/alarm, active alert count, last CGM alert (e.g. Failed Sensor), CGM sensor state, last CGM session end (cause + wear time) |
 | Pump Status | 11 | Control-IQ mode + closed-loop-preferred, activity mode, cartridge insulin, CGM sensor type, suspend reason, site/cartridge/tubing age |
 | Pump Settings | 11 | Active profile + hourly schedule, max bolus, CIQ limits, alert thresholds |
 | Device & Timestamps | 7 | Serial, firmware, last sync, last glucose update |
@@ -91,12 +91,15 @@ using your existing Tandem Source account. No extra hardware required.
 |---|---|
 | Battery percentage | Current battery level (%) |
 
-### Alerts & Alarms (3)
+### Alerts & Alarms (6)
 | Sensor | Description |
 |---|---|
-| Last pump alert | Most recent alert (human-readable name) |
-| Last pump alarm | Most recent alarm (human-readable name) |
-| Active pump alerts | Count of uncleared alerts + alarms |
+| Last pump alert | Most recent pump alert (human-readable name; `alert_id` in attributes) |
+| Last pump alarm | Most recent pump alarm or malfunction (`alert_id` in attributes) |
+| Active pump alerts | Count of uncleared pump alerts + alarms |
+| Last CGM alert | Most recent CGM alert — e.g. CGM Sensor Failed, Sensor Expired, Out Of Range, CGM High/Low. Attributes: `cgm_alert_id`, `sensor_type`, `cleared`, `acknowledged`, `active`, `recent` |
+| CGM sensor state | G7 / Libre 2 sensor algorithm state — Warmup, In Session, Session Stopped (Sensor Failed / End of Session / …) |
+| Last CGM session end | When the last sensor session ended ("Sensor Session Ended"). Attributes: `cause`, `stop_reason`, raw stop codes, `sensor_wear_hours`, `ended_early`, `recent` (last 10) |
 
 ### Pump Status (11)
 | Sensor | Description |

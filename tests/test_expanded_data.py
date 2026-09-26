@@ -1219,10 +1219,11 @@ class TestAlertAlarmCoordinator:
         """MalfunctionActivated (event 6) populates last_alarm sensor with resolved name."""
         events = [
             _make_cgm_event(1, 100),
-            _make_malfunction_activated(2, malfunction_id=14),  # 14 = "Software Error"
+            _make_malfunction_activated(2, malfunction_id=14),
         ]
         coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
-        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALARM] == "Software Error"
+        # malfId is its own code space — never resolved through the alarm map.
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALARM] == "Malfunction 14"
         assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] == 1
 
     async def test_malfunction_cleared_by_alarm_cleared(self, hass: HomeAssistant):
@@ -1233,7 +1234,7 @@ class TestAlertAlarmCoordinator:
             _make_alarm_cleared(3, alarm_id=14, minutes_ago=5),
         ]
         coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
-        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALARM] == "Software Error"
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_ALARM] == "Malfunction 14"
         assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] == 0
 
     async def test_alarm_cleared_reduces_count(self, hass: HomeAssistant):

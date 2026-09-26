@@ -121,6 +121,17 @@ TANDEM_SENSOR_KEY_CGM_SESSION_START = "tandem_cgm_session_start"
 TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY = "tandem_cgm_session_expiry"
 TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING = "tandem_cgm_sensor_days_remaining"
 
+# ── CGM alerts + sensor lifecycle keys (from events 171/172, 369/370/371, 214/447, 399) ─
+# CGM alerts ("Failed Sensor", "Sensor Expired", "Out Of Range", …) are logged by the
+# pump as their own event family, separate from pump alerts (4/26).
+TANDEM_SENSOR_KEY_LAST_CGM_ALERT = "tandem_last_cgm_alert"
+# G7 sensor algorithm state from the latest event 399 (Warmup / In session / Session
+# Stopped (Algorithm Detected Failure) …) — the reason behind a "Failed Sensor".
+TANDEM_SENSOR_KEY_CGM_SENSOR_STATE = "tandem_cgm_sensor_state"
+# Wall-clock time of the most recent CGM session stop (214 / 447), with the stop
+# reason and the wear duration of the sensor that ended.
+TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END = "tandem_last_cgm_session_end"
+
 # ── Bolus Calculator keys (Phase 4 — from events 64, 65, 66) ─────────
 TANDEM_SENSOR_KEY_LAST_BOLUS_BG = "tandem_last_bolus_bg"
 TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS = "tandem_last_bolus_carbs_entered"
@@ -163,89 +174,170 @@ CGM_STATUS_LOW = 2
 CGM_GLUCOSE_MGDL_MAX = 400
 CGM_GLUCOSE_MGDL_MIN = 40
 
-# CGM session start/join/stop reason → name (tconnectsync DexblesReason enum).
-# Only the confirmed members are listed; others fall back to "Reason {id}".
+# CGM session start/join/stop reason → name (tconnectsync events.json DEXBLES_REASON_*
+# enum on events 213/214). Reserved members (2, 7) fall back to "Reason {id}".
 CGM_SESSION_REASON_MAP: dict[int, str] = {
     0: "User",
     1: "Unknown",
     3: "Transmitter End of Life",
     4: "Transmitter Error",
     5: "Session Stop Success",
+    6: "Transmitter Not In Session",
+    8: "New Session Started",
+    9: "Session Start In Progress",
+    10: "Transmitter In Session",
+    11: "BLE Stack Invalid",
+    12: "New Autocal Session Started",
+    13: "No Autocal Session In Progress",
 }
 
-# Alert and alarm ID → human-readable name maps.
-# Sourced from tconnectsync static_dicts.py (jwoglom/tconnectsync).
+# CGM sensor algorithm state (``algorithmState`` on the CGM data event) → name.
+# The enum is sensor-specific (tconnectsync events.json): G7 (399) and Libre 2 (372)
+# define one; G6 (256) does not, so it is not decoded (null-not-guess). The G7
+# "Session Stopped (…)" members are the pump-side cause of a sensor ending — 35 is
+# what Tandem Source shows as "Failed Sensor".
+CGM_ALGORITHM_STATE_MAP_G7: dict[int, str] = {
+    2: "Warmup",
+    30: "Electronics Wakeup",
+    31: "Detecting Deployment",
+    32: "In Session",
+    33: "In Session (Invalid Reading)",
+    34: "Session Stopped (End of Session)",
+    35: "Session Stopped (Sensor Failed)",
+    36: "Session Stopped (Manual Stop)",
+    37: "Session Stopped (Transmitter Failure)",
+    38: "Session Stopped (SIV Failure)",
+    39: "Session Stopped (Out of Range / Environmental)",
+}
+CGM_ALGORITHM_STATE_MAP_FSL2: dict[int, str] = {
+    2: "Warmup",
+    100: "OK",
+    101: "RF Error",
+    102: "Sensor Signal Low",
+    103: "Temperature High",
+    104: "Temperature Low",
+    105: "Invalid Data",
+    106: "Other",
+}
+# G7 algorithm states that mean the sensor session has ended.
+CGM_ALGORITHM_STATES_SESSION_STOPPED_G7 = frozenset(range(34, 40))
+
+# CGM alert ID (``dalertId`` on events 171/172 and 369/370/371) → name.
+# Sourced from tconnectsync static_dicts.CGM_ALERTS_DICT ("verified from pump display")
+# and filled in from pumpX2 CGMAlertStatusResponse.CGMAlert. Unlisted IDs fall back
+# to "CGM Alert {id}" — the raw id is always exposed in the attributes.
+TANDEM_CGM_ALERT_MAP: dict[int, str] = {
+    1: "CGM Urgent Low",
+    2: "CGM High",
+    3: "CGM Low",
+    4: "CGM Calibration Request",
+    5: "CGM Rise",
+    6: "CGM Rapid Rise",
+    7: "CGM Fall",
+    8: "CGM Rapid Fall",
+    9: "CGM Low Calibration Error",
+    10: "CGM High Calibration Error",
+    11: "CGM Sensor Failed",
+    12: "CGM Sensor Expiring Soon",
+    13: "CGM Sensor Expired",
+    14: "CGM Out Of Range",
+    16: "CGM First Start Calibration",
+    17: "CGM Second Start Calibration",
+    18: "CGM Calibration Required",
+    19: "CGM Low Transmitter",
+    20: "CGM Transmitter Error",
+    22: "CGM Sensor Expiring",
+    25: "CGM Replace Sensor",
+    26: "CGM Temperature",
+    27: "CGM Failed Connection",
+    39: "CGM Transmitter Expired",
+    40: "Pump Bluetooth Error",
+    45: "CGM Transmitter Expiring Soon",
+    46: "CGM Transmitter Expiring",
+    48: "CGM Unavailable",
+}
+
+# CGM sensor type on the Dex CGM alert events (369/370/371, field ``sensorType``).
+CGM_ALERT_SENSOR_TYPE_MAP: dict[int, str] = {1: "G6", 3: "G7"}
+
+# Pump alert and alarm ID → human-readable name maps (events 4/26 and 5/6/28).
+# Sourced from tconnectsync static_dicts.ALERTS_DICT / ALARMS_DICT (jwoglom/tconnectsync),
+# which match pumpX2's AlertStatusResponse enum. IDs upstream only names DEFAULT_* are
+# omitted so they surface as "Alert {id}" / "Alarm {id}" rather than a guessed name.
+# NOTE: CGM alerts ("Sensor Failed", "Sensor Expired", …) are NOT in this family —
+# they have their own events and IDs; see TANDEM_CGM_ALERT_MAP.
 TANDEM_ALERT_MAP: dict[int, str] = {
     0: "Low Insulin",
     1: "USB Connection",
     2: "Low Power",
     3: "Low Power (Critical)",
+    4: "Data Error",
     5: "Auto Off",
+    6: "Max Basal Rate",
     7: "Power Source",
+    8: "Min Basal",
+    9: "Connection Error",
+    10: "Connection Error (2)",
     11: "Incomplete Bolus",
     12: "Incomplete Temp Rate",
     13: "Incomplete Cartridge Change",
+    14: "Incomplete Fill Tubing",
+    15: "Incomplete Fill Cannula",
+    16: "Incomplete Setting",
     17: "Low Insulin (2nd)",
+    18: "Max Basal",
     19: "Low Transmitter",
+    20: "Transmitter",
     22: "Sensor Expiring",
-    23: "Sensor Expired",
-    24: "Sensor Failed",
-    25: "Sensor Warmup",
-    26: "Sensor Out Of Range",
-    27: "Sensor High",
-    28: "Sensor Low",
-    29: "CGM Calibration",
-    30: "CGM Cal Due",
-    31: "CGM Cal Error",
-    32: "CGM Trend",
-    33: "CGM Rise",
-    34: "CGM Fall",
-    36: "Sensor Change",
-    38: "Transmitter Low Battery",
+    23: "Pump Rebooting",
+    24: "Device Connection Error",
+    25: "CGM Graph Removed",
+    26: "Min Basal (2)",
+    27: "Incomplete Calibration",
+    28: "Calibration Timeout",
+    29: "Invalid Transmitter ID",
+    33: "Button",
+    34: "Quick Bolus",
+    35: "Basal-IQ",
     39: "Transmitter End of Life",
-    40: "Pump Bluetooth Error",
-    42: "CGM High Alert",
-    43: "CGM Low Alert",
-    44: "CGM Urgent Low Alert",
-    45: "CGM Very High Alert",
-    46: "Predicted High Alert",
-    47: "Predicted Low Alert",
+    40: "CGM Error",
+    41: "CGM Error (2)",
+    42: "CGM Error (3)",
+    44: "Transmitter Expiring",
+    45: "Transmitter Expiring (2)",
+    46: "Transmitter Expiring (3)",
     48: "CGM Unavailable",
-    50: "Feature Activation",
-    52: "Suspend Before Low",
-    53: "Suspend On Low",
-    54: "Resume From Suspend",
+    51: "Control-IQ Low",
+    54: "Device Paired",
 }
 
 TANDEM_ALARM_MAP: dict[int, str] = {
     0: "Cartridge Alarm",
+    1: "Cartridge Alarm (2)",
     2: "Occlusion",
     3: "Pump Reset",
-    4: "Motor Error",
-    5: "Infusion Complete",
-    6: "Basal Rate Not Set",
+    5: "Cartridge Alarm (3)",
+    6: "Cartridge Alarm (4)",
     7: "Auto Off",
     8: "Empty Cartridge",
-    9: "Delivery Error",
+    9: "Cartridge Alarm (5)",
     10: "Temperature",
-    11: "Hardware Error",
+    11: "Temperature (2)",
     12: "Battery Shutdown",
-    13: "Low Battery",
-    14: "Software Error",
-    15: "Memory Error",
-    16: "Clock Error",
-    17: "Calibration Error",
+    14: "Invalid Date",
+    15: "Temperature (3)",
+    16: "Cartridge Alarm (6)",
     18: "Resume Pump",
-    19: "Cartridge Error",
-    20: "Pressure Error",
+    20: "Cartridge Alarm (7)",
     21: "Altitude",
-    22: "Insulin Expired",
-    23: "Max Daily Insulin",
-    24: "Max Bolus",
+    22: "Stuck Button",
+    23: "Resume Pump (2)",
+    24: "Atmospheric Pressure Out Of Range",
     25: "Cartridge Removed",
-    26: "Priming Error",
-    27: "Plunger Error",
-    28: "Fill Timeout",
+    26: "Occlusion (2)",
+    29: "Cartridge Alarm (10)",
+    30: "Cartridge Alarm (11)",
+    31: "Cartridge Alarm (12)",
 }
 
 # ── Shared icon strings (S1192: avoid duplicating literals 3+ times) ──

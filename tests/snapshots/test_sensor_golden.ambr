@@ -877,6 +877,57 @@
     'state': 'unknown',
   })
 # ---
+# name: test_sensor_golden[sensor.tandem_cgm_sensor_state-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': set({
+    }),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': None,
+    'entity_id': 'sensor.tandem_cgm_sensor_state',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'CGM sensor state',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:list-status',
+    'original_name': 'CGM sensor state',
+    'platform': 'tandem',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_cgm_sensor_state',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_cgm_sensor_state-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'attribution': 'Data provided by Tandem Source',
+      'friendly_name': 'Tandem CGM sensor state',
+      'icon': 'mdi:list-status',
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.tandem_cgm_sensor_state',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'unknown',
+  })
+# ---
 # name: test_sensor_golden[sensor.tandem_cgm_sensor_type-entry]
   EntityRegistryEntrySnapshot({
     'aliases': set({
@@ -2566,6 +2617,109 @@
     }),
     'context': <ANY>,
     'entity_id': 'sensor.tandem_last_cartridge_fill_amount',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'unknown',
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_last_cgm_alert-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': set({
+    }),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': None,
+    'entity_id': 'sensor.tandem_last_cgm_alert',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Last CGM alert',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': 'mdi:access-point-network-off',
+    'original_name': 'Last CGM alert',
+    'platform': 'tandem',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_last_cgm_alert',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_last_cgm_alert-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'attribution': 'Data provided by Tandem Source',
+      'friendly_name': 'Tandem Last CGM alert',
+      'icon': 'mdi:access-point-network-off',
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.tandem_last_cgm_alert',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'unknown',
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_last_cgm_session_end-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': set({
+    }),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'sensor',
+    'entity_category': None,
+    'entity_id': 'sensor.tandem_last_cgm_session_end',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Last CGM session end',
+    'options': dict({
+    }),
+    'original_device_class': <SensorDeviceClass.TIMESTAMP: 'timestamp'>,
+    'original_icon': 'mdi:stop-circle-outline',
+    'original_name': 'Last CGM session end',
+    'platform': 'tandem',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': 0,
+    'translation_key': None,
+    'unique_id': 'tandem_01JTANDEMGOLDEN000000000000_tandem_last_cgm_session_end',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_sensor_golden[sensor.tandem_last_cgm_session_end-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      'attribution': 'Data provided by Tandem Source',
+      'device_class': 'timestamp',
+      'friendly_name': 'Tandem Last CGM session end',
+      'icon': 'mdi:stop-circle-outline',
+    }),
+    'context': <ANY>,
+    'entity_id': 'sensor.tandem_last_cgm_session_end',
     'last_changed': <ANY>,
     'last_reported': <ANY>,
     'last_updated': <ANY>,

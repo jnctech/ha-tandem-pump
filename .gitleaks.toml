@@ -20,4 +20,8 @@ regexes = [
     # Template placeholder values
     '''your-tandem-email@example\.com''',
     '''your-home-assistant-long-lived-token''',
+    # Placeholder in the since-deleted GETTING_STARTED.md (commit 3b24f1c): the textbook
+    # JWT header {"alg":"HS256","typ":"JWT"} followed by a literal "...", not a real token.
+    # Only reached by full-history scans (the Pre-release workflow's CI run).
+    '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.\.\.''',
 ]

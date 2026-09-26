@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+## [2.3.0-rc.2] - 2026-09-26 (pre-release)
+
 ### Added
 - **Dexcom G7 sensor events: Failed Sensor, Sensor Session Ended, CGM alerts.** The pump
   logs CGM alerts and G7 session events as their own event families. Tandem Source shows

@@ -163,7 +163,7 @@ rules:
     comment: README names the supported device (Tandem t:slim X2).
   docs-supported-functions:
     status: done
-    comment: README "What you can do" + full 73-sensor breakdown.
+    comment: README "What you can do" + full 76-sensor breakdown.
   docs-troubleshooting:
     status: done
     comment: TROUBLESHOOTING.md linked from README with a symptom/cause table.
@@ -184,7 +184,7 @@ rules:
   entity-disabled-by-default:
     status: todo
     comment: >-
-      All 73 sensors are enabled by default; no noisy/rarely-used entities set
+      All 76 sensors are enabled by default; no noisy/rarely-used entities set
       entity_registry_enabled_default=False.
   entity-translations:
     status: todo

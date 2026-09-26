@@ -28,6 +28,7 @@ import re
 import ssl
 import struct
 import time
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from urllib.parse import urlencode, urlparse, parse_qs
@@ -96,6 +97,13 @@ EVT_CGM_DATA_G7 = 399
 EVT_CGM_SESSION_START = 212  # LID_CGM_START_SESSION_GX
 EVT_CGM_SESSION_JOIN = 213  # LID_CGM_JOIN_SESSION_GX
 EVT_CGM_SESSION_STOP = 214  # LID_CGM_STOP_SESSION_GX
+EVT_CGM_ALERT_ACTIVATED = 171  # LID_CGM_ALERT_ACTIVATED (legacy CGM alert family)
+EVT_CGM_ALERT_CLEARED = 172  # LID_CGM_ALERT_CLEARED
+EVT_CGM_ALERT_ACTIVATED_DEX = 369  # LID_CGM_ALERT_ACTIVATED_DEX (G6/G7 CGM alerts)
+EVT_CGM_ALERT_CLEARED_DEX = 370  # LID_CGM_ALERT_CLEARED_DEX
+EVT_CGM_ALERT_ACK_DEX = 371  # LID_CGM_ALERT_ACK_DEX
+EVT_CGM_SESSION_JOIN_G7 = 394  # LID_CGM_JOIN_SESSION_G7
+EVT_CGM_SESSION_STOP_G7 = 447  # LID_CGM_STOP_SESSION_G7
 
 
 def _decode_cgm_gxb_layout(evt: dict[str, Any], payload: bytes) -> None:
@@ -515,6 +523,58 @@ def _as_bool(value: Any) -> Any:
     return bool(value) if value is not None else None
 
 
+def _as_flag(value: Any) -> bool | None:
+    """Coerce a FALSE/TRUE enum flag (bool, 0/1, or "TRUE"/"FALSE") to bool; else None."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str) and value.strip().upper() in ("TRUE", "FALSE"):
+        return value.strip().upper() == "TRUE"
+    return None
+
+
+def _bit_names(value: Any, names: dict[int, str]) -> list[str] | None:
+    """Names of the set bits in a BFF bitmask (index array or int); None when absent."""
+    bits = _bitmask_to_int(value)
+    if not isinstance(bits, int) or isinstance(bits, bool):
+        return None
+    return [name for bit, name in names.items() if bits & (1 << bit)]
+
+
+# tconnectsync events.json enums/bitmasks for the fields below.
+_PLGS_HOMIN_STATE_MAP: dict[Any, str] = {
+    0: "On and available",
+    1: "On and suspended",
+    2: "Off",
+    3: "On and not available",
+}
+_PLGS_STATUS_BITS: dict[int, str] = {
+    0: "Suspend Predicted",
+    1: "Suspend Current",
+    4: "Resume EGV Rise",
+    6: "Resume Nadir Lock",
+    7: "Unavailable - Time Small",
+    8: "Unavailable - Suspend Override",
+    9: "Unavailable - CGM Off",
+    10: "Unavailable - High EGV",
+    11: "Unavailable - Not Therapy",
+    12: "Unavailable - Bolus Active",
+    13: "Unavailable - No Current",
+}
+_EGV_INFO_BITS: dict[int, str] = {
+    0: "Five Minute Reading",
+    1: "Backfill",
+    2: "Immediate Match",
+    3: "Calibration Result",
+    4: "No EGV",
+    5: "Valid Timestamp",
+    6: "Valid EGV",
+    7: "Valid Algorithm State",
+    8: "Added To CGM Array",
+}
+
+
 # CGM event codes that share the GXB eventProperties layout (G6, FSL2, G7).
 _CGM_EVENT_IDS = (EVT_CGM_DATA_GXB, EVT_CGM_DATA_FSL2, EVT_CGM_DATA_G7)
 
@@ -577,9 +637,10 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
     NOTE (staged): core event types plus the bolus-calculator (64/65/66),
     Control-IQ daily status (313, CGM sensor type), pump-status/battery
     (9/34/35, battery level from ``abc``), alerts/alarms (4/5/6/26/28) and
-    CGM session (212/213/214) are mapped. Still unmapped — their sensors read
-    unavailable (null-not-guess) until added: ShelfMode (53), USB charging
-    (36/37), daily basal (81), new day (90), PLGS (140). Codes 8 and 27 appear
+    CGM session (212/213/214, G7 394/447) and CGM alerts (171/172, 369/370/371)
+    and PLGS (140) are mapped. Still unmapped (no sensor consumes them): ShelfMode
+    (53), USB charging (36/37), daily basal (81 — not in the tconnectsync catalog, so
+    its BFF field names are unknown), new day (90). Codes 8 and 27 appear
     live but are absent from the tconnectsync event catalog, so they stay
     unmapped pending identification. Live eventProperties keys are recorded in
     .remember/BFF-LIVE-VALIDATION-2026-09-06.md.
@@ -602,6 +663,11 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         # CGM transmitter signal strength. Confirmed present on event 256 (G6/GXB)
         # in live validation; not confirmed on 399 (G7) — absent -> None (null-not-guess).
         evt["rssi"] = g("rssi")
+        # Sensor algorithm state (Warmup / In Session / Session Stopped (…)). Raw
+        # code only — the enum is sensor-specific, so the coordinator names it.
+        evt["algorithm_state"] = g("algorithmstate")
+        # Per-reading quality flags (backfill, no EGV, valid EGV …); None when absent.
+        evt["egv_info"] = _bit_names(g("egvinfobitmask"), _EGV_INFO_BITS)
 
     elif event_id in (EVT_BOLUS_COMPLETED, EVT_BOLEX_COMPLETED):
         evt["event_name"] = "BolusCompleted" if event_id == EVT_BOLUS_COMPLETED else "BolexCompleted"
@@ -696,6 +762,11 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         evt["previous_pcm"] = _PCM_MAP.get(previous, f"PCM_{previous}")
         # Control-IQ setting: whether the user prefers closed-loop operation.
         evt["closed_loop_preferred"] = _as_bool(g("closedlooppreferred"))
+        # Closed-loop preconditions — which one is False explains a drop to open loop.
+        evt["cgm_available"] = _as_flag(g("cgmavailable"))
+        evt["pump_suspended"] = _as_flag(g("pumpsuspended"))
+        evt["calculation_available"] = _as_flag(g("calculationavailable"))
+        evt["sufficient_closed_loop_params"] = _as_flag(g("sufficientclosedloopparams"))
 
     elif event_id == EVT_BOLUS_REQUESTED_MSG1:
         # Bolus calculator message 1 — carbs/BG/IOB at request time. Joined with
@@ -775,7 +846,8 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         # CGM sensor session lifecycle (tconnectsync LID_CGM_{START,JOIN,STOP}_SESSION_GX).
         # Fields (events.json): sessionStartTime / currentTransmitterTime are uint32
         # seconds on the transmitter clock (NOT wall-clock); sessionDuration is a
-        # uint8 count of DAYS (10 for a G7 sensor). The coordinator derives the
+        # uint8 count of DAYS (10 for G6). Live-validated on a G6 only — G7 is expected
+        # to log 394/447 instead (unconfirmed). The coordinator derives the
         # wall-clock start as pumpDateTime - (currentTransmitterTime - sessionStartTime).
         evt["event_name"] = {
             EVT_CGM_SESSION_START: "CGMSessionStart",
@@ -791,6 +863,61 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
             (r for r in (g("sessionstopreason"), g("sessionjoinreason"), g("sessionstartreason")) if r is not None),
             None,
         )
+
+    elif event_id == EVT_PLGS_PERIODIC:
+        # Predictive low-glucose suspend (tconnectsync LID_PLGS_PERIODIC). ``pgv`` is the
+        # predicted glucose; it is only meaningful when ``pgvValid`` is TRUE.
+        evt["event_name"] = "PLGSPeriodic"
+        pgv_valid = _as_flag(g("pgvvalid"))
+        evt["pgv_valid"] = pgv_valid
+        evt["predicted_glucose_mgdl"] = g("pgv") if pgv_valid is not False else None
+        evt["fmr_mgdl"] = g("fmr")
+        homin = g("hominstate")
+        evt["homin_state_id"] = homin
+        evt["homin_state"] = _PLGS_HOMIN_STATE_MAP.get(homin, f"State_{homin}") if homin is not None else None
+        evt["plgs_status"] = _bit_names(g("status"), _PLGS_STATUS_BITS)
+
+    elif event_id == EVT_CGM_SESSION_STOP_G7:
+        # G7 session stop (tconnectsync LID_CGM_STOP_SESSION_G7). Same transmitter-clock
+        # fields as 214 plus ``stopSessionCode``; handled by the coordinator as a stop.
+        evt["event_name"] = "CGMSessionStop"
+        evt["current_transmitter_time"] = g("currenttransmittertime")
+        evt["session_start_time"] = g("sessionstarttime")
+        evt["session_duration_days"] = g("sessionduration")
+        evt["session_stop_time"] = g("sessionstoptime")
+        evt["session_reason"] = g("sessionstopreason")
+        evt["stop_session_code"] = g("stopsessioncode")
+
+    elif event_id == EVT_CGM_SESSION_JOIN_G7:
+        # G7 join (tconnectsync LID_CGM_JOIN_SESSION_G7): carries only cgmTimestamp /
+        # sessionSignature (no duration), so it is informational and never anchors
+        # the session-expiry calculation (null-not-guess).
+        evt["event_name"] = "CGMSessionJoinG7"
+        evt["cgm_timestamp"] = g("cgmtimestamp")
+        evt["session_signature"] = g("sessionsignature")
+
+    elif event_id in (
+        EVT_CGM_ALERT_ACTIVATED,
+        EVT_CGM_ALERT_CLEARED,
+        EVT_CGM_ALERT_ACTIVATED_DEX,
+        EVT_CGM_ALERT_CLEARED_DEX,
+        EVT_CGM_ALERT_ACK_DEX,
+    ):
+        # CGM alert lifecycle — "Failed Sensor", "Sensor Expired", "Out Of Range", CGM
+        # high/low … The pump logs these separately from pump alerts (4/26), keyed by
+        # ``dalertId``. The Dex variants (369–371) add ``sensorType`` (1=G6, 3=G7).
+        evt["event_name"] = {
+            EVT_CGM_ALERT_ACTIVATED: "CGMAlertActivated",
+            EVT_CGM_ALERT_ACTIVATED_DEX: "CGMAlertActivated",
+            EVT_CGM_ALERT_CLEARED: "CGMAlertCleared",
+            EVT_CGM_ALERT_CLEARED_DEX: "CGMAlertCleared",
+            EVT_CGM_ALERT_ACK_DEX: "CGMAlertAcknowledged",
+        }[event_id]
+        evt["cgm_alert_id"] = g("dalertid")
+        evt["sensor_type_id"] = g("sensortype")
+        if event_id == EVT_CGM_ALERT_ACK_DEX:
+            ack_source = g("acksource")
+            evt["ack_source"] = {0: "User", 1: "Software"}.get(ack_source) if ack_source is not None else None
 
     else:
         return None
@@ -1320,6 +1447,9 @@ class TandemSourceClient:
             seen: set[tuple[Any, Any]] = set()
             events: list[dict[str, Any]] = []
             raw_event_count = 0
+            # Codes the mapper does not consume, counted so a debug log can show what a
+            # pump/CGM actually sends (codes only — no event payloads, no PII).
+            unmapped_codes: Counter[Any] = Counter()
 
             for window_start, window_end in self._pump_log_windows(start_date, end_date):
                 params = {
@@ -1345,12 +1475,19 @@ class TandemSourceClient:
                     mapped = map_pump_log_event(raw)
                     if mapped is not None:
                         events.append(mapped)
+                    else:
+                        unmapped_codes[raw.get("eventCode")] += 1
 
             _LOGGER.debug(
                 "Tandem: Mapped %d/%d pump-logs events (types we consume)",
                 len(events),
                 raw_event_count,
             )
+            if unmapped_codes:
+                _LOGGER.debug(
+                    "Tandem: Unmapped pump-logs event codes {code: count}: %s",
+                    dict(sorted(unmapped_codes.items(), key=lambda kv: str(kv[0]))),
+                )
             return events if events else None
 
         except (TandemApiError, httpx.HTTPError) as e:

@@ -30,6 +30,7 @@ from .const import (
     TANDEM_SENSOR_KEY_CGM_LOW_ALERT,
     TANDEM_SENSOR_KEY_CGM_RATE_OF_CHANGE,
     TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING,
+    TANDEM_SENSOR_KEY_CGM_SENSOR_STATE,
     TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE,
     TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY,
     TANDEM_SENSOR_KEY_CGM_SESSION_START,
@@ -57,6 +58,8 @@ from .const import (
     TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
     TANDEM_SENSOR_KEY_LAST_ALARM,
     TANDEM_SENSOR_KEY_LAST_ALERT,
+    TANDEM_SENSOR_KEY_LAST_CGM_ALERT,
+    TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END,
     TANDEM_SENSOR_KEY_LAST_BG_READING,
     TANDEM_SENSOR_KEY_LAST_BOLUS_BG,
     TANDEM_SENSOR_KEY_LAST_BOLUS_CARBS,
@@ -772,6 +775,38 @@ TANDEM_SENSORS = (
         state_class=None,
         device_class=None,
         icon="mdi:timer-sand",
+        entity_category=None,
+    ),
+    # ── CGM alerts + sensor lifecycle (events 171/172, 369–371, 214/447, 399) ─
+    SensorEntityDescription(
+        # "Failed Sensor", "Sensor Expired", "Out Of Range", CGM high/low … — the CGM
+        # alert family, separate from pump alerts. Attributes carry id/active/recent.
+        key=TANDEM_SENSOR_KEY_LAST_CGM_ALERT,
+        name="Last CGM alert",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:access-point-network-off",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        # G7 / Libre 2 sensor algorithm state from the latest CGM reading.
+        key=TANDEM_SENSOR_KEY_CGM_SENSOR_STATE,
+        name="CGM sensor state",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=None,
+        icon="mdi:list-status",
+        entity_category=None,
+    ),
+    SensorEntityDescription(
+        # When the last sensor session ended, with cause, reason codes and wear time.
+        key=TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END,
+        name="Last CGM session end",
+        native_unit_of_measurement=None,
+        state_class=None,
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:stop-circle-outline",
         entity_category=None,
     ),
     # ── Phase 4: Bolus Calculator (from events 64, 65, 66) ────────

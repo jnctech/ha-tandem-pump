@@ -1,0 +1,239 @@
+name: Pre-release
+
+# One-click release: Actions -> Pre-release -> Run workflow.
+#   1. prepare  - next tag (vX.Y.Z-rc.N or vX.Y.Z), bump manifest, move CHANGELOG [Unreleased]
+#                 into the new section, commit to chore/release-<version> (pushed unless dry run)
+#   2. test     - full CI (ci.yml) on that exact commit
+#   3. publish  - GitHub release at that commit (pre-release for rc), notes from the CHANGELOG
+#   4. assets   - release.yml builds and attaches tandem-<version>.zip
+#   5. PRs      - release branch -> develop (and -> master for a final release)
+# The logic lives in scripts/release_tool.py (taken from this workflow's commit, not the source
+# branch) and is unit-tested by tests/test_release_tool.py.
+# Dry run (the default) does steps 1-2 on the source commit and pushes nothing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, X.Y.Z (the manifest version it ships)
+        required: true
+        type: string
+      source:
+        description: Branch to release from (develop; a feature branch for early rc testing)
+        required: true
+        default: develop
+        type: string
+      kind:
+        description: rc = next vX.Y.Z-rc.N pre-release; final = vX.Y.Z (from develop only)
+        required: true
+        default: rc
+        type: choice
+        options: [rc, final]
+      dry_run:
+        description: Check and test only - push, tag and publish nothing
+        required: true
+        default: true
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: prerelease
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare release commit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      tag_version: ${{ steps.plan.outputs.tag_version }}
+      branch: ${{ steps.plan.outputs.branch }}
+      sha: ${{ steps.commit.outputs.sha }}
+    env:
+      VERSION: ${{ inputs.version }}
+      SOURCE: ${{ inputs.source }}
+      KIND: ${{ inputs.kind }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          ref: ${{ inputs.source }}
+          fetch-depth: 0
+
+      # Release tooling comes from the workflow's own commit, so any source branch can be
+      # released even if it predates scripts/release_tool.py.
+      - name: Check out release tooling
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: scripts/release_tool.py
+          sparse-checkout-cone-mode: false
+
+      - name: Keep tooling out of the release commit
+        run: echo ".release-tools/" >> .git/info/exclude
+
+      - name: Plan release
+        id: plan
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          if [ "$KIND" = final ] && [ "$SOURCE" != develop ]; then
+            echo "::error::A final release must come from develop (merge the rc PRs first)."; exit 1
+          fi
+          if ! git merge-base --is-ancestor origin/develop HEAD; then
+            echo "::error::$SOURCE does not contain the latest develop - merge develop into it first."; exit 1
+          fi
+          TAG=$(git tag -l | python3 .release-tools/scripts/release_tool.py next-tag --version "$VERSION" --kind "$KIND")
+          TAG_VERSION="${TAG#v}"
+          BRANCH="chore/release-$TAG_VERSION"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            echo "::error::Branch $BRANCH already exists."; exit 1
+          fi
+          {
+            echo "tag=$TAG"
+            echo "tag_version=$TAG_VERSION"
+            echo "branch=$BRANCH"
+          } >> "$GITHUB_OUTPUT"
+          echo "Planned $TAG on $BRANCH from $SOURCE ($(git rev-parse --short HEAD)), dry run: $DRY_RUN"
+
+      - name: Bump version and cut CHANGELOG
+        env:
+          TAG: ${{ steps.plan.outputs.tag }}
+          TAG_VERSION: ${{ steps.plan.outputs.tag_version }}
+        run: |
+          set -euo pipefail
+          python3 .release-tools/scripts/release_tool.py bump --version "$VERSION"
+          allow_empty=()
+          if [ "$KIND" = final ]; then allow_empty=(--allow-empty); fi
+          python3 .release-tools/scripts/release_tool.py cut-changelog --tag-version "$TAG_VERSION" --date "$(date -u +%F)" "${allow_empty[@]}"
+          {
+            echo "## $TAG"
+            echo
+            echo "Source: \`$SOURCE\` · kind: \`$KIND\` · dry run: \`$DRY_RUN\`"
+            echo
+            echo '```diff'
+            git diff
+            echo '```'
+            echo
+            echo "### Release notes"
+            echo
+            python3 .release-tools/scripts/release_tool.py notes --tag-version "$TAG_VERSION"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit and push release branch
+        id: commit
+        env:
+          TAG: ${{ steps.plan.outputs.tag }}
+          BRANCH: ${{ steps.plan.outputs.branch }}
+        run: |
+          set -euo pipefail
+          SOURCE_SHA=$(git rev-parse HEAD)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): $TAG"
+          if [ "$DRY_RUN" = true ]; then
+            # Nothing is pushed, so CI runs on the source commit; the release commit only
+            # changes the manifest version and CHANGELOG (covered by release_tool tests).
+            echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          else
+            git push origin "HEAD:refs/heads/$BRANCH"
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    name: Test release commit
+    needs: prepare
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+
+  publish:
+    name: Publish release
+    needs: [prepare, test]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      TAG_VERSION: ${{ needs.prepare.outputs.tag_version }}
+      SHA: ${{ needs.prepare.outputs.sha }}
+      KIND: ${{ inputs.kind }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      # Release tooling comes from the workflow's own commit, so any source branch can be
+      # released even if it predates scripts/release_tool.py.
+      - name: Check out release tooling
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: scripts/release_tool.py
+          sparse-checkout-cone-mode: false
+
+      - name: Create GitHub release
+        run: |
+          set -euo pipefail
+          python3 .release-tools/scripts/release_tool.py notes --tag-version "$TAG_VERSION" > "$RUNNER_TEMP/notes.md"
+          if [ "$KIND" = rc ]; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$SHA" \
+              --title "$TAG (pre-release)" --notes-file "$RUNNER_TEMP/notes.md" --prerelease
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$SHA" \
+              --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" --latest
+          fi
+          echo "Published $TAG at $SHA: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  assets:
+    name: Build release assets
+    needs: [prepare, publish]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.prepare.outputs.tag }}
+
+  pull-requests:
+    name: Open follow-up PRs
+    needs: [prepare, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      BRANCH: ${{ needs.prepare.outputs.branch }}
+      KIND: ${{ inputs.kind }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open PRs from the release branch
+        run: |
+          set -uo pipefail
+          open_pr() {
+            local base=$1
+            local open
+            open=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --base "$base" --state open --json number --jq length)
+            if [ "$open" != 0 ]; then echo "PR $BRANCH -> $base already open"; return 0; fi
+            body="Release $TAG, published by the [Pre-release workflow]($RUN_URL), which ran the full CI suite on this exact commit.
+
+          CI does not start automatically on PRs opened by GitHub Actions; push a commit or close and reopen this PR to run it here."
+            if gh pr create --repo "$GITHUB_REPOSITORY" --base "$base" --head "$BRANCH" \
+                 --title "chore(release): $TAG" --body "$body"; then
+              echo "Opened PR $BRANCH -> $base" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::warning::Could not open PR $BRANCH -> $base. Enable Settings > Actions > General > 'Allow GitHub Actions to create and approve pull requests', or open it manually."
+            fi
+          }
+          open_pr develop
+          if [ "$KIND" = final ]; then open_pr master; fi

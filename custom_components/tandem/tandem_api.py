@@ -28,6 +28,7 @@ import re
 import ssl
 import struct
 import time
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from urllib.parse import urlencode, urlparse, parse_qs
@@ -1373,6 +1374,9 @@ class TandemSourceClient:
             seen: set[tuple[Any, Any]] = set()
             events: list[dict[str, Any]] = []
             raw_event_count = 0
+            # Codes the mapper does not consume, counted so a debug log can show what a
+            # pump/CGM actually sends (codes only — no event payloads, no PII).
+            unmapped_codes: Counter[Any] = Counter()
 
             for window_start, window_end in self._pump_log_windows(start_date, end_date):
                 params = {
@@ -1398,12 +1402,19 @@ class TandemSourceClient:
                     mapped = map_pump_log_event(raw)
                     if mapped is not None:
                         events.append(mapped)
+                    else:
+                        unmapped_codes[raw.get("eventCode")] += 1
 
             _LOGGER.debug(
                 "Tandem: Mapped %d/%d pump-logs events (types we consume)",
                 len(events),
                 raw_event_count,
             )
+            if unmapped_codes:
+                _LOGGER.debug(
+                    "Tandem: Unmapped pump-logs event codes {code: count}: %s",
+                    dict(sorted(unmapped_codes.items(), key=lambda kv: str(kv[0]))),
+                )
             return events if events else None
 
         except (TandemApiError, httpx.HTTPError) as e:

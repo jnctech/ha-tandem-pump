@@ -325,3 +325,35 @@ class TestLastCgmSessionEnd:
         assert attrs["sensor_wear_hours"] is None
         assert attrs["ended_early"] is None
         assert attrs["stop_reason"] == "User"
+
+
+# ── Client: unmapped event codes are reported (codes only) ────────────────
+
+
+async def test_get_pump_events_logs_unmapped_codes(caplog):
+    """Dropped event codes are counted in a debug log so a user can see what their CGM sends."""
+    import logging
+    from unittest.mock import AsyncMock
+
+    from custom_components.tandem.tandem_api import TandemSourceClient
+
+    client = TandemSourceClient("user@test.com", "pass")
+    client.pumper_id = "p"
+    client._api_get = AsyncMock(
+        return_value={
+            "events": [
+                {
+                    "eventCode": 369,
+                    "pumpDateTime": "2026-09-26T14:23:00",
+                    "sequenceNumber": 1,
+                    "eventProperties": {"dalertId": 11},
+                },
+                {"eventCode": 8, "pumpDateTime": "2026-09-26T14:24:00", "sequenceNumber": 2, "eventProperties": {}},
+                {"eventCode": 8, "pumpDateTime": "2026-09-26T14:25:00", "sequenceNumber": 3, "eventProperties": {}},
+            ]
+        }
+    )
+    with caplog.at_level(logging.DEBUG, logger="custom_components.tandem.tandem_api"):
+        events = await client.get_pump_events("dev", "2026-09-26", "2026-09-26")
+    assert [e["event_id"] for e in events] == [369]
+    assert "Unmapped pump-logs event codes {code: count}: {8: 2}" in caplog.text

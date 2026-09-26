@@ -523,6 +523,58 @@ def _as_bool(value: Any) -> Any:
     return bool(value) if value is not None else None
 
 
+def _as_flag(value: Any) -> bool | None:
+    """Coerce a FALSE/TRUE enum flag (bool, 0/1, or "TRUE"/"FALSE") to bool; else None."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str) and value.strip().upper() in ("TRUE", "FALSE"):
+        return value.strip().upper() == "TRUE"
+    return None
+
+
+def _bit_names(value: Any, names: dict[int, str]) -> list[str] | None:
+    """Names of the set bits in a BFF bitmask (index array or int); None when absent."""
+    bits = _bitmask_to_int(value)
+    if not isinstance(bits, int) or isinstance(bits, bool):
+        return None
+    return [name for bit, name in names.items() if bits & (1 << bit)]
+
+
+# tconnectsync events.json enums/bitmasks for the fields below.
+_PLGS_HOMIN_STATE_MAP: dict[Any, str] = {
+    0: "On and available",
+    1: "On and suspended",
+    2: "Off",
+    3: "On and not available",
+}
+_PLGS_STATUS_BITS: dict[int, str] = {
+    0: "Suspend Predicted",
+    1: "Suspend Current",
+    4: "Resume EGV Rise",
+    6: "Resume Nadir Lock",
+    7: "Unavailable - Time Small",
+    8: "Unavailable - Suspend Override",
+    9: "Unavailable - CGM Off",
+    10: "Unavailable - High EGV",
+    11: "Unavailable - Not Therapy",
+    12: "Unavailable - Bolus Active",
+    13: "Unavailable - No Current",
+}
+_EGV_INFO_BITS: dict[int, str] = {
+    0: "Five Minute Reading",
+    1: "Backfill",
+    2: "Immediate Match",
+    3: "Calibration Result",
+    4: "No EGV",
+    5: "Valid Timestamp",
+    6: "Valid EGV",
+    7: "Valid Algorithm State",
+    8: "Added To CGM Array",
+}
+
+
 # CGM event codes that share the GXB eventProperties layout (G6, FSL2, G7).
 _CGM_EVENT_IDS = (EVT_CGM_DATA_GXB, EVT_CGM_DATA_FSL2, EVT_CGM_DATA_G7)
 
@@ -586,9 +638,9 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
     Control-IQ daily status (313, CGM sensor type), pump-status/battery
     (9/34/35, battery level from ``abc``), alerts/alarms (4/5/6/26/28) and
     CGM session (212/213/214, G7 394/447) and CGM alerts (171/172, 369/370/371)
-    are mapped. Still unmapped — their sensors read
-    unavailable (null-not-guess) until added: ShelfMode (53), USB charging
-    (36/37), daily basal (81), new day (90), PLGS (140). Codes 8 and 27 appear
+    and PLGS (140) are mapped. Still unmapped (no sensor consumes them): ShelfMode
+    (53), USB charging (36/37), daily basal (81 — not in the tconnectsync catalog, so
+    its BFF field names are unknown), new day (90). Codes 8 and 27 appear
     live but are absent from the tconnectsync event catalog, so they stay
     unmapped pending identification. Live eventProperties keys are recorded in
     .remember/BFF-LIVE-VALIDATION-2026-09-06.md.
@@ -614,6 +666,8 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         # Sensor algorithm state (Warmup / In Session / Session Stopped (…)). Raw
         # code only — the enum is sensor-specific, so the coordinator names it.
         evt["algorithm_state"] = g("algorithmstate")
+        # Per-reading quality flags (backfill, no EGV, valid EGV …); None when absent.
+        evt["egv_info"] = _bit_names(g("egvinfobitmask"), _EGV_INFO_BITS)
 
     elif event_id in (EVT_BOLUS_COMPLETED, EVT_BOLEX_COMPLETED):
         evt["event_name"] = "BolusCompleted" if event_id == EVT_BOLUS_COMPLETED else "BolexCompleted"
@@ -708,6 +762,11 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         evt["previous_pcm"] = _PCM_MAP.get(previous, f"PCM_{previous}")
         # Control-IQ setting: whether the user prefers closed-loop operation.
         evt["closed_loop_preferred"] = _as_bool(g("closedlooppreferred"))
+        # Closed-loop preconditions — which one is False explains a drop to open loop.
+        evt["cgm_available"] = _as_flag(g("cgmavailable"))
+        evt["pump_suspended"] = _as_flag(g("pumpsuspended"))
+        evt["calculation_available"] = _as_flag(g("calculationavailable"))
+        evt["sufficient_closed_loop_params"] = _as_flag(g("sufficientclosedloopparams"))
 
     elif event_id == EVT_BOLUS_REQUESTED_MSG1:
         # Bolus calculator message 1 — carbs/BG/IOB at request time. Joined with
@@ -804,6 +863,19 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
             (r for r in (g("sessionstopreason"), g("sessionjoinreason"), g("sessionstartreason")) if r is not None),
             None,
         )
+
+    elif event_id == EVT_PLGS_PERIODIC:
+        # Predictive low-glucose suspend (tconnectsync LID_PLGS_PERIODIC). ``pgv`` is the
+        # predicted glucose; it is only meaningful when ``pgvValid`` is TRUE.
+        evt["event_name"] = "PLGSPeriodic"
+        pgv_valid = _as_flag(g("pgvvalid"))
+        evt["pgv_valid"] = pgv_valid
+        evt["predicted_glucose_mgdl"] = g("pgv") if pgv_valid is not False else None
+        evt["fmr_mgdl"] = g("fmr")
+        homin = g("hominstate")
+        evt["homin_state_id"] = homin
+        evt["homin_state"] = _PLGS_HOMIN_STATE_MAP.get(homin, f"State_{homin}") if homin is not None else None
+        evt["plgs_status"] = _bit_names(g("status"), _PLGS_STATUS_BITS)
 
     elif event_id == EVT_CGM_SESSION_STOP_G7:
         # G7 session stop (tconnectsync LID_CGM_STOP_SESSION_G7). Same transmitter-clock

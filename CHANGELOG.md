@@ -28,7 +28,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     follows Dexcom's rule: a sensor that fails before 10 days of wear is replaced, whatever
     its rating. The expiry sensor also exposes the `replacement_threshold` time.
 
+- **Control-IQ open-loop reason.** The Control-IQ mode sensor now exposes the
+  closed-loop preconditions from the PCM event (230): `cgm_available`, `pump_suspended`,
+  `calculation_available` and `sufficient_closed_loop_params`. It also exposes
+  `previous_mode` and an `open_loop_reason` (for example "CGM unavailable" after a failed
+  sensor) when closed loop is preferred but not active.
+- **CGM reading quality.** The CGM status sensor exposes the latest reading's flags from
+  `egvInfoBitmask` (Backfill, Valid EGV, No EGV …), plus a count of backfilled readings in
+  the fetch window.
+
 ### Fixed
+- **Predicted glucose was always unavailable** after the Source BFF migration, because the
+  PLGS event (140) was never re-mapped. It is mapped again, and an invalid prediction
+  (`pgvValid` FALSE) reads unavailable instead of a value. Attributes add the prediction
+  state (`hoMinState`) and the suspend/resume status flags.
 - **Pump alert/alarm names.** `TANDEM_ALERT_MAP` / `TANDEM_ALARM_MAP` no longer matched
   upstream (tconnectsync / pumpX2) from id 23 up. Several pump alerts were labelled as CGM
   alerts, e.g. alert 24 showed "Sensor Failed" but is Device Connection Error, and alarm 22

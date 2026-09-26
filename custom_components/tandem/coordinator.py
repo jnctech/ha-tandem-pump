@@ -989,6 +989,17 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_CGM_STATUS] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_RSSI] = UNAVAILABLE
 
+        # ── CGM reading quality flags (backfill / no EGV / valid EGV) ──
+        if cgm_readings:
+            latest_flags = cgm_readings[-1].get("egv_info")
+            flagged = [r for r in cgm_readings if r.get("egv_info") is not None]
+            data[f"{TANDEM_SENSOR_KEY_CGM_STATUS}_attributes"] = {
+                "reading_flags": latest_flags,
+                "backfilled": ("Backfill" in latest_flags) if latest_flags is not None else None,
+                "backfilled_readings": (sum(1 for r in flagged if "Backfill" in r["egv_info"]) if flagged else None),
+                "readings_with_flags": len(flagged),
+            }
+
         # ── CGM sensor algorithm state (G7 / Libre 2) ─────────────────
         # Independent of glucose validity: a failed/ended sensor often sends no
         # usable glucose, which is exactly when its state matters most.
@@ -1198,6 +1209,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_CONTROL_IQ_MODE] = last_pcm.get("current_pcm", UNAVAILABLE)
             clp = last_pcm.get("closed_loop_preferred")
             data[TANDEM_SENSOR_KEY_CLOSED_LOOP_PREFERRED] = clp if isinstance(clp, bool) else UNAVAILABLE
+            data[f"{TANDEM_SENSOR_KEY_CONTROL_IQ_MODE}_attributes"] = self._control_iq_attributes(last_pcm)
         else:
             data[TANDEM_SENSOR_KEY_CONTROL_IQ_MODE] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_CLOSED_LOOP_PREFERRED] = UNAVAILABLE
@@ -1494,6 +1506,11 @@ class TandemCoordinator(DataUpdateCoordinator):
                     data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] = int(pgv)
                 else:
                     data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] = UNAVAILABLE
+                data[f"{TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE}_attributes"] = {
+                    "prediction_state": latest_plgs.get("homin_state"),
+                    "status": latest_plgs.get("plgs_status"),
+                    "timestamp": latest_plgs["timestamp"].replace(tzinfo=ZoneInfo(self.timezone)).isoformat(),
+                }
             else:
                 data[TANDEM_SENSOR_KEY_PREDICTED_GLUCOSE] = UNAVAILABLE
         except (KeyError, TypeError, IndexError, ValueError) as e:
@@ -1719,6 +1736,32 @@ class TandemCoordinator(DataUpdateCoordinator):
                 CGM_SESSION_REASON_MAP.get(reason_id, f"Reason {reason_id}") if reason_id is not None else None
             ),
         }
+
+    @staticmethod
+    def _control_iq_attributes(pcm: dict[str, Any]) -> dict[str, Any]:
+        """Closed-loop preconditions from the latest PCM event (230), plus a reason.
+
+        When closed loop is preferred but the pump is not in it, ``open_loop_reason``
+        names the first failed precondition (e.g. "CGM unavailable" after a failed
+        sensor). None when in closed loop, not preferred, or the flags are absent.
+        """
+        flags = {
+            "cgm_available": pcm.get("cgm_available"),
+            "pump_suspended": pcm.get("pump_suspended"),
+            "calculation_available": pcm.get("calculation_available"),
+            "sufficient_closed_loop_params": pcm.get("sufficient_closed_loop_params"),
+        }
+        reason = None
+        if pcm.get("closed_loop_preferred") is True and pcm.get("current_pcm") != "Closed Loop":
+            if flags["cgm_available"] is False:
+                reason = "CGM unavailable"
+            elif flags["pump_suspended"] is True:
+                reason = "Pump suspended"
+            elif flags["sufficient_closed_loop_params"] is False:
+                reason = "Insufficient closed-loop settings"
+            elif flags["calculation_available"] is False:
+                reason = "Calculation unavailable"
+        return {**flags, "previous_mode": pcm.get("previous_pcm"), "open_loop_reason": reason}
 
     def _parse_cgm_sensor_state(self, cgm_readings: list[dict[str, Any]], data: dict[str, Any]) -> None:
         """Surface the latest CGM reading's sensor algorithm state (G7 / Libre 2).

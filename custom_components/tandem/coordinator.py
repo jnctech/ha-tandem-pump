@@ -258,6 +258,42 @@ def _dedupe_cgm_readings(cgm_readings: list[dict[str, Any]]) -> list[dict[str, A
     return out
 
 
+def _carb_entries_from_bolus_requests(bolus_req_msg1: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Carb entries from bolus calculator requests (event 64 ``carbAmount``), one per bolus.
+
+    The BFF stream never carries the standalone CarbsEntered event (48): carbs entered
+    in the bolus calculator arrive only on msg1 (live-verified 2026-09-06, no 48 in a
+    window with daily calculator carbs). Entries use the event-48 shape so every carb
+    consumer reads both. Zero/absent amounts are correction-only boluses, not entries;
+    a non-numeric amount is skipped and logged, never coerced.
+    """
+    seen: set[Any] = set()
+    out: list[dict[str, Any]] = []
+    for m in bolus_req_msg1:
+        carbs = m.get("carb_amount")
+        if carbs is None or carbs == 0:
+            continue
+        if isinstance(carbs, bool) or not isinstance(carbs, (int, float)) or carbs < 0:
+            _LOGGER.warning("Tandem: ignoring bolus %s carb amount %r (not a gram count)", m.get("bolus_id"), carbs)
+            continue
+        bolus_id = m.get("bolus_id")
+        if bolus_id is not None:
+            if bolus_id in seen:
+                continue
+            seen.add(bolus_id)
+        out.append(
+            {
+                "event_id": EVT_CARBS_ENTERED,
+                "source_event_id": m.get("event_id"),
+                "timestamp": m["timestamp"],
+                "seq": m.get("seq"),
+                "carbs": carbs,
+                "bolus_id": bolus_id,
+            }
+        )
+    return out
+
+
 def _cgm_session_anchors(cgm_session_events: list[dict[str, Any]], tz: ZoneInfo) -> list[dict[str, Any]]:
     """Every CGM session start that can be placed on the wall clock, in event order.
 
@@ -1013,6 +1049,9 @@ class TandemCoordinator(DataUpdateCoordinator):
         alarm_events.sort(key=lambda e: e["timestamp"])
         daily_status_events.sort(key=lambda e: e["timestamp"])
         bolus_req_msg1.sort(key=lambda e: e["timestamp"])
+        carbs_entered = sorted(
+            carbs_entered + _carb_entries_from_bolus_requests(bolus_req_msg1), key=lambda e: e["timestamp"]
+        )
         bolus_req_msg2.sort(key=lambda e: e["timestamp"])
         bolus_req_msg3.sort(key=lambda e: e["timestamp"])
         plgs_events.sort(key=lambda e: e["timestamp"])
@@ -2765,7 +2804,9 @@ class TandemCoordinator(DataUpdateCoordinator):
         bolus_stats: list[StatisticData] = []
         correction_stats: list[StatisticData] = []
 
-        for evt in pump_events:
+        # Calculator carbs (event 64) are imported as meal carbs alongside any event 48.
+        msg1 = [e for e in pump_events if e.get("event_id") == EVT_BOLUS_REQUESTED_MSG1 and e.get("timestamp")]
+        for evt in [*pump_events, *_carb_entries_from_bolus_requests(msg1)]:
             eid = evt.get("event_id")
             ts = evt.get("timestamp")
             if not ts:

@@ -59,7 +59,7 @@ using your existing Tandem Source account. No extra hardware required.
 | CGM signal strength | Transmitter signal strength (RSSI; diagnostic) |
 | Average glucose (mmol/L) | Daily average computed from CGM events |
 | Average glucose (mg/dL) | Daily average computed from CGM events |
-| Time in Range | % of readings 70–180 mg/dL |
+| Time in Range | % of readings 70–180 mg/dL over the 7 days up to the latest reading. Attributes: `period_start`/`period_end`, `readings`, and the latest calendar day's figure (`day_time_in_range` …, matching Tandem Source's daily view) |
 | Time below range | % of readings below 70 mg/dL |
 | Time above range | % of readings above 180 mg/dL |
 | Glucose SD / CV | Standard deviation and coefficient of variation |
@@ -99,7 +99,9 @@ using your existing Tandem Source account. No extra hardware required.
 | Active pump alerts | Count of uncleared pump alerts + alarms |
 | Last CGM alert | Most recent CGM alert — e.g. CGM Sensor Failed, Sensor Expired, Out Of Range, CGM High/Low. Attributes: `cgm_alert_id`, `sensor_type`, `cleared`, `acknowledged`, `active`, `recent` |
 | CGM sensor state | G7 / Libre 2 sensor algorithm state — Warmup, In Session, Session Stopped (Sensor Failed / End of Session / …) |
-| Last CGM session end | When the last sensor session ended ("Sensor Session Ended"). Attributes: `cause`, `stop_reason`, raw stop codes, `sensor_wear_hours`, `ended_early`, `replacement_eligible` (Dexcom: failed before 10 days of wear), `recent` (last 10) |
+| Last CGM session end | When the last sensor session ended ("Sensor Session Ended" / "Failed Sensor"). Attributes: `cause` (e.g. Session Stopped (Sensor Failed), CGM Sensor Expired), `stop_reason`, raw stop codes, `sensor_wear_hours`/`_days` (from the sensor's own clock), `ended_early`, `ended_in_grace_period` (G7), `replacement_eligible` (Dexcom: stopped before 10 days of wear), `recent` (last 10) |
+
+**CGM sensor session start / expiry / days remaining** work for both Dexcom generations: a G6 (10-day sensor on a reusable transmitter) is read from its start/join events, a G7 (all-in-one, 10 days + 12 h grace) from its join event. For a G6 the expiry sensor's attributes also carry the transmitter's age and 3-month expiry (`transmitter_age_days`, `transmitter_expiry`, `transmitter_days_remaining`).
 
 ### Pump Status (11)
 | Sensor | Description |
@@ -138,7 +140,7 @@ using your existing Tandem Source account. No extra hardware required.
 | Pump serial number | Device serial |
 | Pump model | Model name |
 | Software version | Firmware version |
-| CGM usage | Percentage of time CGM was active |
+| CGM usage | Readings received vs expected (one per 5 min) over the same 7-day period |
 
 </details>
 

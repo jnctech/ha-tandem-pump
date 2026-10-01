@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+### Fixed
+- **Dexcom G7 sensor sessions.** Rebuilt against live G6 → G7 pump data (Sep 2026). The rc.1/rc.2
+  session code assumed a G7 logs the G6 session events (212/213); it never does.
+  - Session start / expiry / days remaining now work on a G7: anchored on the G7 join (394),
+    `start = join time − cgmTimestamp` (the G7 clock counts from sensor start; it agrees with the
+    matching stop to within seconds). Re-joins after a pump reset are handled.
+  - Last CGM session end: G7 wear time now comes from the stop's own clock (447
+    `currentTransmitterTime`), not a stale G6 join. Live: one G7 at 9.70 days → `ended_early`,
+    `replacement_eligible`; one at 10.05 days → `ended_in_grace_period`, not replaceable.
+    G6 wear uses the transmitter clock (stop − join start), so a pump clock change cannot skew it,
+    and a stop on a new transmitter reports no wear rather than a wrong one.
+  - The cause ("Failed Sensor") now comes from the CGM Sensor Failed alert (369, `param1` 35) logged
+    with the stop. The G7 data stream stays "In Session" up to the failure, so the old
+    algorithm-state source never fired. A normal G6 end reads "CGM Sensor Expired".
+- **Time in range / CGM summary.** The period is now a stated 7 days up to the latest reading (was an
+  unlabelled ~7.7-day fetch window), with the latest calendar day's TIR as attributes to compare with
+  Tandem Source's daily view. Duplicate copies of the same reading (~2%) are dropped.
+- **CGM usage** was readings ÷ one day's worth, so it always showed 100%; it is now readings vs
+  expected over the 7-day period.
+
+### Added
+- **G6 transmitter life.** The session-expiry attributes carry the reusable G6 transmitter's age and
+  3-month expiry (its session clock counts from activation). Not applicable to the all-in-one G7.
+
 ## [2.3.0-rc.2] - 2026-09-26 (pre-release)
 
 ### Added

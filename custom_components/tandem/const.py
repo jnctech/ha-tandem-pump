@@ -116,7 +116,7 @@ TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT = "tandem_active_alerts_count"
 # ── CGM sensor type key (Phase 3 — from event 313) ────────────────────
 TANDEM_SENSOR_KEY_CGM_SENSOR_TYPE = "tandem_cgm_sensor_type"
 
-# ── CGM sensor session keys (Phase 7 — from events 212, 213, 214) ─────
+# ── CGM sensor session keys (Phase 7 — G6 212/213/214, G7 394/447) ────
 TANDEM_SENSOR_KEY_CGM_SESSION_START = "tandem_cgm_session_start"
 TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY = "tandem_cgm_session_expiry"
 TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING = "tandem_cgm_sensor_days_remaining"
@@ -125,8 +125,9 @@ TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING = "tandem_cgm_sensor_days_remaining"
 # CGM alerts ("Failed Sensor", "Sensor Expired", "Out Of Range", …) are logged by the
 # pump as their own event family, separate from pump alerts (4/26).
 TANDEM_SENSOR_KEY_LAST_CGM_ALERT = "tandem_last_cgm_alert"
-# G7 sensor algorithm state from the latest event 399 (Warmup / In session / Session
-# Stopped (Algorithm Detected Failure) …) — the reason behind a "Failed Sensor".
+# G7 sensor algorithm state from the latest event 399 (Warmup / In session …). Note the
+# pump keeps logging "In Session" right up to a failure; the "Failed Sensor" cause is
+# carried on the CGM Sensor Failed alert (369, param1), not on the data stream.
 TANDEM_SENSOR_KEY_CGM_SENSOR_STATE = "tandem_cgm_sensor_state"
 # Wall-clock time of the most recent CGM session stop (214 / 447), with the stop
 # reason and the wear duration of the sensor that ended.
@@ -223,9 +224,24 @@ CGM_ALGORITHM_STATE_MAP_FSL2: dict[int, str] = {
 # rated life (a 15-day G7 is still only covered below 10 days).
 DEXCOM_REPLACEMENT_THRESHOLD_DAYS = 10
 # Post-expiry grace window during which the sensor keeps reading, by sensor model.
-# G7 has 12 h; G6 has none. The rated life itself comes from the session event
-# (``sessionDuration``: 10 for G6/G7, 15 for G7 15 Day).
+# G7 has 12 h; G6 has none. The rated life comes from the session event
+# (``sessionDuration``) where one carries it: the G6 start/join (212/213) and the G7
+# stop (447). The G7 join (394) has no duration, so an active G7 session uses the
+# latest G7 stop's duration, else the standard 10-day G7 rating.
 CGM_GRACE_PERIOD_HOURS: dict[str, int] = {"G6": 0, "G7": 12}
+CGM_G7_DEFAULT_SESSION_DAYS = 10
+
+# The G6 transmitter is separate from the 10-day sensor and moves to each new sensor;
+# it is rated (and warrantied) for 3 months. Its session-event clock counts from
+# transmitter activation, so its age is known from any G6 session event. The G7 is
+# an integrated sensor-transmitter, so this does not apply to it.
+CGM_G6_TRANSMITTER_LIFE_DAYS = 90
+
+# CGM alert ids (``dalertId``) that announce a sensor session ending, used to name the
+# cause of a session stop: 11 Sensor Failed, 13 Sensor Expired, 20 Transmitter Error,
+# 25 Replace Sensor, 39 Transmitter Expired.
+CGM_SESSION_END_ALERT_IDS = frozenset({11, 13, 20, 25, 39})
+CGM_ALERT_SENSOR_FAILED = 11
 
 # G7 algorithm states that mean the sensor session has ended.
 CGM_ALGORITHM_STATES_SESSION_STOPPED_G7 = frozenset(range(34, 40))

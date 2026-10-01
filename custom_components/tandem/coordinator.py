@@ -12,7 +12,7 @@ import logging
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, TypeGuard
 from zoneinfo import ZoneInfo
 
 from homeassistant.config_entries import ConfigEntry
@@ -72,8 +72,12 @@ from .tandem_api import (
 )
 from .exceptions import TandemApiError, TandemAuthError
 from .const import (
+    CGM_ALERT_SENSOR_FAILED,
     CGM_ALERT_SENSOR_TYPE_MAP,
+    CGM_G6_TRANSMITTER_LIFE_DAYS,
+    CGM_G7_DEFAULT_SESSION_DAYS,
     CGM_GRACE_PERIOD_HOURS,
+    CGM_SESSION_END_ALERT_IDS,
     CGM_ALGORITHM_STATE_MAP_FSL2,
     CGM_ALGORITHM_STATE_MAP_G7,
     CGM_ALGORITHM_STATES_SESSION_STOPPED_G7,
@@ -179,7 +183,7 @@ _LOGGER = logging.getLogger(__name__)
 _CGM_SESSION_TIME_SENTINEL = 0xFFFFFFFF  # uint32 max — "no valid time" marker
 
 
-def _valid_session_seconds(value: Any) -> bool:
+def _valid_session_seconds(value: Any) -> TypeGuard[int | float]:
     """True when a CGM-session transmitter-clock field holds a real second count.
 
     Stop events (214) and absent fields use the uint32 sentinel 0xFFFFFFFF (or
@@ -208,18 +212,80 @@ def _cgm_algorithm_state(evt: dict[str, Any]) -> tuple[int, str] | None:
     return code, state_map.get(code, f"State {code}")
 
 
-_CGM_MODEL_BY_EVENT: dict[Any, str] = {EVT_CGM_DATA_GXB: "G6", EVT_CGM_DATA_G7: "G7", EVT_CGM_DATA_FSL2: "Libre 2"}
+# CGM summary period (avg / SD / GMI / TIR / usage): the days up to the latest reading.
+_CGM_SUMMARY_PERIOD_DAYS = 7
 
 
-def _cgm_model_at(cgm_readings: list[dict[str, Any]], when: datetime) -> str | None:
-    """Sensor model ("G6" / "G7" / "Libre 2") from the CGM data nearest before ``when``.
+def _dedupe_cgm_readings(cgm_readings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop repeat copies of the same CGM reading, keeping the first.
 
-    Falls back to the first reading after ``when``; None when there are no readings.
-    Needed because the GX session events (212–214) do not say which sensor they are.
+    The pump sometimes logs one reading twice (same sensor-clock ``egv_timestamp``,
+    value and status; ~2% of a live week, 2026-10-01), which would double-count it
+    in TIR / averages. Readings without an ``egv_timestamp`` are always kept.
     """
-    before = [r for r in cgm_readings if r["timestamp"] <= when]
-    reading = before[-1] if before else next(iter(cgm_readings), None)
-    return _CGM_MODEL_BY_EVENT.get(reading.get("event_id")) if reading else None
+    seen: set[tuple[Any, ...]] = set()
+    out: list[dict[str, Any]] = []
+    for r in cgm_readings:
+        egv = r.get("egv_timestamp")
+        if egv is not None:
+            key = (r.get("event_id"), egv, r.get("glucose_mgdl"), r.get("status"))
+            if key in seen:
+                continue
+            seen.add(key)
+        out.append(r)
+    return out
+
+
+def _cgm_session_anchors(cgm_session_events: list[dict[str, Any]], tz: ZoneInfo) -> list[dict[str, Any]]:
+    """Every CGM session start that can be placed on the wall clock, in event order.
+
+    The two Dexcom generations log sessions differently (live-verified 2026-10-01):
+
+    * G6 start/join (212/213): ``start = pumpDateTime - (current_transmitter_time -
+      session_start_time)`` on the reusable transmitter's clock; the event carries the
+      rated duration.
+    * G7 join (394): the G7 clock starts with the sensor, so ``start = pumpDateTime -
+      cgm_timestamp``. The join carries no duration, so the latest earlier G7 stop's
+      ``sessionDuration`` is used, else the standard G7 rating.
+
+    Each anchor: ``event``, ``start`` (aware datetime), ``model``, ``duration_days``,
+    ``duration_source``.
+    """
+    anchors: list[dict[str, Any]] = []
+    last_g7_duration: Any = None
+    for e in cgm_session_events:
+        ts = e["timestamp"].replace(tzinfo=tz)
+        name = e.get("event_name")
+        if name == "CGMSessionStop" and e.get("event_id") == EVT_CGM_SESSION_STOP_G7:
+            if isinstance(e.get("session_duration_days"), (int, float)) and e["session_duration_days"] > 0:
+                last_g7_duration = e["session_duration_days"]
+        elif name in ("CGMSessionStart", "CGMSessionJoin"):
+            ct, sst, dur = (
+                e.get("current_transmitter_time"),
+                e.get("session_start_time"),
+                e.get("session_duration_days"),
+            )
+            if _valid_session_seconds(ct) and _valid_session_seconds(sst) and isinstance(dur, (int, float)):
+                anchors.append(
+                    {
+                        "event": e,
+                        "start": ts - timedelta(seconds=ct - sst),
+                        "model": "G6",
+                        "duration_days": dur,
+                        "duration_source": "session event",
+                    }
+                )
+        elif name == "CGMSessionJoinG7" and _valid_session_seconds(e.get("cgm_timestamp")):
+            anchors.append(
+                {
+                    "event": e,
+                    "start": ts - timedelta(seconds=e["cgm_timestamp"]),
+                    "model": "G7",
+                    "duration_days": last_g7_duration or CGM_G7_DEFAULT_SESSION_DAYS,
+                    "duration_source": "previous G7 stop" if last_g7_duration else "G7 standard rating",
+                }
+            )
+    return anchors
 
 
 def _is_g7_session_stopped(evt: dict[str, Any]) -> bool:
@@ -900,6 +966,7 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         # Sort all event lists by timestamp
         cgm_readings.sort(key=lambda e: e["timestamp"])
+        cgm_readings = _dedupe_cgm_readings(cgm_readings)
         bolus_completed.sort(key=lambda e: e["timestamp"])
         bolex_completed.sort(key=lambda e: e["timestamp"])
         bolus_delivery.sort(key=lambda e: e["timestamp"])
@@ -1362,7 +1429,7 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         # ── CGM Sensor Session / expiry (Phase 7) ─────────────────────
         try:
-            self._parse_cgm_session_end(cgm_session_events, cgm_readings, data)
+            self._parse_cgm_session_end(cgm_session_events, cgm_readings, data, cgm_alert_events)
         except Exception as e:
             _LOGGER.error(
                 "Error parsing CGM session end (%d session event(s)): %s",
@@ -1648,78 +1715,62 @@ class TandemCoordinator(DataUpdateCoordinator):
         data: dict[str, Any],
         cgm_readings: list[dict[str, Any]] | None = None,
     ) -> None:
-        """Derive CGM sensor session start / expiry from events 212/213/214.
+        """Derive the active CGM sensor session's start / expiry (G6 and G7).
 
-        Events (tconnectsync LID_CGM_{START,JOIN,STOP}_SESSION_GX) carry, on the
-        transmitter clock in whole seconds (uint32): ``current_transmitter_time``
-        (the clock at the event) and ``session_start_time`` (the clock when the
-        session began). ``session_duration_days`` is the session length in whole
-        days (10 for G6; these GX events are live-validated on a G6 only). The
-        wall-clock session start is the event's
-        ``timestamp`` minus the transmitter seconds elapsed since the session
-        began, so the result needs no epoch assumption::
+        The session is anchored by the most recent start that can be placed on the
+        wall clock — a G6 start/join (212/213) or a G7 join (394); see
+        :func:`_cgm_session_anchors` for how each generation is decoded::
 
-            start_wall  = pumpDateTime - (current_transmitter_time - session_start_time)
-            expiry_wall = start_wall + session_duration_days
+            expiry_wall = start_wall + rated duration (+ G7 12 h grace window)
 
-        When the most recent session event is a stop (214 / G7 447), or the latest
-        G7 reading reports a "Session Stopped (…)" algorithm state (e.g. a failed
-        sensor whose stop event has not uploaded yet), there is no active sensor
-        session, so the sensors go unavailable rather than report a stale one
-        (null-not-guess).
+        When a stop (214 / G7 447) was logged after the anchor, or the latest G7
+        reading reports a "Session Stopped (…)" state, or the session is past its
+        grace window, there is no active session and the sensors go unavailable
+        rather than report a stale one (null-not-guess).
+
+        For a G6 the transmitter (reused across sensors, rated 3 months) is reported
+        too: its session-event clock counts from activation, so its age is the
+        latest G6 event's ``current_transmitter_time``.
         """
         keys = (
             TANDEM_SENSOR_KEY_CGM_SESSION_START,
             TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY,
             TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING,
         )
-        # A session is anchored by a start/join (212/213) that carries a valid
-        # transmitter start time. Stop events (214) carry the sentinel
-        # 0xFFFFFFFF for sessionStartTime, so they cannot anchor a session.
-        starts = [
-            e
-            for e in cgm_session_events
-            if e.get("event_name") in ("CGMSessionStart", "CGMSessionJoin")
-            and _valid_session_seconds(e.get("session_start_time"))
-            and _valid_session_seconds(e.get("current_transmitter_time"))
-            and isinstance(e.get("session_duration_days"), (int, float))
-        ]
-        if not starts:
+        tz = ZoneInfo(self.timezone)
+        anchors = _cgm_session_anchors(cgm_session_events, tz)
+        if not anchors:
             for key in keys:
                 data[key] = UNAVAILABLE
             return
 
-        # Most recent valid start/join (list is pre-sorted by timestamp).
-        anchor = starts[-1]
-        ct = anchor["current_transmitter_time"]
-        sst = anchor["session_start_time"]
-        duration_days = anchor["session_duration_days"]
-        tz = ZoneInfo(self.timezone)
-        start_wall = anchor["timestamp"].replace(tzinfo=tz) - timedelta(seconds=ct - sst)
+        anchor = anchors[-1]
+        anchor_evt = anchor["event"]
+        start_wall = anchor["start"]
+        model = anchor["model"]
+        duration_days = anchor["duration_days"]
         expiry_wall = start_wall + timedelta(days=duration_days)
         now = datetime.now(tz)
 
-        # If a stop was logged after this start, or the session has already
-        # expired, the anchored sensor is no longer current and the current
-        # sensor's start has not uploaded yet — report unavailable rather than a
-        # stale/expired session (null-not-guess).
         stopped_after = any(
-            e.get("event_name") == "CGMSessionStop" and e["timestamp"] > anchor["timestamp"] for e in cgm_session_events
+            e.get("event_name") == "CGMSessionStop" and e["timestamp"] > anchor_evt["timestamp"]
+            for e in cgm_session_events
         )
         if cgm_readings and not stopped_after:
             latest_reading = cgm_readings[-1]
-            stopped_after = latest_reading["timestamp"] > anchor["timestamp"] and _is_g7_session_stopped(latest_reading)
+            stopped_after = latest_reading["timestamp"] > anchor_evt["timestamp"] and _is_g7_session_stopped(
+                latest_reading
+            )
         # A G7 keeps reading for a 12 h grace window after its rated expiry, so the
         # session stays current until then (days remaining holds at 0).
-        model = _cgm_model_at(cgm_readings or [], anchor["timestamp"])
-        grace_hours = CGM_GRACE_PERIOD_HOURS.get(model, 0) if model else 0
+        grace_hours = CGM_GRACE_PERIOD_HOURS.get(model, 0)
         grace_end = expiry_wall + timedelta(hours=grace_hours)
         if stopped_after or grace_end <= now:
             for key in keys:
                 data[key] = UNAVAILABLE
             return
 
-        reason_id = anchor.get("session_reason")
+        reason_id = anchor_evt.get("session_reason")
         data[TANDEM_SENSOR_KEY_CGM_SESSION_START] = start_wall
         data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] = expiry_wall
         data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] = max(
@@ -1728,6 +1779,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         data[f"{TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY}_attributes"] = {
             "sensor": model,
             "session_duration_days": duration_days,
+            "session_duration_source": anchor["duration_source"],
             "grace_period_hours": grace_hours,
             "grace_period_end": grace_end.isoformat() if grace_hours else None,
             "in_grace_period": expiry_wall <= now,
@@ -1735,6 +1787,42 @@ class TandemCoordinator(DataUpdateCoordinator):
             "session_started_via": (
                 CGM_SESSION_REASON_MAP.get(reason_id, f"Reason {reason_id}") if reason_id is not None else None
             ),
+            **self._g6_transmitter_attributes(cgm_session_events, model, tz, now),
+        }
+
+    @staticmethod
+    def _g6_transmitter_attributes(
+        cgm_session_events: list[dict[str, Any]], model: str, tz: ZoneInfo, now: datetime
+    ) -> dict[str, Any]:
+        """Age and rated expiry of the reusable G6 transmitter (None for a G7).
+
+        Taken from the latest G6 session event (212/213/214) with a valid
+        ``current_transmitter_time`` — seconds since the transmitter was activated.
+        """
+        empty: dict[str, Any] = {
+            "transmitter_activated": None,
+            "transmitter_age_days": None,
+            "transmitter_expiry": None,
+            "transmitter_days_remaining": None,
+        }
+        if model != "G6":
+            return empty
+        g6 = [
+            e
+            for e in cgm_session_events
+            if e.get("event_id") in (EVT_CGM_SESSION_START, EVT_CGM_SESSION_JOIN, EVT_CGM_SESSION_STOP)
+            and _valid_session_seconds(e.get("current_transmitter_time"))
+        ]
+        if not g6:
+            return empty
+        latest = g6[-1]
+        activated = latest["timestamp"].replace(tzinfo=tz) - timedelta(seconds=latest["current_transmitter_time"])
+        expiry = activated + timedelta(days=CGM_G6_TRANSMITTER_LIFE_DAYS)
+        return {
+            "transmitter_activated": activated.isoformat(),
+            "transmitter_age_days": round((now - activated).total_seconds() / 86400.0, 1),
+            "transmitter_expiry": expiry.isoformat(),
+            "transmitter_days_remaining": max(0.0, round((expiry - now).total_seconds() / 86400.0, 1)),
         }
 
     @staticmethod
@@ -1851,32 +1939,38 @@ class TandemCoordinator(DataUpdateCoordinator):
         stop: dict[str, Any],
         cgm_session_events: list[dict[str, Any]],
         cgm_readings: list[dict[str, Any]],
+        cgm_alert_events: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """Describe one CGM session stop: when, why, and how long the sensor was worn.
 
-        Wear time comes from the stop's own transmitter-clock fields when valid
-        (``session_stop_time - session_start_time``, G7 447); otherwise from the
-        latest valid start/join before the stop (the 214 stop carries the sentinel
-        start time). The cause is the G7 "Session Stopped (…)" algorithm state seen
-        on the CGM data around the stop, when there is one.
+        Wear time comes from the sensor's own clock, never from pump wall-clock
+        arithmetic (the pump clock can be corrected mid-session):
+
+        * ``session_stop_time - session_start_time`` when both are valid;
+        * G7 stop (447): ``current_transmitter_time`` — the G7 clock starts with the
+          sensor (its start field is the 0xFFFFFFFF sentinel);
+        * G6 stop (214): ``current_transmitter_time`` minus the ``session_start_time``
+          of the latest G6 start/join on the same transmitter.
+
+        The cause is the session-ending CGM alert logged with the stop (e.g. "CGM
+        Sensor Failed", whose ``param1`` names the G7 stop state, or "CGM Sensor
+        Expired"), falling back to a "Session Stopped (…)" state on the G7 data.
         """
         tz = ZoneInfo(self.timezone)
         end_wall = stop["timestamp"].replace(tzinfo=tz)
+        is_g7_stop = stop.get("event_id") == EVT_CGM_SESSION_STOP_G7
         sst = stop.get("session_start_time")
         stop_time = stop.get("session_stop_time")
+        ct = stop.get("current_transmitter_time")
         duration_days = stop.get("session_duration_days")
 
         wear_seconds: float | None = None
-        if (
-            isinstance(sst, (int, float))
-            and isinstance(stop_time, (int, float))
-            and _valid_session_seconds(sst)
-            and _valid_session_seconds(stop_time)
-            and stop_time > sst
-        ):
+        if _valid_session_seconds(sst) and _valid_session_seconds(stop_time) and stop_time > sst:
             wear_seconds = float(stop_time - sst)
-        else:
-            anchors = [
+        elif is_g7_stop and _valid_session_seconds(ct):
+            wear_seconds = float(ct)
+        elif not is_g7_stop and _valid_session_seconds(ct):
+            g6_anchors = [
                 e
                 for e in cgm_session_events
                 if e.get("event_name") in ("CGMSessionStart", "CGMSessionJoin")
@@ -1884,30 +1978,18 @@ class TandemCoordinator(DataUpdateCoordinator):
                 and _valid_session_seconds(e.get("session_start_time"))
                 and _valid_session_seconds(e.get("current_transmitter_time"))
             ]
-            if anchors:
-                anchor = anchors[-1]
-                start_wall = anchor["timestamp"].replace(tzinfo=tz) - timedelta(
-                    seconds=anchor["current_transmitter_time"] - anchor["session_start_time"]
-                )
-                wear_seconds = (end_wall - start_wall).total_seconds()
+            # Same transmitter only: its clock must not have gone backwards.
+            if g6_anchors and g6_anchors[-1]["current_transmitter_time"] <= ct:
+                anchor = g6_anchors[-1]
+                wear_seconds = float(ct - anchor["session_start_time"])
                 if not isinstance(duration_days, (int, float)):
                     duration_days = anchor.get("session_duration_days")
         if wear_seconds is not None and wear_seconds < 0:
             wear_seconds = None
 
-        # G7 reports why the session stopped on its data events; take the nearest
-        # stopped-state reading from shortly before to shortly after the stop.
-        cause = None
-        window_start = stop["timestamp"] - timedelta(hours=6)
-        window_end = stop["timestamp"] + timedelta(minutes=30)
-        for reading in reversed(cgm_readings):
-            if window_start <= reading["timestamp"] <= window_end and _is_g7_session_stopped(reading):
-                state = _cgm_algorithm_state(reading)
-                cause = state[1] if state else None
-                break
+        cause, cause_alert_id = self._cgm_stop_cause(stop, cgm_alert_events, cgm_readings)
 
         reason_code = stop.get("session_reason")
-        is_g7_stop = stop.get("event_id") == EVT_CGM_SESSION_STOP_G7
         # The 214 reason is the DEXBLES enum; the G7 447 reason is undocumented, so
         # only its raw code is exposed (null-not-guess).
         reason_name = (
@@ -1915,50 +1997,104 @@ class TandemCoordinator(DataUpdateCoordinator):
             if reason_code is not None and not is_g7_stop
             else None
         )
-        wear_hours = round(wear_seconds / 3600.0, 1) if wear_seconds is not None else None
+        model = "G7" if is_g7_stop else "G6"
+        grace_hours = CGM_GRACE_PERIOD_HOURS.get(model, 0)
         rated_seconds = (
             float(duration_days) * 86400 if isinstance(duration_days, (int, float)) and duration_days > 0 else None
         )
-        ended_early = wear_seconds < rated_seconds if wear_seconds is not None and rated_seconds else None
-        model = "G7" if is_g7_stop else _cgm_model_at(cgm_readings, stop["timestamp"])
-        # Stops come only from Dexcom session events (214 / 447), so the Dexcom
-        # replacement rule applies: failed before 10 days of wear, whatever the rating.
-        replacement_eligible = (
-            wear_seconds < DEXCOM_REPLACEMENT_THRESHOLD_DAYS * 86400 if wear_seconds is not None else None
+        # Wear-derived fields stay None when the wear time is unknown (null-not-guess).
+        wear: dict[str, Any] = dict.fromkeys(
+            (
+                "sensor_wear_hours",
+                "sensor_wear_days",
+                "wear_pct_of_rated",
+                "ended_early",
+                "ended_in_grace_period",
+                "replacement_eligible",
+            )
         )
+        if wear_seconds is not None:
+            wear["sensor_wear_hours"] = round(wear_seconds / 3600.0, 1)
+            wear["sensor_wear_days"] = round(wear_seconds / 86400.0, 2)
+            # Dexcom replaces a sensor that stops before 10 days of wear, whatever its
+            # rating. (The G6 transmitter's 3-month warranty is separate.)
+            wear["replacement_eligible"] = wear_seconds < DEXCOM_REPLACEMENT_THRESHOLD_DAYS * 86400
+            if rated_seconds:
+                wear["wear_pct_of_rated"] = round(100.0 * wear_seconds / rated_seconds, 1)
+                wear["ended_early"] = wear_seconds < rated_seconds
+                # Past the rated life but inside the G7 grace window (not an early failure).
+                wear["ended_in_grace_period"] = (
+                    bool(grace_hours) and rated_seconds <= wear_seconds <= rated_seconds + grace_hours * 3600
+                )
         return {
             "timestamp": end_wall,
             "cause": cause,
+            "cause_alert_id": cause_alert_id,
             "stop_reason": reason_name,
             "stop_reason_code": reason_code,
             "stop_session_code": stop.get("stop_session_code"),
             "source_event": stop.get("event_id"),
             "sensor": model,
             "session_duration_days": duration_days,
-            "grace_period_hours": CGM_GRACE_PERIOD_HOURS.get(model, 0) if model else None,
-            "sensor_wear_hours": wear_hours,
-            "sensor_wear_days": round(wear_seconds / 86400.0, 2) if wear_seconds is not None else None,
-            "wear_pct_of_rated": (
-                round(100.0 * wear_seconds / rated_seconds, 1) if wear_seconds is not None and rated_seconds else None
-            ),
-            "ended_early": ended_early,
-            "replacement_eligible": replacement_eligible,
+            "grace_period_hours": grace_hours,
+            **wear,
         }
+
+    @staticmethod
+    def _cgm_stop_cause(
+        stop: dict[str, Any],
+        cgm_alert_events: list[dict[str, Any]],
+        cgm_readings: list[dict[str, Any]],
+    ) -> tuple[str | None, Any]:
+        """Name why a CGM session stopped: ``(cause, alert_id)``, or ``(None, None)``.
+
+        Uses the session-ending CGM alert activated nearest the stop (30 min before to
+        5 min after). A "CGM Sensor Failed" alert names the G7 stop state from its
+        ``param1`` (35 → "Session Stopped (Sensor Failed)"), which is what Tandem
+        Source shows as "Failed Sensor". Otherwise falls back to a G7 "Session
+        Stopped (…)" state on the CGM data around the stop.
+        """
+        t = stop["timestamp"]
+        candidates = [
+            e
+            for e in cgm_alert_events
+            if e.get("event_name") == "CGMAlertActivated"
+            and e.get("cgm_alert_id") in CGM_SESSION_END_ALERT_IDS
+            and t - timedelta(minutes=30) <= e["timestamp"] <= t + timedelta(minutes=5)
+        ]
+        if candidates:
+            alert = min(candidates, key=lambda e: abs((e["timestamp"] - t).total_seconds()))
+            aid = alert.get("cgm_alert_id")
+            param1 = alert.get("param1")
+            if aid == CGM_ALERT_SENSOR_FAILED and isinstance(param1, int) and param1 in CGM_ALGORITHM_STATE_MAP_G7:
+                return CGM_ALGORITHM_STATE_MAP_G7[param1], aid
+            name = TANDEM_CGM_ALERT_MAP.get(aid) if isinstance(aid, int) else None
+            return name or f"CGM Alert {aid}", aid
+
+        window_start = t - timedelta(hours=6)
+        window_end = t + timedelta(minutes=30)
+        for reading in reversed(cgm_readings):
+            if window_start <= reading["timestamp"] <= window_end and _is_g7_session_stopped(reading):
+                state = _cgm_algorithm_state(reading)
+                return (state[1] if state else None), None
+        return None, None
 
     def _parse_cgm_session_end(
         self,
         cgm_session_events: list[dict[str, Any]],
         cgm_readings: list[dict[str, Any]],
         data: dict[str, Any],
+        cgm_alert_events: list[dict[str, Any]] | None = None,
     ) -> None:
         """Populate the last-CGM-session-end sensor from stop events (214 / G7 447).
 
         State is the wall-clock time the last session ended (Tandem Source's
-        "Sensor Session Ended"); attributes carry the cause, stop reason/codes,
-        sensor wear time and whether it ended before its rated duration, plus the
-        same record for up to 10 recent session ends.
+        "Sensor Session Ended" / "Failed Sensor"); attributes carry the cause, stop
+        reason/codes, sensor wear time, whether it ended early or in the grace window
+        and whether it qualifies for replacement, plus the same record for up to 10
+        recent session ends.
         """
-        # A G7 stop can be logged on both 214 and 447; collapse stops within a few
+        # Should a stop be logged on both 214 and 447, collapse stops within a few
         # minutes of each other, keeping the richer G7 (447) record.
         stops: list[dict[str, Any]] = []
         for e in cgm_session_events:
@@ -1972,7 +2108,8 @@ class TandemCoordinator(DataUpdateCoordinator):
         if not stops:
             data[TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END] = UNAVAILABLE
             return
-        records = [self._cgm_session_end_record(e, cgm_session_events, cgm_readings) for e in stops[-10:]]
+        alerts = cgm_alert_events or []
+        records = [self._cgm_session_end_record(e, cgm_session_events, cgm_readings, alerts) for e in stops[-10:]]
         last = records[-1]
         data[TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END] = last["timestamp"]
         attrs = {k: v for k, v in last.items() if k != "timestamp"}
@@ -2180,6 +2317,11 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         Replaces the broken dashboard_summary API by computing locally:
         avg glucose, SD, CV, GMI, time in/below/above range, CGM usage.
+
+        The period is the 7 days up to the latest reading (the fetch itself spans
+        ~7.7 days from midnight, a window no app reports), stated on the TIR sensor's
+        attributes. The TIR attributes also carry the calendar day of the latest
+        reading — the figure Tandem Source shows on its daily view.
         """
         _unavailable_keys = (
             TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL,
@@ -2198,8 +2340,15 @@ class TandemCoordinator(DataUpdateCoordinator):
                 data[key] = UNAVAILABLE
             return
 
-        # Extract valid glucose values
-        values = [r["glucose_mgdl"] for r in cgm_readings if r.get("glucose_mgdl") and r["glucose_mgdl"] > 0]
+        def _valid(rows: list[dict[str, Any]]) -> list[float]:
+            return [r["glucose_mgdl"] for r in rows if r.get("glucose_mgdl") and r["glucose_mgdl"] > 0]
+
+        def _pct(count: int, total: int) -> float:
+            return round((count / total) * 100, 1)
+
+        latest_ts = cgm_readings[-1]["timestamp"]
+        period_start = latest_ts - timedelta(days=_CGM_SUMMARY_PERIOD_DAYS)
+        values = _valid([r for r in cgm_readings if r["timestamp"] > period_start])
 
         if not values:
             for key in _unavailable_keys:
@@ -2226,17 +2375,34 @@ class TandemCoordinator(DataUpdateCoordinator):
         # GMI (Glucose Management Indicator)
         data[TANDEM_SENSOR_KEY_GMI] = round(3.31 + (0.02392 * mean), 1)
 
-        # Time in range (70-180 mg/dL)
-        in_range = sum(1 for v in values if 70 <= v <= 180)
-        below = sum(1 for v in values if v < 70)
-        above = sum(1 for v in values if v > 180)
-        data[TANDEM_TIME_IN_RANGE] = round((in_range / n) * 100, 1)
-        data[TANDEM_SENSOR_KEY_TIME_BELOW_RANGE] = round((below / n) * 100, 1)
-        data[TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE] = round((above / n) * 100, 1)
+        # Time in range (70-180 mg/dL, i.e. 3.9-10.0 mmol/L)
+        data[TANDEM_TIME_IN_RANGE] = _pct(sum(1 for v in values if 70 <= v <= 180), n)
+        data[TANDEM_SENSOR_KEY_TIME_BELOW_RANGE] = _pct(sum(1 for v in values if v < 70), n)
+        data[TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE] = _pct(sum(1 for v in values if v > 180), n)
 
-        # CGM usage (readings per day: 288 at 5-min intervals)
-        # Use reading count vs expected for the fetch window
-        data[TANDEM_SENSOR_KEY_CGM_USAGE] = round(min((n / 288) * 100, 100.0), 1)
+        # Calendar day of the latest reading (Tandem Source's daily TIR).
+        day_start = latest_ts.replace(hour=0, minute=0, second=0, microsecond=0)
+        today = _valid([r for r in cgm_readings if r["timestamp"] >= day_start])
+        tz = ZoneInfo(self.timezone)
+
+        def _iso(ts: datetime) -> str:
+            return (ts if ts.tzinfo else ts.replace(tzinfo=tz)).isoformat()
+
+        data[f"{TANDEM_TIME_IN_RANGE}_attributes"] = {
+            "period_days": _CGM_SUMMARY_PERIOD_DAYS,
+            "period_start": _iso(period_start),
+            "period_end": _iso(latest_ts),
+            "readings": n,
+            "range_mgdl": "70-180",
+            "day": day_start.date().isoformat(),
+            "day_time_in_range": _pct(sum(1 for v in today if 70 <= v <= 180), len(today)) if today else None,
+            "day_time_below_range": _pct(sum(1 for v in today if v < 70), len(today)) if today else None,
+            "day_time_above_range": _pct(sum(1 for v in today if v > 180), len(today)) if today else None,
+            "day_readings": len(today),
+        }
+
+        # CGM usage: readings received vs expected (one per 5 min) over the period.
+        data[TANDEM_SENSOR_KEY_CGM_USAGE] = round(min(n / (_CGM_SUMMARY_PERIOD_DAYS * 288) * 100, 100.0), 1)
 
         _LOGGER.debug(
             "CGM summary: avg=%d mg/dL, SD=%.1f, CV=%.1f%%, GMI=%.1f%%, "

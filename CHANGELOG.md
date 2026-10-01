@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+## [2.3.0-rc.3] - 2026-10-01 (pre-release)
+
 ### Fixed
 - **Dexcom G7 sensor sessions.** Rebuilt against live G6 → G7 pump data (Sep 2026). The rc.1/rc.2
   session code assumed a G7 logs the G6 session events (212/213); it never does.

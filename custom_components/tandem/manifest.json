@@ -11,7 +11,7 @@
   "issue_tracker": "https://github.com/jnctech/ha-tandem-pump/issues",
   "loggers": ["httpx"],
   "quality_scale": "bronze",
-  "requirements": ["aiofiles==24.1.0", "certifi==2024.12.14", "httpx==0.28.1"],
+  "requirements": [],
   "version": "2.3.0",
   "zeroconf": []
 }

@@ -49,10 +49,28 @@ class TestNextTag:
         with pytest.raises(rt.ReleaseError, match="already released"):
             rt.next_tag("2.3.0", ["v2.3.0"], "rc")
 
-    @pytest.mark.parametrize("bad", ["2.3", "v2.3.0", "2.3.0-rc.1", "2.3.0 "])
+    @pytest.mark.parametrize("bad", ["2.3", "v2.3.0", "2.3.0-rc.1", "2.3.0 ", "2.3.0\n"])
     def test_bad_version(self, bad):
         with pytest.raises(rt.ReleaseError, match="X.Y.Z"):
             rt.next_tag(bad, [], "rc")
+
+    # Live situation 2026-10-01: v2.3.0-rc.1/rc.2 are public, so a 2.2.x tag would sort
+    # below them and HACS would never offer it as an update.
+    LIVE_TAGS = ["v1.6.0", "v2.2.0", "v2.2.1-rc.1", "v2.2.1", "v2.3.0-rc.1", "v2.3.0-rc.2"]
+
+    @pytest.mark.parametrize("version, kind", [("2.2.2", "rc"), ("2.2.2", "final"), ("2.1.9", "rc")])
+    def test_refuses_tag_below_latest(self, version, kind):
+        with pytest.raises(rt.ReleaseError, match="would not sort above the latest release tag v2.3.0-rc.2"):
+            rt.next_tag(version, self.LIVE_TAGS, kind)
+
+    def test_next_rc_and_final_above_latest_allowed(self):
+        assert rt.next_tag("2.3.0", self.LIVE_TAGS, "rc") == "v2.3.0-rc.3"
+        assert rt.next_tag("2.3.0", self.LIVE_TAGS, "final") == "v2.3.0"
+        assert rt.next_tag("2.4.0", self.LIVE_TAGS, "rc") == "v2.4.0-rc.1"
+
+    def test_rc_of_older_version_refused_after_newer_final(self):
+        with pytest.raises(rt.ReleaseError, match="would not sort above"):
+            rt.next_tag("2.3.1", ["v2.4.0"], "rc")
 
     def test_bad_kind(self):
         with pytest.raises(rt.ReleaseError, match="kind"):

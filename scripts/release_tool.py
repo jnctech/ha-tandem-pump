@@ -35,16 +35,30 @@ class ReleaseError(Exception):
 
 def validate_version(version: str) -> str:
     """Return ``version`` if it is a plain X.Y.Z, else raise."""
-    if not _VERSION_RE.match(version):
+    if not _VERSION_RE.fullmatch(version):
         raise ReleaseError(f"version must be X.Y.Z (got {version!r})")
     return version
+
+
+_TAG_RE = re.compile(r"v(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?")
+
+
+def _tag_key(tag: str) -> tuple[int, int, int, int, int] | None:
+    """SemVer sort key for vX.Y.Z / vX.Y.Z-rc.N (a final sorts after its rcs); else None."""
+    m = _TAG_RE.fullmatch(tag)
+    if not m:
+        return None
+    major, minor, patch, rc = m.groups()
+    return (int(major), int(minor), int(patch), 0 if rc else 1, int(rc or 0))
 
 
 def next_tag(version: str, existing_tags: list[str], kind: str) -> str:
     """Next tag for ``version``: vX.Y.Z-rc.<N+1> for an rc, vX.Y.Z for a final.
 
-    Raises if the final tag already exists, or if an rc is requested for a version
-    that has already had its final release.
+    Raises if the final tag already exists, if an rc is requested for a version
+    that has already had its final release, or if the new tag would not sort above
+    every existing release tag (HACS orders releases by SemVer, so a lower tag is
+    never offered as an update).
     """
     validate_version(version)
     final = f"{TAG_PREFIX}{version}"
@@ -52,12 +66,23 @@ def next_tag(version: str, existing_tags: list[str], kind: str) -> str:
     if final in tags:
         raise ReleaseError(f"{final} is already released")
     if kind == "final":
-        return final
+        return _check_above_existing(final, tags)
     if kind != "rc":
         raise ReleaseError(f"kind must be rc or final (got {kind!r})")
     rc_re = re.compile(rf"^{re.escape(final + RC_SEPARATOR)}(\d+)$")
     numbers = [int(m.group(1)) for t in tags if (m := rc_re.match(t))]
-    return f"{final}{RC_SEPARATOR}{max(numbers, default=0) + 1}"
+    new = f"{final}{RC_SEPARATOR}{max(numbers, default=0) + 1}"
+    return _check_above_existing(new, tags)
+
+
+def _check_above_existing(new: str, tags: set[str]) -> str:
+    keyed = [(k, t) for t in tags if (k := _tag_key(t))]
+    if keyed:
+        top_key, top = max(keyed)
+        new_key = _tag_key(new)
+        if new_key is None or new_key <= top_key:
+            raise ReleaseError(f"{new} would not sort above the latest release tag {top}")
+    return new
 
 
 def bump_manifest(text: str, version: str) -> str:

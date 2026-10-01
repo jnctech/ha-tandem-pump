@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live data, where the plain 70–180 mg/dL cut read 1–2.5 points low.
 - **CGM usage** was readings ÷ one day's worth, so it always showed 100%; it is now readings vs
   expected over the 7-day period.
+- **Release pipeline guard.** The Pre-release workflow took the version as free text with no ordering
+  check, so it could cut a tag below an existing one (a 2.2.x after the public v2.3.0-rc.x), which
+  HACS would never offer as an update. `release_tool.py next-tag` now refuses any tag that does not
+  sort above every existing release tag, rejects a version with a trailing newline, and releases may
+  only come from `develop` or a `release/*` branch (rc.2 was cut from an unreviewed feature branch).
 
 ### Changed
 - **Control-IQ mode "Pining" is now "Waiting for CGM".** PCM state 2 (tconnectsync's "PINING")

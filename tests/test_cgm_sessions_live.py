@@ -388,3 +388,94 @@ class TestTandemSourceRange:
         assert coordinator.data[TANDEM_SENSOR_KEY_TIME_IN_RANGE] == 50.0
         assert coordinator.data[TANDEM_SENSOR_KEY_TIME_BELOW_RANGE] == 25.0
         assert coordinator.data[TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE] == 25.0
+
+
+def _pcm(ts: datetime) -> dict:
+    """A non-CGM pump event (Control-IQ mode change), as logged while the CGM is down."""
+    return _bff(
+        230,
+        ts,
+        {
+            "currentPcm": 2,
+            "previousPcm": 3,
+            "pumpSuspended": 0,
+            "calculationAvailable": 1,
+            "cgmAvailable": 0,
+            "closedLoopPreferred": 1,
+            "sufficientClosedLoopParams": 1,
+        },
+    )
+
+
+class TestReviewFindings:
+    async def test_session_survives_join_ageing_out_of_fetch(self, hass: HomeAssistant):
+        """The join is logged once; the next fetch window may no longer contain it."""
+        now = _now(hass)
+        join = _g7_join(now - timedelta(days=8), 600)
+        later = [_reading(now - timedelta(minutes=5), 120, egv=5)]
+        # Control: a coordinator that never saw the join has no session.
+        control = await _setup_coordinator(hass, _make_pump_events_data(later))
+        assert control.data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] is UNAVAILABLE
+
+        coordinator = await _setup_coordinator(
+            hass, _make_pump_events_data([join, _reading(now - timedelta(days=8), 120, egv=1)])
+        )
+        coordinator.client.get_recent_data.return_value = _make_pump_events_data(later)
+        coordinator._last_max_date = None  # force a full fetch on the next poll
+        await coordinator.async_refresh()
+        assert 1.9 < coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] < 2.1
+
+    async def test_cgm_period_ends_at_latest_pump_event(self, hass: HomeAssistant):
+        """Sensor stopped 4 days ago but the pump kept logging: the gap counts."""
+        now = _now(hass)
+        rows = [_reading(now - timedelta(days=4, hours=h), 120, egv=h) for h in range(144)]  # days 10..4 ago
+        rows.sort(key=lambda r: r["timestamp"])
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data([*rows, _pcm(now)]))
+        attrs = coordinator.data[f"{TANDEM_SENSOR_KEY_TIME_IN_RANGE}_attributes"]
+        assert attrs["readings"] == 72  # only days 7..4 ago fall in the 7 days up to now
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_USAGE] == 3.6  # 72 of 2016
+        assert attrs["day_readings"] == 0
+        assert attrs["day_time_in_range"] is None
+
+    async def test_g6_wear_not_taken_across_another_stop(self, hass: HomeAssistant):
+        """This session's start never uploaded: the older join belongs to another session."""
+        now = _now(hass)
+        join = _g6_join(now - timedelta(days=10), ct=_DAY, sst=0)
+        stop2 = _g6_stop(now - timedelta(hours=1), ct=10 * _DAY, reason=0)
+        control = await _setup_coordinator(hass, _make_pump_events_data([join, stop2]))
+        assert control.data[f"{TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END}_attributes"]["sensor_wear_days"] == 10.0
+
+        stop1 = _g6_stop(now - timedelta(days=5), ct=6 * _DAY, reason=0)
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data([join, stop1, stop2]))
+        attrs = coordinator.data[f"{TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END}_attributes"]
+        assert attrs["sensor_wear_days"] is None
+        assert attrs["replacement_eligible"] is None
+
+    async def test_g6_failed_alert_not_decoded_with_g7_states(self, hass: HomeAssistant):
+        now = _now(hass)
+        events = [
+            _g6_join(now - timedelta(days=3), ct=4 * _DAY, sst=_DAY),
+            _alert(now - timedelta(minutes=1), 11, param1=35, sensor=1),
+            _g6_stop(now - timedelta(minutes=1), ct=4 * _DAY + 600, reason=4),
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+        assert coordinator.data[f"{TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END}_attributes"]["cause"] == "CGM Sensor Failed"
+
+    async def test_same_sensor_clock_on_another_sensor_is_not_a_duplicate(self, hass: HomeAssistant):
+        now = _now(hass)
+        rows = [_reading(now - timedelta(days=3), 120, egv=900), _reading(now, 120, egv=900)]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(rows))
+        assert coordinator.data[f"{TANDEM_SENSOR_KEY_TIME_IN_RANGE}_attributes"]["readings"] == 2
+
+    async def test_summary_failure_leaves_nothing_half_written(self, hass: HomeAssistant, monkeypatch):
+        from custom_components.tandem import coordinator as coord
+
+        def _boom(_mgdl: float) -> int:
+            raise ValueError("boom")
+
+        monkeypatch.setattr(coord, "_glucose_band", _boom)
+        now = _now(hass)
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data([_reading(now, 120, egv=1)]))
+        assert coordinator.data[TANDEM_SENSOR_KEY_TIME_IN_RANGE] is UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_USAGE] is UNAVAILABLE
+        assert f"{TANDEM_SENSOR_KEY_TIME_IN_RANGE}_attributes" not in coordinator.data

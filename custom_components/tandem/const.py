@@ -229,6 +229,10 @@ DEXCOM_REPLACEMENT_THRESHOLD_DAYS = 10
 # stop (447). The G7 join (394) has no duration, so an active G7 session uses the
 # latest G7 stop's duration, else the standard 10-day G7 rating.
 CGM_GRACE_PERIOD_HOURS: dict[str, int] = {"G6": 0, "G7": 12}
+# Dexcom spec (operator-supplied, 2026-10-01): G7 10-day wear, G7 15 Day 15-day wear,
+# both all-in-one with a 12 h grace period; warm-up 30 min vs 60 min; the 15 Day is
+# approved for ages 18+ only. So 10 days is the default; a 15-day session is picked up
+# from a previous G7 stop's sessionDuration once one is in the held history.
 CGM_G7_DEFAULT_SESSION_DAYS = 10
 
 # The G6 transmitter is separate from the 10-day sensor and moves to each new sensor;

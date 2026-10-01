@@ -215,6 +215,10 @@ def _cgm_algorithm_state(evt: dict[str, Any]) -> tuple[int, str] | None:
 # CGM summary period (avg / SD / GMI / TIR / usage): the days up to the latest reading.
 _CGM_SUMMARY_PERIOD_DAYS = 7
 _MGDL_PER_MMOL = 18.0182
+# CGM session + alert events are kept across polls for this long. The fetch covers
+# ~7.7 days, but a sensor's start/join is logged once, near its start, so without the
+# history the session sensors would go unavailable for the last days of a sensor.
+_CGM_EVENT_HISTORY_DAYS = 16
 
 
 def _glucose_band(mgdl: float) -> int:
@@ -238,15 +242,18 @@ def _dedupe_cgm_readings(cgm_readings: list[dict[str, Any]]) -> list[dict[str, A
     value and status; ~2% of a live week, 2026-10-01), which would double-count it
     in TIR / averages. Readings without an ``egv_timestamp`` are always kept.
     """
-    seen: set[tuple[Any, ...]] = set()
+    kept: dict[tuple[Any, ...], datetime] = {}
     out: list[dict[str, Any]] = []
     for r in cgm_readings:
         egv = r.get("egv_timestamp")
         if egv is not None:
             key = (r.get("event_id"), egv, r.get("glucose_mgdl"), r.get("status"))
-            if key in seen:
+            # The sensor clock restarts with each G7, so a key only marks a repeat when
+            # the copies were also logged within a day of each other.
+            prev = kept.get(key)
+            if prev is not None and abs(r["timestamp"] - prev) <= timedelta(days=1):
                 continue
-            seen.add(key)
+            kept[key] = r["timestamp"]
         out.append(r)
     return out
 
@@ -420,6 +427,10 @@ class TandemCoordinator(DataUpdateCoordinator):
         self._last_cartridge_fill_seq: int = 0
         self._last_cartridge_fill_volume: float = 0.0
         self._cumulative_delivered: float = 0.0
+        # CGM session / alert events seen in earlier polls (see _CGM_EVENT_HISTORY_DAYS).
+        self._cgm_session_history: dict[tuple[Any, Any, Any], dict[str, Any]] = {}
+        self._cgm_alert_history: dict[tuple[Any, Any, Any], dict[str, Any]] = {}
+        self._g7_default_rating_logged = False
         self._last_delivery_seq: int = 0
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -1007,8 +1018,11 @@ class TandemCoordinator(DataUpdateCoordinator):
         plgs_events.sort(key=lambda e: e["timestamp"])
         # NewDay events decoded for diagnostics logging (Phase 5).
         new_day_events.sort(key=lambda e: e["timestamp"])
-        cgm_session_events.sort(key=lambda e: e["timestamp"])
-        cgm_alert_events.sort(key=lambda e: e["timestamp"])
+        cgm_session_events = self._merge_cgm_history(self._cgm_session_history, cgm_session_events)
+        cgm_alert_events = self._merge_cgm_history(self._cgm_alert_history, cgm_alert_events)
+        # Latest pump event of any type: the pump keeps logging (basal ...) while the CGM
+        # is down, so the CGM summary period ends here and a stopped sensor shows as a gap.
+        data_end = max((t for evt in pump_events if isinstance(t := evt.get("timestamp"), datetime)), default=None)
 
         # ── Populate current sensor values from latest events ────────
 
@@ -1607,9 +1621,12 @@ class TandemCoordinator(DataUpdateCoordinator):
 
         # ── Computed summaries ─────────────────────────────────────────
         try:
-            self._compute_cgm_summary(cgm_readings, data)
+            self._compute_cgm_summary(cgm_readings, data, data_end)
         except Exception as e:
-            _LOGGER.warning("Error computing CGM summary: %s", e, exc_info=True)
+            _LOGGER.error("Error computing CGM summary: %s", e, exc_info=True)
+            # Never leave a half-written summary looking current.
+            self._compute_cgm_summary([], data)
+            data.pop(f"{TANDEM_TIME_IN_RANGE}_attributes", None)
 
         try:
             self._compute_insulin_summary(
@@ -1725,6 +1742,23 @@ class TandemCoordinator(DataUpdateCoordinator):
         # ── Active count (alerts + alarms combined) ───────────────────
         data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] = len(active_alerts) + len(active_alarms)
 
+    @staticmethod
+    def _merge_cgm_history(
+        history: dict[tuple[Any, Any, Any], dict[str, Any]], events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Add this poll's events to ``history``, prune it, and return it sorted.
+
+        Only events from earlier polls are pruned; this poll's events are always kept.
+        """
+        current = {(e.get("event_id"), e.get("seq"), e["timestamp"]) for e in events}
+        for e in events:
+            history[(e.get("event_id"), e.get("seq"), e["timestamp"])] = e
+        if history:
+            cutoff = max(e["timestamp"] for e in history.values()) - timedelta(days=_CGM_EVENT_HISTORY_DAYS)
+            for key in [k for k, e in history.items() if k not in current and e["timestamp"] < cutoff]:
+                del history[key]
+        return sorted(history.values(), key=lambda e: e["timestamp"])
+
     def _parse_cgm_session_events(
         self,
         cgm_session_events: list[dict[str, Any]],
@@ -1756,12 +1790,23 @@ class TandemCoordinator(DataUpdateCoordinator):
         tz = ZoneInfo(self.timezone)
         anchors = _cgm_session_anchors(cgm_session_events, tz)
         if not anchors:
+            _LOGGER.debug(
+                "No CGM session start/join among %d held session event(s); session sensors unavailable",
+                len(cgm_session_events),
+            )
             for key in keys:
                 data[key] = UNAVAILABLE
             return
 
         anchor = anchors[-1]
         anchor_evt = anchor["event"]
+        if anchor["duration_source"] == "G7 standard rating" and not self._g7_default_rating_logged:
+            self._g7_default_rating_logged = True
+            _LOGGER.info(
+                "G7 session length not in the pump data yet; assuming the standard %d-day G7 "
+                "(a 15-day G7 shows the right expiry once its first stop has been seen)",
+                CGM_G7_DEFAULT_SESSION_DAYS,
+            )
         start_wall = anchor["start"]
         model = anchor["model"]
         duration_days = anchor["duration_days"]
@@ -1998,9 +2043,17 @@ class TandemCoordinator(DataUpdateCoordinator):
                 and _valid_session_seconds(e.get("session_start_time"))
                 and _valid_session_seconds(e.get("current_transmitter_time"))
             ]
-            # Same transmitter only: its clock must not have gone backwards.
-            if g6_anchors and g6_anchors[-1]["current_transmitter_time"] <= ct:
-                anchor = g6_anchors[-1]
+            anchor = g6_anchors[-1] if g6_anchors else None
+            # Same session only: no other stop in between (its own start may not have
+            # uploaded), and the same transmitter (its clock must not have gone back).
+            if (
+                anchor is not None
+                and anchor["current_transmitter_time"] <= ct
+                and not any(
+                    e.get("event_name") == "CGMSessionStop" and anchor["timestamp"] < e["timestamp"] < stop["timestamp"]
+                    for e in cgm_session_events
+                )
+            ):
                 wear_seconds = float(ct - anchor["session_start_time"])
                 if not isinstance(duration_days, (int, float)):
                     duration_days = anchor.get("session_duration_days")
@@ -2086,7 +2139,13 @@ class TandemCoordinator(DataUpdateCoordinator):
             alert = min(candidates, key=lambda e: abs((e["timestamp"] - t).total_seconds()))
             aid = alert.get("cgm_alert_id")
             param1 = alert.get("param1")
-            if aid == CGM_ALERT_SENSOR_FAILED and isinstance(param1, int) and param1 in CGM_ALGORITHM_STATE_MAP_G7:
+            is_g7 = alert.get("sensor_type_id") == 3 or stop.get("event_id") == EVT_CGM_SESSION_STOP_G7
+            if (
+                is_g7
+                and aid == CGM_ALERT_SENSOR_FAILED
+                and isinstance(param1, int)
+                and param1 in CGM_ALGORITHM_STATE_MAP_G7
+            ):
                 return CGM_ALGORITHM_STATE_MAP_G7[param1], aid
             name = TANDEM_CGM_ALERT_MAP.get(aid) if isinstance(aid, int) else None
             return name or f"CGM Alert {aid}", aid
@@ -2332,16 +2391,21 @@ class TandemCoordinator(DataUpdateCoordinator):
             if TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS not in data:
                 data[TANDEM_SENSOR_KEY_ACTIVE_PROFILE_ATTRS] = {}
 
-    def _compute_cgm_summary(self, cgm_readings: list[dict[str, Any]], data: dict[str, Any]) -> None:
+    def _compute_cgm_summary(
+        self,
+        cgm_readings: list[dict[str, Any]],
+        data: dict[str, Any],
+        data_end: datetime | None = None,
+    ) -> None:
         """Compute CGM summary statistics from raw glucose readings.
 
         Replaces the broken dashboard_summary API by computing locally:
         avg glucose, SD, CV, GMI, time in/below/above range, CGM usage.
 
-        The period is the 7 days up to the latest reading (the fetch itself spans
-        ~7.7 days from midnight, a window no app reports), stated on the TIR sensor's
-        attributes. The TIR attributes also carry the calendar day of the latest
-        reading — the figure Tandem Source shows on its daily view.
+        The period is the 7 days up to ``data_end`` (the latest pump event of any type,
+        or the latest reading if later), so time after a sensor stops counts as missing
+        CGM data rather than vanishing. It is stated on the TIR sensor's attributes,
+        which also carry that calendar day's figure (Tandem Source's daily view).
         """
         _unavailable_keys = (
             TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL,
@@ -2367,6 +2431,8 @@ class TandemCoordinator(DataUpdateCoordinator):
             return round((count / total) * 100, 1)
 
         latest_ts = cgm_readings[-1]["timestamp"]
+        if data_end is not None and data_end > latest_ts:
+            latest_ts = data_end
         period_start = latest_ts - timedelta(days=_CGM_SUMMARY_PERIOD_DAYS)
         values = _valid([r for r in cgm_readings if r["timestamp"] > period_start])
 

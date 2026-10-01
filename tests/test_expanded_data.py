@@ -577,13 +577,13 @@ class TestComputedCGMSummary:
         assert coordinator.data[TANDEM_SENSOR_KEY_GLUCOSE_CV] is UNAVAILABLE
 
     async def test_cgm_usage_calculated(self, hass: HomeAssistant):
-        """CGM usage = readings / 288 * 100."""
-        # 10 readings out of 288 expected per day
+        """CGM usage = readings / expected 5-min readings over the 7-day period."""
+        # 10 readings out of 7 * 288 = 2016 expected
         events = [_make_cgm_event(i, 120, minutes_ago=i * 5) for i in range(10)]
         data = _make_pump_events_data(events)
         coordinator = await _setup_coordinator(hass, data)
 
-        expected = round((10 / 288) * 100, 1)
+        expected = round((10 / 2016) * 100, 1)
         assert coordinator.data[TANDEM_SENSOR_KEY_CGM_USAGE] == expected
 
 

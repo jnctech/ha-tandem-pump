@@ -305,7 +305,7 @@ def decode_pump_events(raw_b64: str) -> list[dict[str, Any]]:
             pcm_map = {
                 0: "No Control",
                 1: "Open Loop",
-                2: "Pining",
+                2: "Waiting for CGM",
                 3: "Closed Loop",
             }
             evt["current_pcm"] = pcm_map.get(current_pcm, f"PCM_{current_pcm}")
@@ -513,7 +513,9 @@ def decode_pump_events(raw_b64: str) -> list[dict[str, Any]]:
 # ``Any | None`` (a missing/None code falls through to the default).
 _SUSPEND_REASON_MAP: dict[Any, str] = {0: "User", 1: "Alarm", 2: "Malfunction", 3: "Auto-PLGS"}
 _USER_MODE_MAP: dict[Any, str] = {0: "Normal", 1: "Sleep", 2: "Exercise", 3: "Eating Soon"}
-_PCM_MAP: dict[Any, str] = {0: "No Control", 1: "Open Loop", 2: "Pining", 3: "Closed Loop"}
+# PCM 2 is tconnectsync's "PINING": closed loop wanted but waiting on the CGM. Live
+# 2026-10-01: all 185 PCM-2 events in 4 weeks carried cgmAvailable=0.
+_PCM_MAP: dict[Any, str] = {0: "No Control", 1: "Open Loop", 2: "Waiting for CGM", 3: "Closed Loop"}
 _BG_ENTRY_TYPE_MAP: dict[Any, str] = {0: "Manual", 1: "Dexcom EGV"}
 _CGM_SENSOR_TYPE_MAP: dict[Any, str] = {0: "No CGM", 1: "G6", 2: "Libre 2", 3: "G7"}
 
@@ -535,11 +537,17 @@ def _as_flag(value: Any) -> bool | None:
 
 
 def _bit_names(value: Any, names: dict[int, str]) -> list[str] | None:
-    """Names of the set bits in a BFF bitmask (index array or int); None when absent."""
+    """Names of the set bits in a BFF bitmask (index array or int); None when absent.
+
+    Set bits with no known name surface as ``"Bit {n}"`` rather than vanish (the G7
+    sets egvInfoBitmask bits 11 and 12, which no upstream catalog names).
+    """
     bits = _bitmask_to_int(value)
     if not isinstance(bits, int) or isinstance(bits, bool):
         return None
-    return [name for bit, name in names.items() if bits & (1 << bit)]
+    known = [name for bit, name in names.items() if bits & (1 << bit)]
+    unknown = [f"Bit {bit}" for bit in range(bits.bit_length()) if bits & (1 << bit) and bit not in names]
+    return known + unknown
 
 
 # tconnectsync events.json enums/bitmasks for the fields below.
@@ -668,6 +676,9 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         evt["algorithm_state"] = g("algorithmstate")
         # Per-reading quality flags (backfill, no EGV, valid EGV …); None when absent.
         evt["egv_info"] = _bit_names(g("egvinfobitmask"), _EGV_INFO_BITS)
+        # Sensor-clock time of the reading. The pump sometimes logs the same reading
+        # twice (identical egvTimeStamp + value); the coordinator de-duplicates on it.
+        evt["egv_timestamp"] = g("egvtimestamp")
 
     elif event_id in (EVT_BOLUS_COMPLETED, EVT_BOLEX_COMPLETED):
         evt["event_name"] = "BolusCompleted" if event_id == EVT_BOLUS_COMPLETED else "BolexCompleted"
@@ -846,8 +857,10 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         # CGM sensor session lifecycle (tconnectsync LID_CGM_{START,JOIN,STOP}_SESSION_GX).
         # Fields (events.json): sessionStartTime / currentTransmitterTime are uint32
         # seconds on the transmitter clock (NOT wall-clock); sessionDuration is a
-        # uint8 count of DAYS (10 for G6). Live-validated on a G6 only — G7 is expected
-        # to log 394/447 instead (unconfirmed). The coordinator derives the
+        # uint8 count of DAYS (10 for G6). G6 only: the G6 transmitter is reused across
+        # sensors and its clock counts from transmitter activation, so
+        # currentTransmitterTime is also the transmitter's age. A G7 never logs these —
+        # it logs 394/447 (live-verified 2026-10-01). The coordinator derives the
         # wall-clock start as pumpDateTime - (currentTransmitterTime - sessionStartTime).
         evt["event_name"] = {
             EVT_CGM_SESSION_START: "CGMSessionStart",
@@ -878,8 +891,10 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         evt["plgs_status"] = _bit_names(g("status"), _PLGS_STATUS_BITS)
 
     elif event_id == EVT_CGM_SESSION_STOP_G7:
-        # G7 session stop (tconnectsync LID_CGM_STOP_SESSION_G7). Same transmitter-clock
-        # fields as 214 plus ``stopSessionCode``; handled by the coordinator as a stop.
+        # G7 session stop (tconnectsync LID_CGM_STOP_SESSION_G7). The G7 is its own
+        # transmitter and its clock starts with the sensor, so currentTransmitterTime is
+        # the sensor's wear time; sessionStartTime is the 0xFFFFFFFF sentinel and
+        # sessionStopTime 0 (live-verified 2026-10-01). Handled as a stop.
         evt["event_name"] = "CGMSessionStop"
         evt["current_transmitter_time"] = g("currenttransmittertime")
         evt["session_start_time"] = g("sessionstarttime")
@@ -889,9 +904,10 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         evt["stop_session_code"] = g("stopsessioncode")
 
     elif event_id == EVT_CGM_SESSION_JOIN_G7:
-        # G7 join (tconnectsync LID_CGM_JOIN_SESSION_G7): carries only cgmTimestamp /
-        # sessionSignature (no duration), so it is informational and never anchors
-        # the session-expiry calculation (null-not-guess).
+        # G7 join (tconnectsync LID_CGM_JOIN_SESSION_G7): ``cgmTimestamp`` is the seconds
+        # elapsed since the sensor started (it agrees with the matching 447 stop to within
+        # seconds, live-verified 2026-10-01), so it anchors the G7 session start. It is
+        # re-logged mid-session after a pump reset, with the same ``sessionSignature``.
         evt["event_name"] = "CGMSessionJoinG7"
         evt["cgm_timestamp"] = g("cgmtimestamp")
         evt["session_signature"] = g("sessionsignature")
@@ -915,6 +931,10 @@ def map_pump_log_event(event: dict[str, Any]) -> dict[str, Any] | None:
         }[event_id]
         evt["cgm_alert_id"] = g("dalertid")
         evt["sensor_type_id"] = g("sensortype")
+        # On a G7 "CGM Sensor Failed" (dalertId 11) activation, param1 carries the G7
+        # algorithm state that stopped the session (35 = Sensor Failed) — live-verified
+        # 2026-10-01 on both G7 failures; the 399 data stream never shows that state.
+        evt["param1"] = g("param1")
         if event_id == EVT_CGM_ALERT_ACK_DEX:
             ack_source = g("acksource")
             evt["ack_source"] = {0: "User", 1: "Software"}.get(ack_source) if ack_source is not None else None

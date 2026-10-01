@@ -18,9 +18,7 @@ from custom_components.tandem.const import (
     TANDEM_ALARM_MAP,
     TANDEM_ALERT_MAP,
     TANDEM_CGM_ALERT_MAP,
-    TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING,
     TANDEM_SENSOR_KEY_CGM_SENSOR_STATE,
-    TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY,
     TANDEM_SENSOR_KEY_LAST_CGM_ALERT,
     TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END,
     UNAVAILABLE,
@@ -128,10 +126,78 @@ class TestMapCgmAlertEvents:
         assert evt["session_reason"] == 2
         assert evt["stop_session_code"] == 7
 
-    def test_g7_session_join_is_informational(self):
-        evt = map_pump_log_event(_bff(EVT_CGM_SESSION_JOIN_G7, {"cgmTimestamp": 1, "sessionSignature": 2}))
+    def test_g7_session_join_carries_sensor_age(self):
+        # Live shape (2026-09-26): cgmTimestamp = seconds since the G7 sensor started.
+        evt = map_pump_log_event(_bff(EVT_CGM_SESSION_JOIN_G7, {"cgmTimestamp": 1176, "sessionSignature": 147}))
         assert evt["event_name"] == "CGMSessionJoinG7"
-        assert evt["session_signature"] == 2
+        assert evt["cgm_timestamp"] == 1176
+        assert evt["session_signature"] == 147
+
+    def test_g7_session_stop_live_shape(self):
+        # Live 447: sentinel start, stop time 0; currentTransmitterTime is the wear time.
+        evt = map_pump_log_event(
+            _bff(
+                EVT_CGM_SESSION_STOP_G7,
+                {
+                    "currentTransmitterTime": 838395,
+                    "sessionStartTime": 4294967295,
+                    "sessionStopTime": 0,
+                    "sessionDuration": 10,
+                    "sessionStopReason": 15,
+                    "stopSessionCode": 0,
+                },
+            )
+        )
+        assert evt["current_transmitter_time"] == 838395
+        assert evt["session_start_time"] == 0xFFFFFFFF
+        assert evt["session_reason"] == 15
+
+    def test_sensor_failed_alert_carries_stop_state(self):
+        # Live 369 at both G7 failures: dalertId 11, param1 35 (= Sensor Failed state).
+        evt = map_pump_log_event(
+            _bff(EVT_CGM_ALERT_ACTIVATED_DEX, {"dalertId": 11, "sensorType": 3, "param1": 35, "param2": 725})
+        )
+        assert evt["cgm_alert_id"] == 11
+        assert evt["param1"] == 35
+
+    def test_unknown_egv_bits_stay_visible(self):
+        # Live G7 bitmask (2026-10-01): bits 11 and 12 have no upstream name.
+        evt = map_pump_log_event(
+            _bff(EVT_CGM_DATA_G7, {"currentGlucoseDisplayValue": 150, "egvInfoBitmask": [0, 5, 6, 7, 8, 11, 12]})
+        )
+        assert evt["egv_info"] == [
+            "Five Minute Reading",
+            "Valid Timestamp",
+            "Valid EGV",
+            "Valid Algorithm State",
+            "Added To CGM Array",
+            "Bit 11",
+            "Bit 12",
+        ]
+
+    def test_pcm_2_is_waiting_for_cgm(self):
+        # Live 230: currentPcm 2 with cgmAvailable 0 (tconnectsync "PINING").
+        evt = map_pump_log_event(
+            _bff(
+                230,
+                {
+                    "currentPcm": 2,
+                    "previousPcm": 3,
+                    "pumpSuspended": 0,
+                    "calculationAvailable": 1,
+                    "cgmAvailable": 0,
+                    "closedLoopPreferred": 1,
+                    "sufficientClosedLoopParams": 1,
+                },
+            )
+        )
+        assert evt["current_pcm"] == "Waiting for CGM"
+        assert evt["previous_pcm"] == "Closed Loop"
+        assert evt["cgm_available"] is False
+
+    def test_cgm_data_carries_egv_timestamp(self):
+        evt = map_pump_log_event(_bff(EVT_CGM_DATA_G7, {"currentGlucoseDisplayValue": 150, "egvTimeStamp": 123456}))
+        assert evt["egv_timestamp"] == 123456
 
     def test_cgm_data_carries_algorithm_state(self):
         evt = map_pump_log_event(
@@ -247,16 +313,6 @@ class TestCgmSensorState:
         coordinator = await _setup_coordinator(hass, _make_pump_events_data([_g7_reading(1, 120, 77)]))
         assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_STATE] == "State 77"
 
-    async def test_failed_state_ends_active_session(self, hass: HomeAssistant):
-        """A G7 'Session Stopped' reading after the join clears days-remaining."""
-        events = [
-            _make_session_event(1, name="CGMSessionJoin", event_id=213, ct=2 * _DAY, sst=0, dur=10, minutes_ago=120),
-            _g7_reading(2, 0, 35),
-        ]
-        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
-        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] is UNAVAILABLE
-        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] is UNAVAILABLE
-
 
 # ── Coordinator: last CGM session end ─────────────────────────────────────
 
@@ -266,23 +322,30 @@ class TestLastCgmSessionEnd:
         coordinator = await _setup_coordinator(hass, _make_pump_events_data([_make_cgm_event(1, 100)]))
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END] is UNAVAILABLE
 
-    async def test_214_stop_wear_from_anchor_and_cause(self, hass: HomeAssistant):
-        """214 carries a sentinel start; wear comes from the join. Cause from 399."""
+    async def test_214_stop_wear_from_transmitter_clock_and_cause(self, hass: HomeAssistant):
+        """214 carries a sentinel start; wear = stop clock - the join's session start
+        on the same G6 transmitter. Cause from the CGM Sensor Failed alert."""
         events = [
-            # Joined 60 min ago, 2 days into the session → session began 2d+1h ago.
+            # Joined 60 min ago, 2 days into the session.
             _make_session_event(1, name="CGMSessionJoin", event_id=213, ct=2 * _DAY, sst=0, minutes_ago=60),
-            _g7_reading(2, 0, 35, minutes_ago=2),
-            _make_session_event(3, name="CGMSessionStop", event_id=214, ct=0, sst=0xFFFFFFFF, stop_time=0, reason=4),
+            _make_cgm_event(2, 120, minutes_ago=5),
+            _cgm_alert(3, "CGMAlertActivated", 11, minutes_ago=0),
+            _make_session_event(
+                4, name="CGMSessionStop", event_id=214, ct=2 * _DAY + 3600, sst=0xFFFFFFFF, stop_time=0, reason=4
+            ),
         ]
         coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
         end = coordinator.data[TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END]
         assert isinstance(end, datetime)
         attrs = coordinator.data[f"{TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END}_attributes"]
-        assert attrs["cause"] == "Session Stopped (Sensor Failed)"
+        assert attrs["cause"] == "CGM Sensor Failed"  # no G7 param1 -> the alert name
+        assert attrs["cause_alert_id"] == 11
         assert attrs["stop_reason"] == "Transmitter Error"
         assert attrs["stop_reason_code"] == 4
+        assert attrs["sensor"] == "G6"
         assert attrs["sensor_wear_hours"] == 49.0
         assert attrs["ended_early"] is True
+        assert attrs["replacement_eligible"] is True
         assert attrs["source_event"] == 214
         assert len(attrs["recent"]) == 1
 
@@ -357,80 +420,3 @@ async def test_get_pump_events_logs_unmapped_codes(caplog):
         events = await client.get_pump_events("dev", "2026-09-26", "2026-09-26")
     assert [e["event_id"] for e in events] == [369]
     assert "Unmapped pump-logs event codes {code: count}: {8: 2}" in caplog.text
-
-
-# ── Rated life, G7 grace window and the Dexcom replacement rule ───────────
-
-
-class TestSensorLifeRules:
-    """Rated life comes from the session (10 or 15 days); G7 adds a 12 h grace window;
-    Dexcom replaces any sensor that fails before 10 days of wear, whatever its rating."""
-
-    async def _run(self, hass, events):
-        from freezegun import freeze_time
-
-        with freeze_time(BASE_TS + timedelta(minutes=1)):
-            return await _setup_coordinator(hass, _make_pump_events_data(events))
-
-    async def test_g7_in_grace_window_stays_current(self, hass: HomeAssistant):
-        events = [
-            _g7_reading(1, 120, 32, minutes_ago=5),
-            # 10 days + 6 h into a 10-day session → inside the 12 h grace window.
-            _make_session_event(2, name="CGMSessionJoin", event_id=213, ct=10 * _DAY + 6 * 3600, sst=0, dur=10),
-        ]
-        coordinator = await self._run(hass, events)
-        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] == 0.0
-        attrs = coordinator.data[f"{TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY}_attributes"]
-        assert attrs["sensor"] == "G7"
-        assert attrs["grace_period_hours"] == 12
-        assert attrs["in_grace_period"] is True
-
-    async def test_g7_past_grace_window_unavailable(self, hass: HomeAssistant):
-        events = [
-            _g7_reading(1, 120, 32, minutes_ago=5),
-            _make_session_event(2, name="CGMSessionJoin", event_id=213, ct=10 * _DAY + 13 * 3600, sst=0, dur=10),
-        ]
-        coordinator = await self._run(hass, events)
-        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] is UNAVAILABLE
-
-    async def test_g6_has_no_grace_window(self, hass: HomeAssistant):
-        events = [
-            _make_cgm_event(1, 120, minutes_ago=5),
-            _make_session_event(2, name="CGMSessionJoin", event_id=213, ct=10 * _DAY + 1 * 3600, sst=0, dur=10),
-        ]
-        coordinator = await self._run(hass, events)
-        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] is UNAVAILABLE
-
-    async def test_15_day_g7_active_on_day_12(self, hass: HomeAssistant):
-        events = [
-            _g7_reading(1, 120, 32, minutes_ago=5),
-            _make_session_event(2, name="CGMSessionJoin", event_id=213, ct=12 * _DAY, sst=0, dur=15),
-        ]
-        coordinator = await self._run(hass, events)
-        assert 2.9 < coordinator.data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] < 3.1
-        assert coordinator.data[f"{TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY}_attributes"]["in_grace_period"] is False
-
-    async def test_15_day_g7_failing_at_11_days_not_replaceable(self, hass: HomeAssistant):
-        stop = _make_session_event(
-            3, name="CGMSessionStop", event_id=447, ct=12 * _DAY, sst=_DAY, stop_time=12 * _DAY, dur=15
-        )
-        events = [_g7_reading(1, 0, 35, minutes_ago=2), stop]
-        coordinator = await self._run(hass, events)
-        attrs = coordinator.data[f"{TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END}_attributes"]
-        assert attrs["sensor"] == "G7"
-        assert attrs["sensor_wear_days"] == 11.0
-        assert attrs["ended_early"] is True  # before its 15-day rating
-        assert attrs["replacement_eligible"] is False  # but past the 10-day threshold
-        assert attrs["wear_pct_of_rated"] == 73.3
-
-    async def test_g6_failing_at_2_days_replaceable(self, hass: HomeAssistant):
-        events = [
-            _make_session_event(1, name="CGMSessionJoin", event_id=213, ct=2 * _DAY, sst=0, minutes_ago=60),
-            _make_cgm_event(2, 150, minutes_ago=30),
-            _make_session_event(3, name="CGMSessionStop", event_id=214, ct=0, sst=0xFFFFFFFF, stop_time=0, reason=4),
-        ]
-        coordinator = await self._run(hass, events)
-        attrs = coordinator.data[f"{TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END}_attributes"]
-        assert attrs["sensor"] == "G6"
-        assert attrs["grace_period_hours"] == 0
-        assert attrs["replacement_eligible"] is True

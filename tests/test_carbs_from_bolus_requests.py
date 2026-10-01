@@ -80,6 +80,31 @@ def _carbs48(ts: datetime, carbs: object) -> dict:
     return {"event_id": 48, "event_name": "CarbsEntered", "seq": next(_seq), "timestamp": ts, "carbs": carbs}
 
 
+def _basal(ts: datetime, rate: float) -> dict:
+    return {
+        "event_id": 279,
+        "event_name": "BasalDelivery",
+        "seq": next(_seq),
+        "timestamp": ts,
+        "commanded_source": 1,
+        "commanded_rate": rate,
+    }
+
+
+def _bolus_completed(ts: datetime, bolus_id: int, units: float) -> dict:
+    return {
+        "event_id": 20,
+        "event_name": "BolusCompleted",
+        "seq": next(_seq),
+        "timestamp": ts,
+        "bolus_id": bolus_id,
+        "completion_status": 3,
+        "iob": units,
+        "insulin_delivered": units,
+        "insulin_requested": units,
+    }
+
+
 async def _run(hass: HomeAssistant, events: list[dict]):
     with freeze_time(_NOW.replace(tzinfo=timezone.utc)):
         return await _setup_coordinator(hass, _make_pump_events_data(events))
@@ -210,6 +235,29 @@ class TestCarbSensorsFromBolusRequests:
 
         assert coordinator.data[TANDEM_SENSOR_KEY_DAILY_CARBS] == 50
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_CARBS] == 35
+
+
+class TestDailyCarbsZeroDay:
+    """A day the pump has logged with no carb entries reads 0 g, as Tandem Source shows it."""
+
+    async def test_logged_day_without_carbs_is_zero(self, hass: HomeAssistant):
+        events = [
+            _cgm(_NOW),
+            _basal(_NOW - timedelta(hours=3), 0.8),
+            _bolus_completed(_NOW - timedelta(hours=2), 31, 0.5),  # Control-IQ auto bolus
+            _msg1(_NOW - timedelta(days=1), 30, 45),  # yesterday's meal
+        ]
+        coordinator = await _run(hass, events)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_DAILY_CARBS] == 0
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_CARBS] == 45  # positive control
+
+    async def test_no_pump_events_today_stays_unknown(self, hass: HomeAssistant):
+        """Only yesterday's pump events: today's carbs are unknown, not 0."""
+        events = [_cgm(_NOW), _basal(_NOW - timedelta(days=1), 0.8), _msg1(_NOW - timedelta(days=1), 30, 45)]
+        coordinator = await _run(hass, events)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_DAILY_CARBS] is UNAVAILABLE
 
 
 class TestMealCarbStatisticsFromBolusRequests:

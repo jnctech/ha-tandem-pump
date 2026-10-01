@@ -19,7 +19,7 @@ on:
         required: true
         type: string
       source:
-        description: Branch to release from (develop; a feature branch for early rc testing)
+        description: Branch to release from (develop, or a release/* branch)
         required: true
         default: develop
         type: string
@@ -81,6 +81,10 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --force --tags origin
+          case "$SOURCE" in
+            develop|release/*) ;;
+            *) echo "::error::Release from develop or a release/* branch only - land feature work via a reviewed PR first."; exit 1 ;;
+          esac
           if [ "$KIND" = final ] && [ "$SOURCE" != develop ]; then
             echo "::error::A final release must come from develop (merge the rc PRs first)."; exit 1
           fi

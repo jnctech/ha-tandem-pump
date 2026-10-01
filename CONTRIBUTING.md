@@ -98,7 +98,7 @@ Releases are cut by the **Pre-release** workflow (Actions → Pre-release → Ru
 | Input | Meaning |
 |-------|---------|
 | `version` | `X.Y.Z` the release ships (the manifest version) |
-| `source` | `develop`, or a feature branch for early rc testing (must contain `develop`) |
+| `source` | `develop`, or a `release/*` branch (must contain `develop`). Feature work lands via a reviewed PR first. |
 | `kind` | `rc` → next `vX.Y.Z-rc.N` pre-release; `final` → `vX.Y.Z` (from `develop` only) |
 | `dry_run` | default **on**: plans, bumps and runs the full CI suite, pushes and publishes nothing |
 

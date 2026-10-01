@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+### Fixed
+- **Carb sensors.** Daily carbs, last carb entry, last carb entry time and the meal-carbs statistic
+  were always unknown: they read only the standalone carbs-entered event (48), which did not appear in
+  the Tandem Source data. Carbs entered in the bolus calculator arrive on the bolus request (event 64,
+  `carbAmount`), the value `last_bolus_carbs_entered` already showed. Both sources now feed all four,
+  one entry per bolus, and a meal logged on both events within 10 minutes counts once. A bolus
+  request counts whether or not the bolus completed. Correction-only boluses (0 g) are not carb
+  entries; with no carb entries the sensors stay unavailable rather than reading 0. Meals in the same
+  hour are now summed in the meal-carbs statistic instead of overwriting each other.
+
 ## [2.3.0-rc.3] - 2026-10-01 (pre-release)
 
 ### Fixed

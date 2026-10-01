@@ -78,8 +78,8 @@ using your existing Tandem Source account. No extra hardware required.
 | Total daily insulin | TDI for today |
 | Daily bolus / basal totals | Split with basal percentage |
 | Daily bolus count | Number of boluses today |
-| Daily carbs | Total carbs entered today |
-| Last carb entry | Most recent carb entry with timestamp |
+| Daily carbs | Total carbs entered today (bolus calculator entries, pump time zone) |
+| Last carb entry | Most recent carb entry (bolus with carbs) with timestamp |
 | Last bolus BG | BG at time of bolus request (+ calculator details as attributes) |
 | Last bolus carbs entered | Carbs entered into bolus calculator |
 | Last bolus correction | Correction portion (units) |

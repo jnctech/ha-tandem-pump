@@ -2433,7 +2433,13 @@ class TandemCoordinator(DataUpdateCoordinator):
         latest_ts = cgm_readings[-1]["timestamp"]
         if data_end is not None and data_end > latest_ts:
             latest_ts = data_end
-        period_start = latest_ts - timedelta(days=_CGM_SUMMARY_PERIOD_DAYS)
+        # Subtract in UTC so a DST change cannot make the period 7 days +/- 1 h.
+        tz = ZoneInfo(self.timezone)
+        if latest_ts.tzinfo is None:
+            utc_start = latest_ts.replace(tzinfo=tz).astimezone(timezone.utc) - timedelta(days=_CGM_SUMMARY_PERIOD_DAYS)
+            period_start = utc_start.astimezone(tz).replace(tzinfo=None)
+        else:
+            period_start = latest_ts - timedelta(days=_CGM_SUMMARY_PERIOD_DAYS)
         values = _valid([r for r in cgm_readings if r["timestamp"] > period_start])
 
         if not values:
@@ -2472,7 +2478,6 @@ class TandemCoordinator(DataUpdateCoordinator):
         day_start = latest_ts.replace(hour=0, minute=0, second=0, microsecond=0)
         today = _valid([r for r in cgm_readings if r["timestamp"] >= day_start])
         day_bands = [_glucose_band(v) for v in today]
-        tz = ZoneInfo(self.timezone)
 
         def _iso(ts: datetime) -> str:
             return (ts if ts.tzinfo else ts.replace(tzinfo=tz)).isoformat()

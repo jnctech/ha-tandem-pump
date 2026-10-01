@@ -2698,10 +2698,13 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_TOTAL_DAILY_INSULIN] = UNAVAILABLE
             data[TANDEM_SENSOR_KEY_BASAL_BOLUS_SPLIT] = UNAVAILABLE
 
-        # Daily carbs
+        # Daily carbs. A day the pump has logged but with no carb entries is 0 g, as
+        # Tandem Source shows it; a day with no pump events yet is unknown.
         if carbs_entered:
             total_carbs = sum(c.get("carbs", 0) for c in carbs_entered)
             data[TANDEM_SENSOR_KEY_DAILY_CARBS] = total_carbs
+        elif all_bolus or basal_delivery or basal_rate_changes:
+            data[TANDEM_SENSOR_KEY_DAILY_CARBS] = 0
         else:
             data[TANDEM_SENSOR_KEY_DAILY_CARBS] = UNAVAILABLE
 

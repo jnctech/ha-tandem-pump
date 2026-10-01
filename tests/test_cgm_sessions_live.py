@@ -352,3 +352,25 @@ class TestCgmSummaryWindow:
         assert attrs["day_time_below_range"] == 33.3
         assert attrs["day_time_above_range"] == 33.3
         assert coordinator.data[TANDEM_SENSOR_KEY_TIME_IN_RANGE] == 25.0  # 7-day period
+
+
+class TestDaylightSaving:
+    async def test_expiry_is_ten_real_days_across_dst(self, hass: HomeAssistant):
+        """Live case: G7 started 2026-09-26 16:51:42 ACST; Adelaide moves to ACDT on
+        2026-10-04, so wall-clock arithmetic put expiry an hour early (06:21Z)."""
+        from datetime import timezone
+
+        from freezegun import freeze_time
+
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data([_reading(_now(hass), 120)]))
+        coordinator.timezone = "Australia/Adelaide"
+        # Re-join after a pump reset, exactly as logged (pump-local time).
+        events = [_g7_join(datetime(2026, 9, 27, 13, 36, 12), 74670)]
+        data: dict = {}
+        with freeze_time("2026-10-01T11:00:00+00:00"):
+            coordinator._parse_cgm_session_events(events, data, [])
+        assert data[TANDEM_SENSOR_KEY_CGM_SESSION_START] == datetime(2026, 9, 26, 7, 21, 42, tzinfo=timezone.utc)
+        assert data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] == datetime(2026, 10, 6, 7, 21, 42, tzinfo=timezone.utc)
+        assert data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] == 4.85
+        attrs = data[f"{TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY}_attributes"]
+        assert attrs["grace_period_end"] == "2026-10-07T05:51:42+10:30"  # 19:21:42Z

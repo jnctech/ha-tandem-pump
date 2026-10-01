@@ -248,13 +248,14 @@ def _cgm_session_anchors(cgm_session_events: list[dict[str, Any]], tz: ZoneInfo)
       cgm_timestamp``. The join carries no duration, so the latest earlier G7 stop's
       ``sessionDuration`` is used, else the standard G7 rating.
 
-    Each anchor: ``event``, ``start`` (aware datetime), ``model``, ``duration_days``,
-    ``duration_source``.
+    Each anchor: ``event``, ``start`` (aware, UTC), ``model``, ``duration_days``,
+    ``duration_source``. Durations are applied in UTC: aware arithmetic in the pump
+    zone is wall-clock and would be an hour off across a DST change.
     """
     anchors: list[dict[str, Any]] = []
     last_g7_duration: Any = None
     for e in cgm_session_events:
-        ts = e["timestamp"].replace(tzinfo=tz)
+        ts = e["timestamp"].replace(tzinfo=tz).astimezone(timezone.utc)
         name = e.get("event_name")
         if name == "CGMSessionStop" and e.get("event_id") == EVT_CGM_SESSION_STOP_G7:
             if isinstance(e.get("session_duration_days"), (int, float)) and e["session_duration_days"] > 0:
@@ -1750,7 +1751,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         model = anchor["model"]
         duration_days = anchor["duration_days"]
         expiry_wall = start_wall + timedelta(days=duration_days)
-        now = datetime.now(tz)
+        now = datetime.now(timezone.utc)
 
         stopped_after = any(
             e.get("event_name") == "CGMSessionStop" and e["timestamp"] > anchor_evt["timestamp"]
@@ -1771,8 +1772,8 @@ class TandemCoordinator(DataUpdateCoordinator):
             return
 
         reason_id = anchor_evt.get("session_reason")
-        data[TANDEM_SENSOR_KEY_CGM_SESSION_START] = start_wall
-        data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] = expiry_wall
+        data[TANDEM_SENSOR_KEY_CGM_SESSION_START] = start_wall.astimezone(tz)
+        data[TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY] = expiry_wall.astimezone(tz)
         data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] = max(
             0.0, round((expiry_wall - now).total_seconds() / 86400.0, 2)
         )
@@ -1781,9 +1782,11 @@ class TandemCoordinator(DataUpdateCoordinator):
             "session_duration_days": duration_days,
             "session_duration_source": anchor["duration_source"],
             "grace_period_hours": grace_hours,
-            "grace_period_end": grace_end.isoformat() if grace_hours else None,
+            "grace_period_end": grace_end.astimezone(tz).isoformat() if grace_hours else None,
             "in_grace_period": expiry_wall <= now,
-            "replacement_threshold": (start_wall + timedelta(days=DEXCOM_REPLACEMENT_THRESHOLD_DAYS)).isoformat(),
+            "replacement_threshold": (start_wall + timedelta(days=DEXCOM_REPLACEMENT_THRESHOLD_DAYS))
+            .astimezone(tz)
+            .isoformat(),
             "session_started_via": (
                 CGM_SESSION_REASON_MAP.get(reason_id, f"Reason {reason_id}") if reason_id is not None else None
             ),
@@ -1816,12 +1819,14 @@ class TandemCoordinator(DataUpdateCoordinator):
         if not g6:
             return empty
         latest = g6[-1]
-        activated = latest["timestamp"].replace(tzinfo=tz) - timedelta(seconds=latest["current_transmitter_time"])
+        activated = latest["timestamp"].replace(tzinfo=tz).astimezone(timezone.utc) - timedelta(
+            seconds=latest["current_transmitter_time"]
+        )
         expiry = activated + timedelta(days=CGM_G6_TRANSMITTER_LIFE_DAYS)
         return {
-            "transmitter_activated": activated.isoformat(),
+            "transmitter_activated": activated.astimezone(tz).isoformat(),
             "transmitter_age_days": round((now - activated).total_seconds() / 86400.0, 1),
-            "transmitter_expiry": expiry.isoformat(),
+            "transmitter_expiry": expiry.astimezone(tz).isoformat(),
             "transmitter_days_remaining": max(0.0, round((expiry - now).total_seconds() / 86400.0, 1)),
         }
 

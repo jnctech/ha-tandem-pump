@@ -160,6 +160,41 @@ class TestMapCgmAlertEvents:
         assert evt["cgm_alert_id"] == 11
         assert evt["param1"] == 35
 
+    def test_unknown_egv_bits_stay_visible(self):
+        # Live G7 bitmask (2026-10-01): bits 11 and 12 have no upstream name.
+        evt = map_pump_log_event(
+            _bff(EVT_CGM_DATA_G7, {"currentGlucoseDisplayValue": 150, "egvInfoBitmask": [0, 5, 6, 7, 8, 11, 12]})
+        )
+        assert evt["egv_info"] == [
+            "Five Minute Reading",
+            "Valid Timestamp",
+            "Valid EGV",
+            "Valid Algorithm State",
+            "Added To CGM Array",
+            "Bit 11",
+            "Bit 12",
+        ]
+
+    def test_pcm_2_is_waiting_for_cgm(self):
+        # Live 230: currentPcm 2 with cgmAvailable 0 (tconnectsync "PINING").
+        evt = map_pump_log_event(
+            _bff(
+                230,
+                {
+                    "currentPcm": 2,
+                    "previousPcm": 3,
+                    "pumpSuspended": 0,
+                    "calculationAvailable": 1,
+                    "cgmAvailable": 0,
+                    "closedLoopPreferred": 1,
+                    "sufficientClosedLoopParams": 1,
+                },
+            )
+        )
+        assert evt["current_pcm"] == "Waiting for CGM"
+        assert evt["previous_pcm"] == "Closed Loop"
+        assert evt["cgm_available"] is False
+
     def test_cgm_data_carries_egv_timestamp(self):
         evt = map_pump_log_event(_bff(EVT_CGM_DATA_G7, {"currentGlucoseDisplayValue": 150, "egvTimeStamp": 123456}))
         assert evt["egv_timestamp"] == 123456

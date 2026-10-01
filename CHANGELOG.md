@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CGM usage** was readings ÷ one day's worth, so it always showed 100%; it is now readings vs
   expected over the 7-day period.
 
+### Changed
+- **Control-IQ mode "Pining" is now "Waiting for CGM".** PCM state 2 (tconnectsync's "PINING")
+  means closed loop is wanted but the CGM is unavailable; live, every such event carried
+  `cgmAvailable=0`. Automations matching the old "Pining" value need updating.
+- **CGM reading flags** now list set bits with no known name as `Bit N` instead of dropping them
+  (the G7 sets bits 11 and 12).
+
 ### Added
 - **G6 transmitter life.** The session-expiry attributes carry the reusable G6 transmitter's age and
   3-month expiry (its session clock counts from activation). Not applicable to the all-in-one G7.

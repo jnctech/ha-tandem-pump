@@ -305,7 +305,7 @@ def decode_pump_events(raw_b64: str) -> list[dict[str, Any]]:
             pcm_map = {
                 0: "No Control",
                 1: "Open Loop",
-                2: "Pining",
+                2: "Waiting for CGM",
                 3: "Closed Loop",
             }
             evt["current_pcm"] = pcm_map.get(current_pcm, f"PCM_{current_pcm}")
@@ -513,7 +513,9 @@ def decode_pump_events(raw_b64: str) -> list[dict[str, Any]]:
 # ``Any | None`` (a missing/None code falls through to the default).
 _SUSPEND_REASON_MAP: dict[Any, str] = {0: "User", 1: "Alarm", 2: "Malfunction", 3: "Auto-PLGS"}
 _USER_MODE_MAP: dict[Any, str] = {0: "Normal", 1: "Sleep", 2: "Exercise", 3: "Eating Soon"}
-_PCM_MAP: dict[Any, str] = {0: "No Control", 1: "Open Loop", 2: "Pining", 3: "Closed Loop"}
+# PCM 2 is tconnectsync's "PINING": closed loop wanted but waiting on the CGM. Live
+# 2026-10-01: all 185 PCM-2 events in 4 weeks carried cgmAvailable=0.
+_PCM_MAP: dict[Any, str] = {0: "No Control", 1: "Open Loop", 2: "Waiting for CGM", 3: "Closed Loop"}
 _BG_ENTRY_TYPE_MAP: dict[Any, str] = {0: "Manual", 1: "Dexcom EGV"}
 _CGM_SENSOR_TYPE_MAP: dict[Any, str] = {0: "No CGM", 1: "G6", 2: "Libre 2", 3: "G7"}
 
@@ -535,11 +537,17 @@ def _as_flag(value: Any) -> bool | None:
 
 
 def _bit_names(value: Any, names: dict[int, str]) -> list[str] | None:
-    """Names of the set bits in a BFF bitmask (index array or int); None when absent."""
+    """Names of the set bits in a BFF bitmask (index array or int); None when absent.
+
+    Set bits with no known name surface as ``"Bit {n}"`` rather than vanish (the G7
+    sets egvInfoBitmask bits 11 and 12, which no upstream catalog names).
+    """
     bits = _bitmask_to_int(value)
     if not isinstance(bits, int) or isinstance(bits, bool):
         return None
-    return [name for bit, name in names.items() if bits & (1 << bit)]
+    known = [name for bit, name in names.items() if bits & (1 << bit)]
+    unknown = [f"Bit {bit}" for bit in range(bits.bit_length()) if bits & (1 << bit) and bit not in names]
+    return known + unknown
 
 
 # tconnectsync events.json enums/bitmasks for the fields below.

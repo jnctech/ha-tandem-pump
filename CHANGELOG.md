@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+## [2.3.0-rc.4] - 2026-10-01 (pre-release)
+
 ### Fixed
 - **Carb sensors.** Daily carbs, last carb entry, last carb entry time and the meal-carbs statistic
   were always unknown: they read only the standalone carbs-entered event (48), which did not appear in

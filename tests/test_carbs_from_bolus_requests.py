@@ -75,6 +75,11 @@ def _cgm(ts: datetime) -> dict:
     return _bff(256, ts, {"currentGlucoseDisplayValue": 110, "rate": 0, "glucoseValueStatus": 0})
 
 
+def _carbs48(ts: datetime, carbs: object) -> dict:
+    """Standalone CarbsEntered (48) as the mapper emits it."""
+    return {"event_id": 48, "event_name": "CarbsEntered", "seq": next(_seq), "timestamp": ts, "carbs": carbs}
+
+
 async def _run(hass: HomeAssistant, events: list[dict]):
     with freeze_time(_NOW.replace(tzinfo=timezone.utc)):
         return await _setup_coordinator(hass, _make_pump_events_data(events))
@@ -142,17 +147,63 @@ class TestCarbSensorsFromBolusRequests:
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_CARBS] == 20
         assert "carb amount '40'" in caplog.text
 
+    async def test_malformed_amount_warns_once(self, hass: HomeAssistant, caplog, mock_import):
+        """The sensor pass and the statistics pass share one warning per bad event."""
+        events = [_cgm(_NOW), _msg1(_NOW - timedelta(hours=1), 2, -5)]
+        coordinator = await _run(hass, events)
+        await hass.async_block_till_done()
+        await coordinator._import_statistics(events)  # a later poll's statistics pass
+
+        assert caplog.text.count("ignoring carb amount -5") == 1
+
+    async def test_nan_carb_amount_skipped(self, hass: HomeAssistant):
+        events = [
+            _cgm(_NOW),
+            _msg1(_NOW - timedelta(hours=2), 1, 20),
+            _msg1(_NOW - timedelta(hours=1), 2, float("nan")),
+        ]
+        coordinator = await _run(hass, events)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_DAILY_CARBS] == 20
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_CARBS] == 20
+
+    async def test_same_meal_on_both_events_counted_once(self, hass: HomeAssistant, caplog):
+        """If the pump logs CarbsEntered (48) beside the calculator request for one meal,
+        the meal counts once (the 48 amount); a differing amount is logged."""
+        meal = _NOW - timedelta(hours=1)
+        events = [
+            _cgm(_NOW),
+            _carbs48(meal - timedelta(minutes=1), 50),
+            _msg1(meal, 21, 50),
+            _carbs48(_NOW - timedelta(hours=4), 30),
+            _msg1(_NOW - timedelta(hours=4) + timedelta(minutes=2), 22, 35),
+        ]
+        coordinator = await _run(hass, events)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_DAILY_CARBS] == 80
+        assert "differ from the carbs-entered event" in caplog.text
+
+    async def test_missing_bolus_id_deduplicated_by_time(self, hass: HomeAssistant, caplog):
+        ts = _NOW - timedelta(hours=1)
+        events = [_cgm(_NOW), _msg1(ts, None, 25), _msg1(ts, None, 25)]
+        coordinator = await _run(hass, events)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_DAILY_CARBS] == 25
+        assert "has no bolus id" in caplog.text
+
+    async def test_event_48_without_amount_does_not_break_carbs(self, hass: HomeAssistant):
+        """A 48 whose amount the mapper could not read is skipped, not summed as None."""
+        events = [_cgm(_NOW), _carbs48(_NOW - timedelta(hours=2), None), _msg1(_NOW - timedelta(hours=1), 3, 45)]
+        coordinator = await _run(hass, events)
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_DAILY_CARBS] == 45
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_CARBS] == 45
+
     async def test_event_48_still_counted_alongside(self, hass: HomeAssistant):
         """The legacy standalone carb event keeps working next to calculator carbs."""
         events = [
             _cgm(_NOW),
-            {
-                "event_id": 48,
-                "event_name": "CarbsEntered",
-                "seq": 900,
-                "timestamp": _NOW - timedelta(hours=3),
-                "carbs": 15,
-            },
+            _carbs48(_NOW - timedelta(hours=3), 15),
             _msg1(_NOW - timedelta(hours=1), 9, 35),
         ]
         coordinator = await _run(hass, events)
@@ -175,3 +226,15 @@ class TestMealCarbStatisticsFromBolusRequests:
         call = next(c for c in mock_import.call_args_list if c[0][1]["statistic_id"] == f"sensor.{DOMAIN}_meal_carbs")
         stats = call[0][2]
         assert [(s["start"].hour, s["mean"]) for s in stats] == [(8, 40.0), (18, 60.0)]
+
+    async def test_meals_in_one_hour_are_summed(self, hass: HomeAssistant, mock_import):
+        """HA keeps one row per hour; two meals in it must not overwrite each other."""
+        coordinator = await make_tandem_coordinator(hass)
+        events = [
+            _msg1(datetime(2026, 10, 1, 18, 5), 1, 60),
+            _msg1(datetime(2026, 10, 1, 18, 40), 2, 20),
+        ]
+        await coordinator._import_statistics(events)
+
+        call = next(c for c in mock_import.call_args_list if c[0][1]["statistic_id"] == f"sensor.{DOMAIN}_meal_carbs")
+        assert [(s["start"].hour, s["mean"]) for s in call[0][2]] == [(18, 80.0)]

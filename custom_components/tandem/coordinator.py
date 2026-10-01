@@ -258,39 +258,95 @@ def _dedupe_cgm_readings(cgm_readings: list[dict[str, Any]]) -> list[dict[str, A
     return out
 
 
-def _carb_entries_from_bolus_requests(bolus_req_msg1: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Carb entries from bolus calculator requests (event 64 ``carbAmount``), one per bolus.
+_CARB_SAME_MEAL_WINDOW = timedelta(minutes=10)
 
-    The BFF stream never carries the standalone CarbsEntered event (48): carbs entered
-    in the bolus calculator arrive only on msg1 (live-verified 2026-09-06, no 48 in a
-    window with daily calculator carbs). Entries use the event-48 shape so every carb
-    consumer reads both. Zero/absent amounts are correction-only boluses, not entries;
-    a non-numeric amount is skipped and logged, never coerced.
+
+def _carb_grams(evt: dict[str, Any], carbs: Any, warned: set[Any]) -> float | None:
+    """A usable gram count, or None (logged once per event) for a malformed amount."""
+    if isinstance(carbs, (int, float)) and not isinstance(carbs, bool) and math.isfinite(carbs) and carbs >= 0:
+        return carbs
+    key = (evt.get("event_id"), evt.get("seq"), evt.get("timestamp"))
+    if key not in warned:
+        warned.add(key)
+        _LOGGER.warning(
+            "Tandem: ignoring carb amount %r on event %s at %s (not a gram count)",
+            carbs,
+            evt.get("event_id"),
+            evt.get("timestamp"),
+        )
+    return None
+
+
+def _merge_carb_entries(
+    carbs_entered: list[dict[str, Any]],
+    bolus_req_msg1: list[dict[str, Any]],
+    warned: set[Any],
+) -> list[dict[str, Any]]:
+    """All carb entries, oldest first: standalone CarbsEntered (48) plus bolus calculator carbs.
+
+    Calculator carbs arrive as ``carbAmount`` on BolusRequestedMsg1 (64). The live BFF
+    window of 2026-09-06 had calculator carbs and no 48 at all, but that window may
+    simply have had no standalone entries, so both sources are read. One meal is never
+    counted twice: a calculator entry within 10 minutes of a 48 entry is dropped (a
+    differing amount is logged). One entry per bolus id. A request counts whether or
+    not the bolus later completed: the carbs were entered either way.
+
+    Zero/absent amounts (correction-only boluses) are not entries; a malformed amount
+    is skipped and logged once, never coerced. Calculator entries take the event-48
+    shape (``source_event_id`` keeps 64) so every carb consumer reads both alike.
     """
-    seen: set[Any] = set()
     out: list[dict[str, Any]] = []
+    for c in carbs_entered:
+        carbs = c.get("carbs")
+        if carbs is None:
+            continue
+        grams = _carb_grams(c, carbs, warned)
+        if grams is not None and grams > 0:
+            out.append(c)
+
+    seen: dict[Any, Any] = {}
     for m in bolus_req_msg1:
         carbs = m.get("carb_amount")
-        if carbs is None or carbs == 0:
+        if carbs is None:
             continue
-        if isinstance(carbs, bool) or not isinstance(carbs, (int, float)) or carbs < 0:
-            _LOGGER.warning("Tandem: ignoring bolus %s carb amount %r (not a gram count)", m.get("bolus_id"), carbs)
+        grams = _carb_grams(m, carbs, warned)
+        if not grams:
             continue
+        ts = m["timestamp"]
         bolus_id = m.get("bolus_id")
-        if bolus_id is not None:
-            if bolus_id in seen:
-                continue
-            seen.add(bolus_id)
+        key = bolus_id if bolus_id is not None else ("no-id", ts, grams)
+        if key in seen:
+            if seen[key] != grams:
+                _LOGGER.debug(
+                    "Tandem: bolus %s logged twice with carbs %s and %s; kept the first", bolus_id, seen[key], grams
+                )
+            continue
+        seen[key] = grams
+        if bolus_id is None and ("no-id", m.get("seq")) not in warned:
+            warned.add(("no-id", m.get("seq")))
+            _LOGGER.warning("Tandem: bolus request at %s has no bolus id; carbs de-duplicated by time", ts)
+        near = [
+            c for c in out if c.get("source_event_id") is None and abs(c["timestamp"] - ts) <= _CARB_SAME_MEAL_WINDOW
+        ]
+        if near:
+            if all(c["carbs"] != grams for c in near) and ("mismatch", m.get("seq")) not in warned:
+                warned.add(("mismatch", m.get("seq")))
+                _LOGGER.warning(
+                    "Tandem: calculator carbs at %s differ from the carbs-entered event beside it; counted the latter",
+                    ts,
+                )
+            continue
         out.append(
             {
                 "event_id": EVT_CARBS_ENTERED,
                 "source_event_id": m.get("event_id"),
-                "timestamp": m["timestamp"],
+                "timestamp": ts,
                 "seq": m.get("seq"),
-                "carbs": carbs,
+                "carbs": grams,
                 "bolus_id": bolus_id,
             }
         )
+    out.sort(key=lambda c: c["timestamp"])
     return out
 
 
@@ -465,6 +521,8 @@ class TandemCoordinator(DataUpdateCoordinator):
         self._cumulative_delivered: float = 0.0
         # CGM session / alert events seen in earlier polls (see _CGM_EVENT_HISTORY_DAYS).
         self._cgm_session_history: dict[tuple[Any, Any, Any], dict[str, Any]] = {}
+        # Malformed carb events already logged, so a bad event warns once, not every poll.
+        self._warned_carb_events: set[Any] = set()
         self._cgm_alert_history: dict[tuple[Any, Any, Any], dict[str, Any]] = {}
         self._g7_default_rating_logged = False
         self._last_delivery_seq: int = 0
@@ -1049,9 +1107,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         alarm_events.sort(key=lambda e: e["timestamp"])
         daily_status_events.sort(key=lambda e: e["timestamp"])
         bolus_req_msg1.sort(key=lambda e: e["timestamp"])
-        carbs_entered = sorted(
-            carbs_entered + _carb_entries_from_bolus_requests(bolus_req_msg1), key=lambda e: e["timestamp"]
-        )
+        carbs_entered = _merge_carb_entries(carbs_entered, bolus_req_msg1, self._warned_carb_events)
         bolus_req_msg2.sort(key=lambda e: e["timestamp"])
         bolus_req_msg3.sort(key=lambda e: e["timestamp"])
         plgs_events.sort(key=lambda e: e["timestamp"])
@@ -2804,9 +2860,15 @@ class TandemCoordinator(DataUpdateCoordinator):
         bolus_stats: list[StatisticData] = []
         correction_stats: list[StatisticData] = []
 
+        carbs_by_hour: dict[datetime, float] = {}
         # Calculator carbs (event 64) are imported as meal carbs alongside any event 48.
-        msg1 = [e for e in pump_events if e.get("event_id") == EVT_BOLUS_REQUESTED_MSG1 and e.get("timestamp")]
-        for evt in [*pump_events, *_carb_entries_from_bolus_requests(msg1)]:
+        timed = [e for e in pump_events if isinstance(e.get("timestamp"), datetime)]
+        carb_entries = _merge_carb_entries(
+            [e for e in timed if e.get("event_id") == EVT_CARBS_ENTERED],
+            [e for e in timed if e.get("event_id") == EVT_BOLUS_REQUESTED_MSG1],
+            self._warned_carb_events,
+        )
+        for evt in [*(e for e in pump_events if e.get("event_id") != EVT_CARBS_ENTERED), *carb_entries]:
             eid = evt.get("event_id")
             ts = evt.get("timestamp")
             if not ts:
@@ -2884,16 +2946,9 @@ class TandemCoordinator(DataUpdateCoordinator):
                     )
 
             elif eid == EVT_CARBS_ENTERED:
-                carbs = evt.get("carbs")
-                if carbs is not None and carbs > 0:
-                    carbs_val = round(float(carbs), 1)
-                    carb_stats.append(
-                        StatisticData(
-                            start=period_start,
-                            mean=carbs_val,
-                            state=carbs_val,
-                        )
-                    )
+                # Entries are validated by _merge_carb_entries. HA keeps one row per
+                # hour, so meals in the same hour are summed rather than overwritten.
+                carbs_by_hour[period_start] = carbs_by_hour.get(period_start, 0.0) + float(evt["carbs"])
 
             elif eid == EVT_BOLUS_DELIVERY:
                 if evt.get("delivery_status") == 0:
@@ -2912,6 +2967,9 @@ class TandemCoordinator(DataUpdateCoordinator):
                         "Tandem: Skipping event 280 — delivery_status=%r (expected 0 for completed)",
                         evt.get("delivery_status"),
                     )
+
+        for start, grams in sorted(carbs_by_hour.items()):
+            carb_stats.append(StatisticData(start=start, mean=round(grams, 1), state=round(grams, 1)))
 
         # Import each statistic type — each in its own try/except so a failure
         # in one type does not prevent the others from being recorded.

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+### Fixed
+- **Release pipeline guard.** The Pre-release workflow took the version as free text with no ordering
+  check, so it could cut a tag below an existing one (a 2.2.x after the public v2.3.0-rc.x), which
+  HACS would never offer as an update. `release_tool.py next-tag` now refuses any tag that does not
+  sort above every existing release tag, rejects a version with a trailing newline, and releases may
+  only come from `develop` or a `release/*` branch (rc.2 was cut from an unreviewed feature branch).
+
 ## [2.3.0-rc.2] - 2026-09-26 (pre-release)
 
 ### Added

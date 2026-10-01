@@ -59,7 +59,7 @@ using your existing Tandem Source account. No extra hardware required.
 | CGM signal strength | Transmitter signal strength (RSSI; diagnostic) |
 | Average glucose (mmol/L) | Daily average computed from CGM events |
 | Average glucose (mg/dL) | Daily average computed from CGM events |
-| Time in Range | % of readings 70–180 mg/dL over the 7 days up to the latest reading. Attributes: `period_start`/`period_end`, `readings`, and the latest calendar day's figure (`day_time_in_range` …, matching Tandem Source's daily view) |
+| Time in Range | % of readings in 3.9–10.0 mmol/L (banded as Tandem Source does: 70–181 mg/dL) over the 7 days up to the latest reading. Attributes: `period_start`/`period_end`, `readings`, and the latest calendar day's figure (`day_time_in_range` …, matching Tandem Source's daily view) |
 | Time below range | % of readings below 70 mg/dL |
 | Time above range | % of readings above 180 mg/dL |
 | Glucose SD / CV | Standard deviation and coefficient of variation |

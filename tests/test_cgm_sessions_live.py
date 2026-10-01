@@ -29,6 +29,8 @@ from custom_components.tandem.const import (
     TANDEM_SENSOR_KEY_CGM_SESSION_START,
     TANDEM_SENSOR_KEY_CGM_USAGE,
     TANDEM_SENSOR_KEY_LAST_CGM_SESSION_END,
+    TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE,
+    TANDEM_SENSOR_KEY_TIME_BELOW_RANGE,
     TANDEM_SENSOR_KEY_TIME_IN_RANGE,
     UNAVAILABLE,
 )
@@ -374,3 +376,15 @@ class TestDaylightSaving:
         assert data[TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING] == 4.85
         attrs = data[f"{TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY}_attributes"]
         assert attrs["grace_period_end"] == "2026-10-07T05:51:42+10:30"  # 19:21:42Z
+
+
+class TestTandemSourceRange:
+    async def test_range_boundaries_match_tandem_source(self, hass: HomeAssistant):
+        """Tandem bands in mmol/L rounded to 1 dp: 69 below, 70 and 181 in, 182 above."""
+        now = _now(hass)
+        rows = [_reading(now - timedelta(minutes=5 * i), g, egv=i) for i, g in enumerate([69, 70, 181, 182])]
+        rows.sort(key=lambda r: r["timestamp"])
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(rows))
+        assert coordinator.data[TANDEM_SENSOR_KEY_TIME_IN_RANGE] == 50.0
+        assert coordinator.data[TANDEM_SENSOR_KEY_TIME_BELOW_RANGE] == 25.0
+        assert coordinator.data[TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE] == 25.0

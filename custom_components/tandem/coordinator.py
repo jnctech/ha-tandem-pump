@@ -214,6 +214,21 @@ def _cgm_algorithm_state(evt: dict[str, Any]) -> tuple[int, str] | None:
 
 # CGM summary period (avg / SD / GMI / TIR / usage): the days up to the latest reading.
 _CGM_SUMMARY_PERIOD_DAYS = 7
+_MGDL_PER_MMOL = 18.0182
+
+
+def _glucose_band(mgdl: float) -> int:
+    """-1 below / 0 in / 1 above the 3.9-10.0 mmol/L target range.
+
+    Matches Tandem Source: the reading is converted to mmol/L and rounded to one
+    decimal before comparing, so 181 mg/dL (10.05) is in range and 182 is not.
+    Reproduces its 2-week and daily TIR exactly on live data (2026-10-01), where a
+    plain 70-180 mg/dL cut read 1-2.5 points low.
+    """
+    mmol = round(mgdl / _MGDL_PER_MMOL, 1)
+    if mmol < 3.9:
+        return -1
+    return 1 if mmol > 10.0 else 0
 
 
 def _dedupe_cgm_readings(cgm_readings: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -2380,14 +2395,17 @@ class TandemCoordinator(DataUpdateCoordinator):
         # GMI (Glucose Management Indicator)
         data[TANDEM_SENSOR_KEY_GMI] = round(3.31 + (0.02392 * mean), 1)
 
-        # Time in range (70-180 mg/dL, i.e. 3.9-10.0 mmol/L)
-        data[TANDEM_TIME_IN_RANGE] = _pct(sum(1 for v in values if 70 <= v <= 180), n)
-        data[TANDEM_SENSOR_KEY_TIME_BELOW_RANGE] = _pct(sum(1 for v in values if v < 70), n)
-        data[TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE] = _pct(sum(1 for v in values if v > 180), n)
+        # Time in range 3.9-10.0 mmol/L, banded the way Tandem Source does it
+        # (see _glucose_band).
+        bands = [_glucose_band(v) for v in values]
+        data[TANDEM_TIME_IN_RANGE] = _pct(bands.count(0), n)
+        data[TANDEM_SENSOR_KEY_TIME_BELOW_RANGE] = _pct(bands.count(-1), n)
+        data[TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE] = _pct(bands.count(1), n)
 
         # Calendar day of the latest reading (Tandem Source's daily TIR).
         day_start = latest_ts.replace(hour=0, minute=0, second=0, microsecond=0)
         today = _valid([r for r in cgm_readings if r["timestamp"] >= day_start])
+        day_bands = [_glucose_band(v) for v in today]
         tz = ZoneInfo(self.timezone)
 
         def _iso(ts: datetime) -> str:
@@ -2398,11 +2416,11 @@ class TandemCoordinator(DataUpdateCoordinator):
             "period_start": _iso(period_start),
             "period_end": _iso(latest_ts),
             "readings": n,
-            "range_mgdl": "70-180",
+            "range_mmol": "3.9-10.0",
             "day": day_start.date().isoformat(),
-            "day_time_in_range": _pct(sum(1 for v in today if 70 <= v <= 180), len(today)) if today else None,
-            "day_time_below_range": _pct(sum(1 for v in today if v < 70), len(today)) if today else None,
-            "day_time_above_range": _pct(sum(1 for v in today if v > 180), len(today)) if today else None,
+            "day_time_in_range": _pct(day_bands.count(0), len(today)) if today else None,
+            "day_time_below_range": _pct(day_bands.count(-1), len(today)) if today else None,
+            "day_time_above_range": _pct(day_bands.count(1), len(today)) if today else None,
             "day_readings": len(today),
         }
 

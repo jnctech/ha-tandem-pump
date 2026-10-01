@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Time in range / CGM summary.** The period is now a stated 7 days up to the latest reading (was an
   unlabelled ~7.7-day fetch window), with the latest calendar day's TIR as attributes to compare with
   Tandem Source's daily view. Duplicate copies of the same reading (~2%) are dropped.
+  The 3.9–10.0 mmol/L band is now applied the way Tandem Source does it (convert, round to one
+  decimal, then compare; i.e. 70–181 mg/dL). This reproduces Tandem Source's 2-week and daily TIR on
+  live data, where the plain 70–180 mg/dL cut read 1–2.5 points low.
 - **CGM usage** was readings ÷ one day's worth, so it always showed 100%; it is now readings vs
   expected over the 7-day period.
 

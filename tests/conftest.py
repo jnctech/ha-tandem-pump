@@ -285,5 +285,10 @@ async def make_tandem_coordinator(
     mock_client.close = AsyncMock()
 
     coordinator = TandemCoordinator(hass, entry, mock_client, update_interval=timedelta(seconds=300))
+    # As async_setup_entry: the short-window first refresh, then the full-window
+    # backfill (the 7-day CGM summary is only computed on the full window).
     await coordinator.async_config_entry_first_refresh()
+    await coordinator.async_backfill_full_history()
+    # The backfill swallows its own errors; a successful one caches maxDate.
+    assert coordinator._last_max_date is not None, "full-window backfill failed"
     return coordinator

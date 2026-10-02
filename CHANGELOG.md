@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Daily carbs reads 0 g on a day without carb entries**, as Tandem Source shows it, once the pump
   has logged anything that day (basal or bolus). Before any pump data for the day it stays unknown.
+- **Faster startup.** The integration now fetches only a short history window on
+  first load so Home Assistant entry setup completes quickly, then backfills the
+  full window (used for the retrospective trend statistics and long-term
+  statistics) on a background task once setup is done. Real-time sensors (current
+  glucose, IOB, basal) are available immediately as before; the trend stats
+  (average / TIR / GMI) populate a few seconds later. Also removes a duplicate
+  pump-metadata API call on every poll. For those few seconds after a restart or
+  reload, sensors that need more than a day of history read unknown rather than
+  a value computed from one day: the 7-day CGM figures, CGM session start /
+  expiry / days remaining, active alerts and the last alert / alarm / CGM alert.
+  "Last ..." sensors whose event is more than a day old are unknown until the
+  backfill completes.
 
 ### Fixed
 - **A network failure during login no longer disables the integration.** A DNS, connection or

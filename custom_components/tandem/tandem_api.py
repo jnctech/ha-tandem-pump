@@ -1546,6 +1546,8 @@ class TandemSourceClient:
         self,
         pump_timezone: str | None = None,
         fallback_date: str | None = None,
+        history_days: int = 7,
+        prefetched_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Fetch all available recent data from Tandem Source APIs.
 
@@ -1561,6 +1563,12 @@ class TandemSourceClient:
                            returns no pump_events (pump hasn't synced recently),
                            a second fetch is attempted around this date so the
                            dashboard can show the last-known pump state.
+            history_days: Size of the pump-event history window to fetch, in days
+                           (default 7). The coordinator uses a smaller window on
+                           the first refresh to speed up entry setup.
+            prefetched_metadata: Pump metadata already fetched by the caller (the
+                           coordinator's freshness check). When provided, it is
+                           reused instead of fetching the same endpoint again.
 
         Returns a unified dict with keys:
             pump_metadata: dict or None
@@ -1577,7 +1585,7 @@ class TandemSourceClient:
             tz = ZoneInfo("UTC")
 
         now_pump = datetime.now(tz)
-        week_ago_pump = now_pump - timedelta(days=7)
+        window_start_pump = now_pump - timedelta(days=history_days)
 
         data: dict[str, Any] = {
             "pump_metadata": None,
@@ -1587,21 +1595,30 @@ class TandemSourceClient:
             "dashboard_summary": None,
         }
 
-        # ── Phase 1: metadata + pumper_info in parallel ──────────────
+        # ── Phase 1: metadata + pumper_info ──────────────────────────
         # Pre-declare the unpack targets: mypy cannot infer the tuple element
         # types through asyncio.gather(return_exceptions=True) unpacking.
-        metadata_result: dict[str, Any] | None | BaseException
         pumper_result: dict[str, Any] | None | BaseException
-        metadata_result, pumper_result = await asyncio.gather(
-            self._fetch_pump_metadata(),
-            self._fetch_pumper_info(),
-            return_exceptions=True,
-        )
-
-        if isinstance(metadata_result, BaseException):
-            _LOGGER.warning("Failed to fetch pump metadata: %s", metadata_result)
+        if prefetched_metadata is not None:
+            # Reuse the metadata the coordinator already fetched for its
+            # freshness check — avoids a duplicate call to the same endpoint on
+            # every refresh. Only pumper_info still needs fetching here.
+            data["pump_metadata"] = prefetched_metadata
+            try:
+                pumper_result = await self._fetch_pumper_info()
+            except Exception as err:  # noqa: BLE001 - mirror gather(return_exceptions=True)
+                pumper_result = err
         else:
-            data["pump_metadata"] = metadata_result
+            metadata_result: dict[str, Any] | None | BaseException
+            metadata_result, pumper_result = await asyncio.gather(
+                self._fetch_pump_metadata(),
+                self._fetch_pumper_info(),
+                return_exceptions=True,
+            )
+            if isinstance(metadata_result, BaseException):
+                _LOGGER.warning("Failed to fetch pump metadata: %s", metadata_result)
+            else:
+                data["pump_metadata"] = metadata_result
 
         if isinstance(pumper_result, BaseException):
             _LOGGER.warning("Failed to fetch pumper info: %s", pumper_result)
@@ -1614,7 +1631,7 @@ class TandemSourceClient:
             device_id = data["pump_metadata"].get("tconnectDeviceId")
 
         if device_id:
-            start_iso = week_ago_pump.strftime("%Y-%m-%d")
+            start_iso = window_start_pump.strftime("%Y-%m-%d")
             end_iso = now_pump.strftime("%Y-%m-%d")
             try:
                 data["pump_events"] = await self.get_pump_events(device_id, start_iso, end_iso)
@@ -1652,7 +1669,7 @@ class TandemSourceClient:
 
         # ── Phase 3: ControlIQ fallback (parallel) ───────────────────
         if not data["pump_events"]:
-            start_mm = week_ago_pump.strftime("%m-%d-%Y")
+            start_mm = window_start_pump.strftime("%m-%d-%Y")
             end_mm = now_pump.strftime("%m-%d-%Y")
 
             _LOGGER.debug(

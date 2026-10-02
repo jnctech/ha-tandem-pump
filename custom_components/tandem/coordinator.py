@@ -182,6 +182,44 @@ _LOGGER = logging.getLogger(__name__)
 
 _CGM_SESSION_TIME_SENTINEL = 0xFFFFFFFF  # uint32 max — "no valid time" marker
 
+# History fetch windows (days). The first refresh runs while Home Assistant is
+# still starting up and gates entry setup, so it fetches only a short window to
+# populate the real-time sensors quickly; the full window (used for the
+# retrospective trend stats and long-term statistics) is backfilled immediately
+# afterwards, off the setup critical path. See async_backfill_full_history.
+STARTUP_HISTORY_DAYS = 1
+FULL_HISTORY_DAYS = 7
+
+
+# Keys written by _compute_cgm_summary: each is a figure over the
+# _CGM_SUMMARY_PERIOD_DAYS period, so a shorter fetch window gives a wrong value.
+_CGM_SUMMARY_KEYS = (
+    TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL,
+    TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL,
+    TANDEM_TIME_IN_RANGE,
+    TANDEM_SENSOR_KEY_CGM_USAGE,
+    TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV,
+    TANDEM_SENSOR_KEY_GLUCOSE_CV,
+    TANDEM_SENSOR_KEY_GMI,
+    TANDEM_SENSOR_KEY_TIME_BELOW_RANGE,
+    TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE,
+)
+
+# Keys that need more history than the fast-start window holds. Computed from
+# one day they read wrong, not just unknown: a 7-day figure over a day, a
+# G7 15-day session rated 10 (its stop is older), an active alert raised
+# before the window missing from the active count (a false all-clear).
+_SHORT_WINDOW_UNKNOWN_KEYS = (
+    *_CGM_SUMMARY_KEYS,
+    TANDEM_SENSOR_KEY_CGM_SESSION_START,
+    TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY,
+    TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING,
+    TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT,
+    TANDEM_SENSOR_KEY_LAST_ALERT,
+    TANDEM_SENSOR_KEY_LAST_ALARM,
+    TANDEM_SENSOR_KEY_LAST_CGM_ALERT,
+)
+
 
 def _valid_session_seconds(value: Any) -> TypeGuard[int | float]:
     """True when a CGM-session transmitter-clock field holds a real second count.
@@ -509,6 +547,10 @@ class TandemCoordinator(DataUpdateCoordinator):
         # Historical data tracking
         self._last_max_date: str | None = None  # maxDateWithEvents from metadata
         self._last_event_seq: int = 0  # Last processed event sequence number
+        # True once the first (short-window) refresh has run. Gates the fast-start
+        # path: the first fetch uses STARTUP_HISTORY_DAYS and then schedules a
+        # full-window backfill; every later poll uses FULL_HISTORY_DAYS.
+        self._first_refresh_done: bool = False
 
         # Phase 6: Estimated Remaining Insulin — cumulative tracking.
         # Accumulates delivered insulin incrementally using seq numbers to
@@ -564,16 +606,26 @@ class TandemCoordinator(DataUpdateCoordinator):
             )
             return self.data
 
+        # Fast start: the very first refresh fetches only a short window so HA
+        # entry setup completes quickly; the full window is backfilled straight
+        # after (see the end of this method). Every later poll uses the full window.
+        is_first_refresh = not self._first_refresh_done
+        history_days = STARTUP_HISTORY_DAYS if is_first_refresh else FULL_HISTORY_DAYS
+
         _LOGGER.info(
-            "[Tandem] New pump data: maxDate %s → %s — fetching events",
+            "[Tandem] New pump data: maxDate %s → %s — fetching events (%d-day window%s)",
             self._last_max_date or "(first poll)",
             max_date_str,
+            history_days,
+            ", fast start" if is_first_refresh else "",
         )
 
         try:
             recent_data = await self.client.get_recent_data(
                 pump_timezone=self.timezone,
                 fallback_date=max_date_str,
+                history_days=history_days,
+                prefetched_metadata=metadata_entry,
             )
         except TandemApiError as err:
             raise UpdateFailed(f"Tandem API error: {err}") from err
@@ -583,8 +635,10 @@ class TandemCoordinator(DataUpdateCoordinator):
         if not isinstance(recent_data, dict):
             raise UpdateFailed(f"get_recent_data() returned {type(recent_data)}, expected dict")
 
-        # Save maxDateWithEvents for next poll comparison
-        if max_date_str:
+        # Save maxDateWithEvents for next poll comparison. Skipped on the first
+        # (short-window) refresh so the immediate full-history backfill is not
+        # short-circuited by the freshness check above.
+        if max_date_str and not is_first_refresh:
             self._last_max_date = max_date_str
 
         _LOGGER.debug("Tandem before data parsing: %s", sanitize_for_logging(recent_data))
@@ -711,11 +765,64 @@ class TandemCoordinator(DataUpdateCoordinator):
             is_data_stale(data),
         )
 
+        # The short first window holds about a day. Leave the keys that need
+        # more history unknown until the full-window backfill fills them — on
+        # the pump-events path and the dashboard-summary fallback alike.
+        if is_first_refresh:
+            for key in _SHORT_WINDOW_UNKNOWN_KEYS:
+                data[key] = UNAVAILABLE
+                data.pop(f"{key}_attributes", None)
+
         # ── Import long-term statistics with correct timestamps ──────────
         if pump_events:
             self.hass.async_create_task(self._import_statistics(pump_events))
 
+        # Fast start: the first refresh only fetched a short window so entry setup
+        # could complete quickly. The full-window backfill is scheduled once by
+        # async_setup_entry (async_backfill_full_history), off the setup path.
+        if is_first_refresh:
+            self._first_refresh_done = True
+
         return data
+
+    async def async_backfill_full_history(self) -> None:
+        """Fetch the full history window after the fast first refresh.
+
+        Scheduled by async_setup_entry, off the entry-setup critical path. Re-runs
+        the normal update (now with the full window, since ``_first_refresh_done``
+        is set) and pushes the result only on success — a backfill failure leaves
+        the good short-window data in place and is logged, so live sensors never
+        regress to unavailable because of it.
+        """
+        _LOGGER.debug("[Tandem] Backfilling full history window after fast first refresh")
+        # The short first refresh and this backfill are one logical first
+        # observation, moments apart on the same latest reading. Clear the
+        # glucose-delta baseline the short refresh set so the backfill does not
+        # emit a spurious zero delta between two fetches of the same reading;
+        # the genuine poll-to-poll delta then starts at the next scheduled poll.
+        # (The cumulative insulin trackers are sequence-guarded and idempotent,
+        # so re-processing the same events here does not double-count.)
+        self._prev_sg_mgdl = None
+        # ponytail: calls _async_update_data directly, outside the coordinator's
+        # refresh lock; a manual refresh in these few seconds can overlap it.
+        # Route through async_refresh if that ever shows up.
+        try:
+            data = await self._async_update_data()
+        except Exception as err:  # noqa: BLE001 - must not downgrade the successful short-window refresh
+            # Clear the freshness gate so the next scheduled poll is guaranteed to
+            # re-fetch the full window. Without this, a failure that occurred after
+            # _async_update_data cached maxDateWithEvents would let the freshness
+            # short-circuit keep serving the short-window stats until the pump
+            # produced a new maxDate (potentially hours).
+            self._last_max_date = None
+            _LOGGER.warning(
+                "[Tandem] Full-history backfill failed; keeping short-window data "
+                "(full stats will refresh on the next poll): %s",
+                err,
+            )
+            return
+        self.async_set_updated_data(data)
+        _LOGGER.debug("[Tandem] Full-history backfill complete (%d keys)", len(data))
 
     def _parse_therapy_timeline(self, timeline: dict[str, Any] | None, data: dict[str, Any]) -> None:
         """Parse therapy timeline data into sensor values."""
@@ -2502,17 +2609,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         CGM data rather than vanishing. It is stated on the TIR sensor's attributes,
         which also carry that calendar day's figure (Tandem Source's daily view).
         """
-        _unavailable_keys = (
-            TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL,
-            TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL,
-            TANDEM_TIME_IN_RANGE,
-            TANDEM_SENSOR_KEY_CGM_USAGE,
-            TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV,
-            TANDEM_SENSOR_KEY_GLUCOSE_CV,
-            TANDEM_SENSOR_KEY_GMI,
-            TANDEM_SENSOR_KEY_TIME_BELOW_RANGE,
-            TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE,
-        )
+        _unavailable_keys = _CGM_SUMMARY_KEYS
 
         if not cgm_readings:
             for key in _unavailable_keys:

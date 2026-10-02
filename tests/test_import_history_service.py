@@ -275,6 +275,8 @@ def _tandem_setup_patches(hass: HomeAssistant):
     """Context manager that patches away network-touching internals of async_setup_entry."""
     mock_coord = MagicMock()
     mock_coord.async_config_entry_first_refresh = AsyncMock()
+    # async_setup_entry schedules this as a background task after first refresh.
+    mock_coord.async_backfill_full_history = AsyncMock()
     mock_coord.data = {}
 
     return (

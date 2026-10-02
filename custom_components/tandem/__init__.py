@@ -96,11 +96,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: TandemConfigEntry) -> bo
         raise ConfigEntryNotReady(f"Failed to initialise Tandem client: {err}") from err
 
     coordinator = TandemCoordinator(hass, entry, client, update_interval=timedelta(seconds=config[SCAN_INTERVAL]))
+    # The first refresh fetches only a short history window so entry setup stays
+    # fast; the full window (trend stats + long-term statistics) is backfilled
+    # immediately afterwards on a background task, off the setup critical path.
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = TandemRuntimeData(client=client, coordinator=coordinator)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _register_services(hass, entry)
+
+    entry.async_create_background_task(
+        hass,
+        coordinator.async_backfill_full_history(),
+        name=f"tandem_backfill_{entry.entry_id}",
+    )
 
     _LOGGER.info("Tandem entry setup completed: %s", entry.entry_id)
     return True

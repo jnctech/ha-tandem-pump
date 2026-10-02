@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Daily carbs reads 0 g on a day without carb entries**, as Tandem Source shows it, once the pump
   has logged anything that day (basal or bolus). Before any pump data for the day it stays unknown.
 
+### Fixed
+- **A network failure during login no longer disables the integration.** A DNS, connection or
+  timeout error, a Tandem 5xx or rate limit, or a malformed reply after the password was accepted
+  was reported as an authentication failure, so
+  Home Assistant stopped retrying and waited for a manual reauth. A DNS failure at HA startup
+  left the integration down until it was reloaded by hand. These now retry automatically; only a login
+  Tandem rejects asks for reauth. The setup dialog shows "cannot connect" for them, not "invalid
+  credentials".
+
 ## [2.3.0-rc.4] - 2026-10-01 (pre-release)
 
 ### Fixed

@@ -15,7 +15,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.httpx_client import get_async_client
 
 from .const import CONF_EMAIL, CONF_PASSWORD, CONF_REGION, DOMAIN, PLATFORM_TANDEM, PLATFORM_TYPE, SCAN_INTERVAL
-from .exceptions import TandemAuthError
+from .exceptions import TandemApiError, TandemAuthError
 from .tandem_api import TandemSourceClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +38,9 @@ async def validate_tandem_input(hass: HomeAssistant, data: dict[str, Any]) -> di
     except TandemAuthError as err:
         _LOGGER.warning("Tandem login failed: %s", err)
         raise InvalidAuth from err
+    except TandemApiError as err:
+        _LOGGER.warning("Cannot reach Tandem Source: %s", err)
+        raise CannotConnect from err
     finally:
         try:
             await client.close()

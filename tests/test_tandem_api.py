@@ -490,20 +490,22 @@ class TestExtractJwtClaims:
         return TandemSourceClient("user@test.com", "pass", region="EU")
 
     def test_invalid_jwt_format_raises(self):
-        """JWT with wrong number of parts raises TandemAuthError."""
+        """JWT with wrong number of parts is a server fault: TandemApiError, not reauth."""
         client = self._make_client()
         client.id_token = "only.two"
-        with pytest.raises(TandemAuthError, match="Invalid JWT format"):
+        with pytest.raises(TandemApiError, match="Invalid JWT format") as exc:
             client._extract_jwt_claims()
+        assert not isinstance(exc.value, TandemAuthError)
 
     def test_invalid_base64_payload_raises(self):
-        """Garbled base64 payload raises TandemAuthError, not bare Exception (M2)."""
+        """Garbled base64 payload raises TandemApiError, not bare Exception (M2)."""
         client = self._make_client()
         # Header and signature are irrelevant; payload is invalid base64
         bad_payload = "!!!not-valid-base64!!!"
         client.id_token = f"header.{bad_payload}.signature"
-        with pytest.raises(TandemAuthError, match="Cannot decode JWT payload"):
+        with pytest.raises(TandemApiError, match="Cannot decode JWT payload") as exc:
             client._extract_jwt_claims()
+        assert not isinstance(exc.value, TandemAuthError)
 
     def test_valid_jwt_no_pumper_id_raises(self):
         """JWT with valid base64 but no pumperId raises TandemAuthError."""
@@ -636,6 +638,7 @@ class TestLoginErrors:
         mock_login_resp.json.return_value = {"status": "SUCCESS"}
 
         mock_auth_resp = MagicMock()
+        mock_auth_resp.status_code = 200
         mock_auth_resp.url = "https://example.com/callback?error=access_denied"
 
         mock_http = AsyncMock()
@@ -658,7 +661,7 @@ class TestLoginErrors:
         mock_login_resp.status_code = 200
         mock_login_resp.json.return_value = {"status": "SUCCESS"}
 
-        mock_auth_resp = MagicMock()
+        mock_auth_resp = MagicMock(status_code=200)
         mock_auth_resp.url = "https://example.com/callback?code=test_auth_code"
 
         mock_token_resp = MagicMock()
@@ -693,7 +696,7 @@ class TestLoginErrors:
         mock_login_resp.status_code = 200
         mock_login_resp.json.return_value = {"status": "SUCCESS"}
 
-        mock_auth_resp = MagicMock()
+        mock_auth_resp = MagicMock(status_code=200)
         mock_auth_resp.url = "https://example.com/callback?code=test_auth_code"
 
         # Stop the flow at token exchange — we only assert the authorize call.
@@ -1140,3 +1143,72 @@ class TestMapPumpLogEventBoundaries:
 
     def test_missing_event_code_returns_none(self):
         assert map_pump_log_event({"pumpDateTime": "2026-09-06T00:00:00"}) is None
+
+
+class TestLoginFailureClassification:
+    """Only a rejected login is an auth failure; network trouble must be retryable.
+
+    A DNS failure at HA boot raised TandemAuthError, which became
+    ConfigEntryAuthFailed and left the entry disabled until a manual reauth.
+    """
+
+    def _client(self, get: object = None, post: object = None) -> TandemSourceClient:
+        session = AsyncMock(spec=httpx.AsyncClient)
+        session.is_closed = False
+        session.get = AsyncMock(side_effect=get) if get else AsyncMock()
+        if isinstance(post, list):
+            session.post = AsyncMock(side_effect=post)
+        else:
+            session.post = AsyncMock(return_value=post) if post else AsyncMock()
+        return TandemSourceClient("user@test.com", "pass", session=session)
+
+    @staticmethod
+    def _resp(status: int = 200, url: str = "", json: object = None, text: str = "") -> MagicMock:
+        resp = MagicMock(status_code=status, text=text, url=url)
+        if json is None:
+            resp.json.side_effect = ValueError("not JSON")
+        else:
+            resp.json.return_value = json
+        return resp
+
+    async def _assert_retryable(self, client: TandemSourceClient) -> None:
+        with pytest.raises(TandemApiError) as exc:
+            await client.login()
+        assert not isinstance(exc.value, TandemAuthError)
+
+    async def test_dns_failure_on_login_page_is_api_error(self):
+        client = self._client(get=httpx.ConnectError("[Errno -3] Try again"))
+        with pytest.raises(TandemApiError) as exc:
+            await client.login()
+        assert not isinstance(exc.value, TandemAuthError)
+
+    async def test_login_server_error_is_api_error(self):
+        client = self._client(post=MagicMock(status_code=503, text="unavailable"))
+        with pytest.raises(TandemApiError) as exc:
+            await client.login()
+        assert not isinstance(exc.value, TandemAuthError)
+
+    async def test_rejected_login_is_auth_error(self):
+        client = self._client(post=MagicMock(status_code=401, text="bad credentials"))
+        with pytest.raises(TandemAuthError):
+            await client.login()
+
+    async def test_rate_limited_login_is_api_error(self):
+        await self._assert_retryable(self._client(post=self._resp(429, text="slow down")))
+
+    async def test_authorize_server_error_is_api_error(self):
+        ok = self._resp(json={"status": "SUCCESS"})
+        client = self._client(get=[self._resp(), self._resp(503, url="https://idp/authorize")], post=ok)
+        await self._assert_retryable(client)
+
+    async def test_authorize_temporarily_unavailable_redirect_is_api_error(self):
+        ok = self._resp(json={"status": "SUCCESS"})
+        redirect = self._resp(url="https://app/callback?error=temporarily_unavailable")
+        client = self._client(get=[self._resp(), redirect], post=ok)
+        await self._assert_retryable(client)
+
+    async def test_non_json_token_reply_is_api_error(self):
+        ok = self._resp(json={"status": "SUCCESS"})
+        code = self._resp(url="https://app/callback?code=abc")
+        client = self._client(get=[self._resp(), code], post=[ok, self._resp(200, text="<html>maintenance")])
+        await self._assert_retryable(client)

@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **A network failure during login no longer disables the integration.** A DNS, connection or
-  timeout error (or a Tandem 5xx) while logging in was reported as an authentication failure, so
+  timeout error, a Tandem 5xx or rate limit, or a malformed reply after the password was accepted
+  was reported as an authentication failure, so
   Home Assistant stopped retrying and waited for a manual reauth. A DNS failure at HA startup
   left the integration down until it was reloaded by hand. These now retry automatically; only a login
   Tandem rejects asks for reauth. The setup dialog shows "cannot connect" for them, not "invalid

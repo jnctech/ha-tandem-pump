@@ -990,6 +990,20 @@ def _select_active_first(legacy_pumps: list[dict[str, Any]]) -> list[dict[str, A
     return sorted(legacy_pumps, key=sort_key, reverse=True)
 
 
+def _raise_if_retryable(resp: httpx.Response, step: str) -> None:
+    """Raise TandemApiError for a status that is the server's problem, not the user's."""
+    if resp.status_code >= 500 or resp.status_code in (408, 429):
+        raise TandemApiError(f"{step} HTTP {resp.status_code}: {resp.text[:200]}")
+
+
+def _json_or_api_error(resp: httpx.Response, step: str) -> Any:
+    """Parse a JSON body; a non-JSON 2xx (WAF, maintenance page) is retryable."""
+    try:
+        return resp.json()
+    except ValueError as e:
+        raise TandemApiError(f"{step} returned non-JSON: {resp.text[:200]}") from e
+
+
 class TandemSourceClient:
     """Async API client for Tandem Diabetes Source platform."""
 
@@ -1092,8 +1106,9 @@ class TandemSourceClient:
         """Perform OIDC/PKCE authentication.
 
         Returns on success. Raises TandemAuthError only when Tandem rejects the
-        login (credentials, consent); a transport error or a 5xx raises
-        TandemApiError, so HA retries instead of asking the user to reauth.
+        login (credentials, consent, no pump on the account). A transport error,
+        5xx/408/429, or a malformed reply raises TandemApiError, so HA retries
+        instead of asking the user to reauth.
         """
         if not self._needs_login():
             return
@@ -1123,12 +1138,11 @@ class TandemSourceClient:
         except httpx.HTTPError as e:
             raise TandemApiError(f"Login request failed: {e}") from e
 
-        if login_resp.status_code >= 500:
-            raise TandemApiError(f"Login server error HTTP {login_resp.status_code}")
+        _raise_if_retryable(login_resp, "Login")
         if login_resp.status_code != 200:
             raise TandemAuthError(f"Login failed with HTTP {login_resp.status_code}: {login_resp.text[:200]}")
 
-        login_json = login_resp.json()
+        login_json = _json_or_api_error(login_resp, "Login")
         if login_json.get("status") != "SUCCESS":
             raise TandemAuthError(f"Login rejected: {login_json.get('message', 'Unknown error')}")
 
@@ -1162,11 +1176,16 @@ class TandemSourceClient:
         except httpx.HTTPError as e:
             raise TandemApiError(f"Authorization request failed: {e}") from e
 
+        _raise_if_retryable(auth_resp, "Authorization")
+
         # Extract authorization code from redirect URL
         final_url = str(auth_resp.url)
         parsed = urlparse(final_url)
         query_params = parse_qs(parsed.query)
 
+        # RFC 6749 §4.1.2.1: the server's own transient failures, not a rejection.
+        if query_params.get("error", [""])[0] in ("server_error", "temporarily_unavailable"):
+            raise TandemApiError(f"Authorization server error: {query_params['error'][0]}")
         if "code" not in query_params:
             raise TandemAuthError(f"No authorization code in redirect URL: {final_url[:200]}")
 
@@ -1192,17 +1211,18 @@ class TandemSourceClient:
         except httpx.HTTPError as e:
             raise TandemApiError(f"Token exchange failed: {e}") from e
 
-        if token_resp.status_code >= 500:
-            raise TandemApiError(f"Token exchange server error HTTP {token_resp.status_code}")
+        _raise_if_retryable(token_resp, "Token exchange")
         if token_resp.status_code // 100 != 2:
             raise TandemAuthError(f"Token exchange HTTP {token_resp.status_code}: {token_resp.text[:200]}")
 
-        token_json = token_resp.json()
+        # From here the credentials were accepted: a malformed reply is the
+        # server's fault, so it retries rather than asking for a reauth.
+        token_json = _json_or_api_error(token_resp, "Token exchange")
 
         if "access_token" not in token_json:
-            raise TandemAuthError("Missing access_token in token response")
+            raise TandemApiError("Missing access_token in token response")
         if "id_token" not in token_json:
-            raise TandemAuthError("Missing id_token in token response")
+            raise TandemApiError("Missing id_token in token response")
 
         self.access_token = token_json["access_token"]
         self.id_token = token_json["id_token"]
@@ -1224,10 +1244,10 @@ class TandemSourceClient:
         HTTPS directly from the token endpoint.
         """
         if self.id_token is None:
-            raise TandemAuthError("No id_token available to decode")
+            raise TandemApiError("No id_token available to decode")
         parts = self.id_token.split(".")
         if len(parts) != 3:
-            raise TandemAuthError("Invalid JWT format")
+            raise TandemApiError("Invalid JWT format")
 
         # Base64url decode the payload (middle part)
         payload = parts[1]
@@ -1237,7 +1257,7 @@ class TandemSourceClient:
         try:
             claims = json.loads(base64.urlsafe_b64decode(payload))
         except ValueError as e:  # json.JSONDecodeError is a subclass of ValueError
-            raise TandemAuthError(f"Cannot decode JWT payload: {e}") from e
+            raise TandemApiError(f"Cannot decode JWT payload: {e}") from e
 
         self.pumper_id = claims.get("pumperId")
         self.account_id = claims.get("accountId")

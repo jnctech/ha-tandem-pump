@@ -12,7 +12,7 @@ Assistant setup:
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -20,7 +20,12 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.tandem.const import DOMAIN
+from custom_components.tandem.const import (
+    DOMAIN,
+    TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL,
+    TANDEM_SENSOR_KEY_CGM_USAGE,
+    TANDEM_SENSOR_KEY_TIME_IN_RANGE,
+)
 from custom_components.tandem.coordinator import (
     FULL_HISTORY_DAYS,
     STARTUP_HISTORY_DAYS,
@@ -291,3 +296,45 @@ class TestHistoryDaysWindow:
         assert date.fromisoformat(start_7) < date.fromisoformat(start_1)
         assert (date.fromisoformat(end_1) - date.fromisoformat(start_1)).days == 1
         assert (date.fromisoformat(end_7) - date.fromisoformat(start_7)).days == 7
+
+
+def _recent_data_with_cgm_events() -> dict[str, Any]:
+    """recent_data payload carrying a day of 5-minute CGM pump events."""
+    data = _recent_data()
+    end = datetime(2024, 1, 15, 12, 0, 0)
+    data["pump_events"] = [
+        {
+            "event_id": 256,
+            "event_name": "CGM_DATA_GXB",
+            "seq": i + 1,
+            "timestamp": end - timedelta(minutes=5 * (287 - i)),
+            "glucose_mgdl": 120,
+            "status": 0,
+        }
+        for i in range(288)
+    ]
+    return data
+
+
+class TestShortWindowSummary:
+    """The 7-day CGM summary must not be computed over the short first window."""
+
+    async def test_summary_unknown_after_short_refresh_then_filled_by_backfill(self, hass: HomeAssistant):
+        coordinator, _client = await _make_coordinator(
+            hass,
+            recent_data_side_effect=[_recent_data_with_cgm_events(), _recent_data_with_cgm_events()],
+        )
+
+        await coordinator.async_config_entry_first_refresh()
+
+        # One day of readings would read CGM usage ~14% if computed as a 7-day figure.
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_USAGE] is None
+        assert coordinator.data[TANDEM_SENSOR_KEY_TIME_IN_RANGE] is None
+        assert coordinator.data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] is None
+        assert f"{TANDEM_SENSOR_KEY_TIME_IN_RANGE}_attributes" not in coordinator.data
+
+        await coordinator.async_backfill_full_history()
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] == 120
+        assert coordinator.data[TANDEM_SENSOR_KEY_TIME_IN_RANGE] == 100.0
+        assert coordinator.data[TANDEM_SENSOR_KEY_CGM_USAGE] is not None

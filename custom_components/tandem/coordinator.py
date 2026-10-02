@@ -191,6 +191,21 @@ STARTUP_HISTORY_DAYS = 1
 FULL_HISTORY_DAYS = 7
 
 
+# Keys written by _compute_cgm_summary: each is a figure over the
+# _CGM_SUMMARY_PERIOD_DAYS period, so a shorter fetch window gives a wrong value.
+_CGM_SUMMARY_KEYS = (
+    TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL,
+    TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL,
+    TANDEM_TIME_IN_RANGE,
+    TANDEM_SENSOR_KEY_CGM_USAGE,
+    TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV,
+    TANDEM_SENSOR_KEY_GLUCOSE_CV,
+    TANDEM_SENSOR_KEY_GMI,
+    TANDEM_SENSOR_KEY_TIME_BELOW_RANGE,
+    TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE,
+)
+
+
 def _valid_session_seconds(value: Any) -> TypeGuard[int | float]:
     """True when a CGM-session transmitter-clock field holds a real second count.
 
@@ -734,6 +749,14 @@ class TandemCoordinator(DataUpdateCoordinator):
             age_str,
             is_data_stale(data),
         )
+
+        # The short first window holds about a day, not the summary period: the
+        # 7-day figures would be computed over it and read wrong (CGM usage ~1/7).
+        # Leave them unknown until the full-window backfill fills them.
+        if is_first_refresh and pump_events:
+            for key in _CGM_SUMMARY_KEYS:
+                data[key] = UNAVAILABLE
+            data.pop(f"{TANDEM_TIME_IN_RANGE}_attributes", None)
 
         # ── Import long-term statistics with correct timestamps ──────────
         if pump_events:
@@ -2568,17 +2591,7 @@ class TandemCoordinator(DataUpdateCoordinator):
         CGM data rather than vanishing. It is stated on the TIR sensor's attributes,
         which also carry that calendar day's figure (Tandem Source's daily view).
         """
-        _unavailable_keys = (
-            TANDEM_SENSOR_KEY_AVG_GLUCOSE_MMOL,
-            TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL,
-            TANDEM_TIME_IN_RANGE,
-            TANDEM_SENSOR_KEY_CGM_USAGE,
-            TANDEM_SENSOR_KEY_GLUCOSE_STD_DEV,
-            TANDEM_SENSOR_KEY_GLUCOSE_CV,
-            TANDEM_SENSOR_KEY_GMI,
-            TANDEM_SENSOR_KEY_TIME_BELOW_RANGE,
-            TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE,
-        )
+        _unavailable_keys = _CGM_SUMMARY_KEYS
 
         if not cgm_readings:
             for key in _unavailable_keys:

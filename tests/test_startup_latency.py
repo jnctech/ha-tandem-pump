@@ -22,6 +22,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.tandem.const import (
     DOMAIN,
+    TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT,
     TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL,
     TANDEM_SENSOR_KEY_CGM_USAGE,
     TANDEM_SENSOR_KEY_TIME_IN_RANGE,
@@ -338,3 +339,31 @@ class TestShortWindowSummary:
         assert coordinator.data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] == 120
         assert coordinator.data[TANDEM_SENSOR_KEY_TIME_IN_RANGE] == 100.0
         assert coordinator.data[TANDEM_SENSOR_KEY_CGM_USAGE] is not None
+
+    async def test_dashboard_fallback_summary_unknown_after_short_refresh(self, hass: HomeAssistant):
+        """No pump events: the fallback dashboard summary also covers only the short window."""
+        payload = _recent_data()
+        payload["dashboard_summary"] = {"averageReading": 140, "timeInRangePercent": 70, "timeInUsePercent": 95}
+        coordinator, _client = await _make_coordinator(hass, recent_data_side_effect=[payload, payload])
+
+        await coordinator.async_config_entry_first_refresh()
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_TIME_IN_RANGE] is None
+        assert coordinator.data[TANDEM_SENSOR_KEY_AVG_GLUCOSE_MGDL] is None
+
+        await coordinator.async_backfill_full_history()
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_TIME_IN_RANGE] is not None
+
+    async def test_active_alert_count_unknown_after_short_refresh(self, hass: HomeAssistant):
+        """An alert raised before the short window would be missing: no false all-clear."""
+        coordinator, _client = await _make_coordinator(
+            hass,
+            recent_data_side_effect=[_recent_data_with_cgm_events(), _recent_data_with_cgm_events()],
+        )
+
+        await coordinator.async_config_entry_first_refresh()
+        assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] is None
+
+        await coordinator.async_backfill_full_history()
+        assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT] == 0

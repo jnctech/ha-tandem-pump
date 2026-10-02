@@ -205,6 +205,21 @@ _CGM_SUMMARY_KEYS = (
     TANDEM_SENSOR_KEY_TIME_ABOVE_RANGE,
 )
 
+# Keys that need more history than the fast-start window holds. Computed from
+# one day they read wrong, not just unknown: a 7-day figure over a day, a
+# G7 15-day session rated 10 (its stop is older), an active alert raised
+# before the window missing from the active count (a false all-clear).
+_SHORT_WINDOW_UNKNOWN_KEYS = (
+    *_CGM_SUMMARY_KEYS,
+    TANDEM_SENSOR_KEY_CGM_SESSION_START,
+    TANDEM_SENSOR_KEY_CGM_SESSION_EXPIRY,
+    TANDEM_SENSOR_KEY_CGM_SENSOR_DAYS_REMAINING,
+    TANDEM_SENSOR_KEY_ACTIVE_ALERTS_COUNT,
+    TANDEM_SENSOR_KEY_LAST_ALERT,
+    TANDEM_SENSOR_KEY_LAST_ALARM,
+    TANDEM_SENSOR_KEY_LAST_CGM_ALERT,
+)
+
 
 def _valid_session_seconds(value: Any) -> TypeGuard[int | float]:
     """True when a CGM-session transmitter-clock field holds a real second count.
@@ -750,13 +765,13 @@ class TandemCoordinator(DataUpdateCoordinator):
             is_data_stale(data),
         )
 
-        # The short first window holds about a day, not the summary period: the
-        # 7-day figures would be computed over it and read wrong (CGM usage ~1/7).
-        # Leave them unknown until the full-window backfill fills them.
-        if is_first_refresh and pump_events:
-            for key in _CGM_SUMMARY_KEYS:
+        # The short first window holds about a day. Leave the keys that need
+        # more history unknown until the full-window backfill fills them — on
+        # the pump-events path and the dashboard-summary fallback alike.
+        if is_first_refresh:
+            for key in _SHORT_WINDOW_UNKNOWN_KEYS:
                 data[key] = UNAVAILABLE
-            data.pop(f"{TANDEM_TIME_IN_RANGE}_attributes", None)
+                data.pop(f"{key}_attributes", None)
 
         # ── Import long-term statistics with correct timestamps ──────────
         if pump_events:
@@ -788,6 +803,9 @@ class TandemCoordinator(DataUpdateCoordinator):
         # (The cumulative insulin trackers are sequence-guarded and idempotent,
         # so re-processing the same events here does not double-count.)
         self._prev_sg_mgdl = None
+        # ponytail: calls _async_update_data directly, outside the coordinator's
+        # refresh lock; a manual refresh in these few seconds can overlap it.
+        # Route through async_refresh if that ever shows up.
         try:
             data = await self._async_update_data()
         except Exception as err:  # noqa: BLE001 - must not downgrade the successful short-window refresh

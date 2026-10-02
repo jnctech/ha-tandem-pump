@@ -16,7 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   statistics) on a background task once setup is done. Real-time sensors (current
   glucose, IOB, basal) are available immediately as before; the trend stats
   (average / TIR / GMI) populate a few seconds later. Also removes a duplicate
-  pump-metadata API call on every poll. No change to any sensor's values.
+  pump-metadata API call on every poll. For those few seconds after a restart or
+  reload, sensors that need more than a day of history read unknown rather than
+  a value computed from one day: the 7-day CGM figures, CGM session start /
+  expiry / days remaining, active alerts and the last alert / alarm / CGM alert.
+  "Last ..." sensors whose event is more than a day old are unknown until the
+  backfill completes.
 
 ## [2.3.0-rc.4] - 2026-10-01 (pre-release)
 

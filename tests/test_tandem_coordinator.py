@@ -77,7 +77,10 @@ async def _setup_tandem_coordinator(
 
     coordinator = TandemCoordinator(hass, entry, mock_client, update_interval=timedelta(seconds=300))
 
+    # As async_setup_entry: the short-window first refresh, then the full-window
+    # backfill (window-dependent keys are only computed on the full window).
     await coordinator.async_config_entry_first_refresh()
+    await coordinator.async_backfill_full_history()
     return coordinator
 
 

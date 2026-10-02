@@ -142,6 +142,22 @@ class TestValidateTandemInput:
         with pytest.raises(InvalidAuth):
             await validate_tandem_input(hass, {"tandem_email": "", "tandem_password": "", "tandem_region": "EU"})
 
+    async def test_validate_tandem_input_network_error_is_cannot_connect(self, hass: HomeAssistant):
+        """A TandemApiError from login (network, 5xx) is mapped to CannotConnect, not InvalidAuth."""
+        from custom_components.tandem.config_flow import CannotConnect, validate_tandem_input
+        from custom_components.tandem.exceptions import TandemApiError
+
+        with patch("custom_components.tandem.config_flow.TandemSourceClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.login = AsyncMock(side_effect=TandemApiError("Cannot reach login page"))
+            mock_client.close = AsyncMock()
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(CannotConnect):
+                await validate_tandem_input(
+                    hass, {"tandem_email": "user@test.com", "tandem_password": "pw", "tandem_region": "EU"}
+                )
+
     async def test_validate_tandem_input_login_fails(self, hass: HomeAssistant):
         """A TandemAuthError from login is mapped to InvalidAuth."""
         from custom_components.tandem.config_flow import InvalidAuth, validate_tandem_input

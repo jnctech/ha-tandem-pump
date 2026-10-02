@@ -1140,3 +1140,35 @@ class TestMapPumpLogEventBoundaries:
 
     def test_missing_event_code_returns_none(self):
         assert map_pump_log_event({"pumpDateTime": "2026-09-06T00:00:00"}) is None
+
+
+class TestLoginFailureClassification:
+    """Only a rejected login is an auth failure; network trouble must be retryable.
+
+    A DNS failure at HA boot raised TandemAuthError, which became
+    ConfigEntryAuthFailed and left the entry disabled until a manual reauth.
+    """
+
+    def _client(self, get: object = None, post: object = None) -> TandemSourceClient:
+        session = AsyncMock(spec=httpx.AsyncClient)
+        session.is_closed = False
+        session.get = AsyncMock(side_effect=get) if get else AsyncMock()
+        session.post = AsyncMock(return_value=post) if post else AsyncMock()
+        return TandemSourceClient("user@test.com", "pass", session=session)
+
+    async def test_dns_failure_on_login_page_is_api_error(self):
+        client = self._client(get=httpx.ConnectError("[Errno -3] Try again"))
+        with pytest.raises(TandemApiError) as exc:
+            await client.login()
+        assert not isinstance(exc.value, TandemAuthError)
+
+    async def test_login_server_error_is_api_error(self):
+        client = self._client(post=MagicMock(status_code=503, text="unavailable"))
+        with pytest.raises(TandemApiError) as exc:
+            await client.login()
+        assert not isinstance(exc.value, TandemAuthError)
+
+    async def test_rejected_login_is_auth_error(self):
+        client = self._client(post=MagicMock(status_code=401, text="bad credentials"))
+        with pytest.raises(TandemAuthError):
+            await client.login()

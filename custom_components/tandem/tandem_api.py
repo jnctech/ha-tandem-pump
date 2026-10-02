@@ -1091,7 +1091,9 @@ class TandemSourceClient:
     async def login(self) -> None:
         """Perform OIDC/PKCE authentication.
 
-        Returns on success, raises TandemAuthError on failure.
+        Returns on success. Raises TandemAuthError only when Tandem rejects the
+        login (credentials, consent); a transport error or a 5xx raises
+        TandemApiError, so HA retries instead of asking the user to reauth.
         """
         if not self._needs_login():
             return
@@ -1108,7 +1110,7 @@ class TandemSourceClient:
                 timeout=REQUEST_TIMEOUT,
             )
         except httpx.HTTPError as e:
-            raise TandemAuthError(f"Cannot reach login page: {e}") from e
+            raise TandemApiError(f"Cannot reach login page: {e}") from e
 
         # Step 2: POST credentials to login API
         try:
@@ -1119,8 +1121,10 @@ class TandemSourceClient:
                 timeout=REQUEST_TIMEOUT,
             )
         except httpx.HTTPError as e:
-            raise TandemAuthError(f"Login request failed: {e}") from e
+            raise TandemApiError(f"Login request failed: {e}") from e
 
+        if login_resp.status_code >= 500:
+            raise TandemApiError(f"Login server error HTTP {login_resp.status_code}")
         if login_resp.status_code != 200:
             raise TandemAuthError(f"Login failed with HTTP {login_resp.status_code}: {login_resp.text[:200]}")
 
@@ -1156,7 +1160,7 @@ class TandemSourceClient:
                 follow_redirects=True,
             )
         except httpx.HTTPError as e:
-            raise TandemAuthError(f"Authorization request failed: {e}") from e
+            raise TandemApiError(f"Authorization request failed: {e}") from e
 
         # Extract authorization code from redirect URL
         final_url = str(auth_resp.url)
@@ -1186,8 +1190,10 @@ class TandemSourceClient:
                 timeout=REQUEST_TIMEOUT,
             )
         except httpx.HTTPError as e:
-            raise TandemAuthError(f"Token exchange failed: {e}") from e
+            raise TandemApiError(f"Token exchange failed: {e}") from e
 
+        if token_resp.status_code >= 500:
+            raise TandemApiError(f"Token exchange server error HTTP {token_resp.status_code}")
         if token_resp.status_code // 100 != 2:
             raise TandemAuthError(f"Token exchange HTTP {token_resp.status_code}: {token_resp.text[:200]}")
 

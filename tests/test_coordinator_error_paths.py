@@ -106,6 +106,18 @@ class TestUpdateDataLoginErrors:
             await coordinator.async_config_entry_first_refresh()
         client.get_pump_event_metadata.assert_not_called()
 
+    async def test_tandemapierror_during_login_is_retryable(self, hass: HomeAssistant):
+        """A network failure in login → ConfigEntryNotReady (HA retries), not reauth."""
+        from custom_components.tandem import TandemCoordinator
+        from custom_components.tandem.tandem_api import TandemApiError
+
+        entry = _make_entry(hass)
+        client = _make_client()
+        client.login = AsyncMock(side_effect=TandemApiError("Cannot reach login page: [Errno -3] Try again"))
+        coordinator = TandemCoordinator(hass, entry, client, update_interval=timedelta(seconds=300))
+        with pytest.raises(ConfigEntryNotReady):
+            await coordinator.async_config_entry_first_refresh()
+
     async def test_generic_exception_during_login(self, hass: HomeAssistant):
         """Generic exception from login → UpdateFailed → ConfigEntryNotReady."""
         from custom_components.tandem import TandemCoordinator

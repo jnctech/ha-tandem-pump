@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+### Changed
+- **Actions are always available and report failures.** `tandem.import_history` and
+  `tandem.capture_diagnostics` are registered when the integration loads, not per entry, and take
+  an optional `config_entry_id` (needed only with more than one Tandem account). Failures that
+  used to be logged and ignored are now shown as errors: an unloaded integration, missing,
+  invalid or reversed dates, a login or metadata failure, a statistics write that failed, a
+  snapshot write that failed, or a snapshot where every fetch failed. If an import chunk fails,
+  the remaining ones are still imported and the error names the missing date ranges. A login
+  Tandem rejects during an action also starts the reauthentication flow.
+- **Minimum Home Assistant version is 2026.2.0** (`hacs.json` said 2023.1.0; nothing that old is tested,
+  and the code uses newer HA APIs). 2026.2 is the version the test suite runs against.
+- README: new "Removing the integration" section.
+
 ## [2.3.0-rc.5] - 2026-10-03 (pre-release)
 
 ### Changed

@@ -64,7 +64,7 @@ The Tandem app uploads roughly once per hour when running unrestricted.
 
 - Tandem t:slim X2 with [Tandem Source](https://source.tandemdiabetes.com) account
 - Tandem mobile app (Android or iOS), syncing regularly
-- Home Assistant 2023.1.0+ with HACS
+- Home Assistant 2026.2.0+ with HACS
 
 ---
 

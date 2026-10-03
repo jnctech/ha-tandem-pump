@@ -13,9 +13,13 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+import voluptuous as vol
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.httpx_client import get_async_client
+from homeassistant.helpers.typing import ConfigType
 
 from .const import (
     CONF_EMAIL,
@@ -26,12 +30,14 @@ from .const import (
     SCAN_INTERVAL,
 )
 from .coordinator import TandemConfigEntry, TandemCoordinator, TandemRuntimeData
+from .exceptions import TandemAuthError
 from .tandem_api import TandemSourceClient
 from .util import convert_date_to_isodate, sanitize_for_logging
 
 __all__ = [
     "TandemCoordinator",
     "TandemSourceClient",
+    "async_setup",
     "async_setup_entry",
     "async_unload_entry",
     "convert_date_to_isodate",
@@ -44,41 +50,63 @@ SERVICE_IMPORT_HISTORY = "import_history"
 SERVICE_CAPTURE_DIAGNOSTICS = "capture_diagnostics"
 
 
-def _get_tandem_data(hass: HomeAssistant, entry_id: str) -> TandemRuntimeData | None:
-    """Resolve TandemRuntimeData for a config entry from its runtime_data.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-    Returns None (logging why) when the entry_id is unknown or the entry is not
-    loaded — runtime_data only exists between setup and unload.
+_ENTRY_FIELD = {vol.Optional("config_entry_id"): cv.string}
+IMPORT_HISTORY_SCHEMA = vol.Schema(
+    {vol.Required("start_date"): cv.date, vol.Optional("end_date"): cv.date, **_ENTRY_FIELD}
+)
+CAPTURE_DIAGNOSTICS_SCHEMA = vol.Schema(_ENTRY_FIELD)
+
+
+def _get_tandem_data(hass: HomeAssistant, call: ServiceCall) -> TandemRuntimeData:
+    """Resolve the loaded Tandem entry a service call targets.
+
+    Uses ``config_entry_id`` when given, otherwise the only loaded entry.
     """
-    entry = hass.config_entries.async_get_entry(entry_id)
-    if entry is None:
-        _LOGGER.error("[Tandem] Config entry '%s' not found in the registry", entry_id)
-        return None
-    if not isinstance(entry.runtime_data, TandemRuntimeData):
-        _LOGGER.error(
-            "[Tandem] Config entry '%s' (%s) is not loaded (state=%s); load the integration before running this service",
-            entry_id,
-            entry.title,
-            entry.state,
-        )
-        return None
-    return entry.runtime_data
+    entry_id = call.data.get("config_entry_id")
+    if entry_id:
+        entry = hass.config_entries.async_get_entry(entry_id)
+        if entry is None or entry.domain != DOMAIN:
+            raise ServiceValidationError(f"Config entry '{entry_id}' is not a Tandem entry")
+        entries = [entry]
+    else:
+        entries = hass.config_entries.async_entries(DOMAIN)
+    loaded = [
+        d
+        for e in entries
+        if e.state is ConfigEntryState.LOADED and isinstance(d := getattr(e, "runtime_data", None), TandemRuntimeData)
+    ]
+    if not loaded:
+        raise ServiceValidationError("The Tandem integration is not loaded; set it up or wait for it to finish loading")
+    if len(loaded) > 1:
+        raise ServiceValidationError("More than one Tandem account is loaded; set config_entry_id")
+    return loaded[0]
 
 
-def _register_services(hass: HomeAssistant, entry: TandemConfigEntry) -> None:
-    """Register the Tandem service actions (idempotent)."""
-    if not hass.services.has_service(DOMAIN, SERVICE_IMPORT_HISTORY):
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_IMPORT_HISTORY,
-            functools.partial(_handle_import_history, hass, entry.entry_id),
-        )
-    if not hass.services.has_service(DOMAIN, SERVICE_CAPTURE_DIAGNOSTICS):
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_CAPTURE_DIAGNOSTICS,
-            functools.partial(_handle_capture_diagnostics, hass, entry.entry_id),
-        )
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the service actions once, independent of any entry being loaded."""
+    hass.services.async_register(
+        DOMAIN, SERVICE_IMPORT_HISTORY, functools.partial(_handle_import_history, hass), IMPORT_HISTORY_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CAPTURE_DIAGNOSTICS,
+        functools.partial(_handle_capture_diagnostics, hass),
+        CAPTURE_DIAGNOSTICS_SCHEMA,
+    )
+    return True
+
+
+async def _login(hass: HomeAssistant, coordinator: TandemCoordinator) -> None:
+    """Log in for a service action; a rejected login also starts the reauth flow."""
+    try:
+        await coordinator.client.login()
+    except TandemAuthError as err:
+        coordinator.config_entry.async_start_reauth(hass)
+        raise HomeAssistantError(f"Tandem rejected the login; reauthenticate the integration: {err}") from err
+    except Exception as err:
+        raise HomeAssistantError(f"Tandem login failed: {err}") from err
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: TandemConfigEntry) -> bool:
@@ -103,7 +131,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: TandemConfigEntry) -> bo
     entry.runtime_data = TandemRuntimeData(client=client, coordinator=coordinator)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    _register_services(hass, entry)
 
     entry.async_create_background_task(
         hass,
@@ -118,9 +145,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: TandemConfigEntry) -> bo
 async def async_unload_entry(hass: HomeAssistant, entry: TandemConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        for service in (SERVICE_IMPORT_HISTORY, SERVICE_CAPTURE_DIAGNOSTICS):
-            if hass.services.has_service(DOMAIN, service):
-                hass.services.async_remove(DOMAIN, service)
         client = entry.runtime_data.client
         try:
             await client.close()
@@ -130,52 +154,48 @@ async def async_unload_entry(hass: HomeAssistant, entry: TandemConfigEntry) -> b
     return unload_ok
 
 
-async def _handle_import_history(hass: HomeAssistant, entry_id: str, call: ServiceCall) -> None:
+async def _handle_import_history(hass: HomeAssistant, call: ServiceCall) -> None:
     """Handle the tandem.import_history service call.
 
     Fetches pump events for the requested date range in 7-day chunks and imports
     them as long-term statistics (CGM glucose, active insulin, basal rate).
     """
-    data = _get_tandem_data(hass, entry_id)
-    if data is None:
-        return
-    coordinator = data.coordinator
-
-    start_str: str = call.data["start_date"]
-    end_str: str = call.data.get("end_date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-    _LOGGER.info("[Tandem] import_history: importing events %s → %s", start_str, end_str)
+    coordinator = _get_tandem_data(hass, call).coordinator
 
     try:
-        await coordinator.client.login()
-    except Exception as err:
-        _LOGGER.error("[Tandem] import_history: authentication failed: %s", err)
-        return
+        start = date.fromisoformat(str(call.data["start_date"]))
+        end_raw = call.data.get("end_date")
+        end = date.fromisoformat(str(end_raw)) if end_raw else datetime.now(timezone.utc).date()
+    except ValueError as err:
+        raise ServiceValidationError(f"Invalid date: {err}") from err
+    if end < start:
+        raise ServiceValidationError(f"end_date {end} is before start_date {start}")
+
+    _LOGGER.info("[Tandem] import_history: importing events %s → %s", start, end)
+
+    await _login(hass, coordinator)
 
     # Retrieve tconnectDeviceId from pump metadata
     try:
         metadata_list = await coordinator.client.get_pump_event_metadata()
-        metadata_entry = None
-        if isinstance(metadata_list, list) and metadata_list:
-            metadata_entry = metadata_list[0]
-        elif isinstance(metadata_list, dict):
-            metadata_entry = metadata_list
-        device_id = metadata_entry.get("tconnectDeviceId") if metadata_entry else None
     except Exception as err:
-        _LOGGER.error("[Tandem] import_history: metadata fetch failed: %s", err)
-        return
-
+        raise HomeAssistantError(f"Tandem pump metadata fetch failed: {err}") from err
+    metadata_entry = None
+    if isinstance(metadata_list, list) and metadata_list:
+        metadata_entry = metadata_list[0]
+    elif isinstance(metadata_list, dict):
+        metadata_entry = metadata_list
+    device_id = metadata_entry.get("tconnectDeviceId") if metadata_entry else None
     if not device_id:
-        _LOGGER.error("[Tandem] import_history: no tconnectDeviceId found in pump metadata")
-        return
+        raise HomeAssistantError("Tandem pump metadata has no tconnectDeviceId")
 
     # Fetch events in 7-day chunks to avoid API timeouts on large date ranges
-    chunk_start = date.fromisoformat(start_str)
-    chunk_end_limit = date.fromisoformat(end_str)
+    chunk_start = start
     all_events: list[dict[str, Any]] = []
+    failed: list[str] = []
 
-    while chunk_start <= chunk_end_limit:
-        chunk_end = min(chunk_start + timedelta(days=6), chunk_end_limit)
+    while chunk_start <= end:
+        chunk_end = min(chunk_start + timedelta(days=6), end)
         try:
             events = await coordinator.client.get_pump_events(
                 device_id,
@@ -185,43 +205,39 @@ async def _handle_import_history(hass: HomeAssistant, entry_id: str, call: Servi
             if events:
                 all_events.extend(events)
         except Exception as err:
-            _LOGGER.warning(
-                "[Tandem] import_history: chunk %s → %s failed: %s",
-                chunk_start.isoformat(),
-                chunk_end.isoformat(),
-                err,
-            )
+            _LOGGER.warning("[Tandem] import_history: chunk %s → %s failed: %s", chunk_start, chunk_end, err)
+            failed.append(f"{chunk_start} → {chunk_end}")
         chunk_start = chunk_end + timedelta(days=1)
 
     _LOGGER.info("[Tandem] import_history: fetched %d events total", len(all_events))
 
-    if all_events:
-        await coordinator._import_statistics(all_events)
+    # Import what was fetched even when a chunk failed, then say what is missing.
+    problems: list[str] = []
+    if failed:
+        problems.append(f"these date ranges failed to fetch: {', '.join(failed)} (run the action again for them)")
+    if not all_events:
+        _LOGGER.warning("[Tandem] import_history: no events returned for %s → %s", start, end)
     else:
-        _LOGGER.warning(
-            "[Tandem] import_history: no events returned for %s → %s",
-            start_str,
-            end_str,
-        )
+        try:
+            failed_stats = await coordinator._import_statistics(all_events)
+        except Exception as err:
+            raise HomeAssistantError(f"Statistics import failed: {err}. {'; '.join(problems)}".rstrip(". ")) from err
+        if failed_stats:
+            problems.append(f"these statistics failed to write: {', '.join(failed_stats)} (see the log)")
+    if problems:
+        raise HomeAssistantError(f"Fetched {len(all_events)} events, but " + "; ".join(problems))
 
 
-async def _handle_capture_diagnostics(hass: HomeAssistant, entry_id: str, call: ServiceCall) -> None:
+async def _handle_capture_diagnostics(hass: HomeAssistant, call: ServiceCall) -> None:
     """Handle the tandem.capture_diagnostics service call.
 
     Fetches raw API responses and writes a sanitised diagnostic snapshot to
     /config/tandem_diagnostics_<timestamp>.json for schema documentation
     and troubleshooting.
     """
-    data = _get_tandem_data(hass, entry_id)
-    if data is None:
-        return
-    coordinator = data.coordinator
+    coordinator = _get_tandem_data(hass, call).coordinator
 
-    try:
-        await coordinator.client.login()
-    except Exception as err:
-        _LOGGER.error("[Tandem] capture_diagnostics: authentication failed: %s", err)
-        return
+    await _login(hass, coordinator)
 
     snapshot: dict[str, Any] = {"captured_at": datetime.now(timezone.utc).isoformat()}
 
@@ -291,6 +307,8 @@ async def _handle_capture_diagnostics(hass: HomeAssistant, entry_id: str, call: 
                 snapshot["pump_events_summary"] = {"total_events": 0}
         except Exception as err:
             snapshot["pump_events_error"] = str(err)
+    else:
+        snapshot["pump_events_skipped"] = "no tconnectDeviceId in pump metadata"
 
     # 4. Current sensor state (keys and their types/values)
     if coordinator.data:
@@ -308,19 +326,14 @@ async def _handle_capture_diagnostics(hass: HomeAssistant, entry_id: str, call: 
     ts_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = hass.config.path(f"tandem_diagnostics_{ts_str}.json")
 
+    def _write() -> None:
+        with open(out_path, "w") as f:
+            json.dump(snapshot, f, indent=2, default=str)
+
     try:
-        import aiofiles
-
-        async with aiofiles.open(out_path, "w") as f:
-            await f.write(json.dumps(snapshot, indent=2, default=str))
-        _LOGGER.info("[Tandem] Diagnostic snapshot written to %s", out_path)
-    except ImportError:
-        # aiofiles not available — fall back to sync write in executor
-        import asyncio
-
-        def _write() -> None:
-            with open(out_path, "w") as f:
-                json.dump(snapshot, f, indent=2, default=str)
-
-        await asyncio.get_running_loop().run_in_executor(None, _write)
-        _LOGGER.info("[Tandem] Diagnostic snapshot written to %s", out_path)
+        await hass.async_add_executor_job(_write)
+    except OSError as err:
+        raise HomeAssistantError(f"Could not write diagnostic snapshot to {out_path}: {err}") from err
+    _LOGGER.info("[Tandem] Diagnostic snapshot written to %s", out_path)
+    if "pump_event_metadata_error" in snapshot and "pumper_info_error" in snapshot:
+        raise HomeAssistantError(f"Every Tandem fetch failed; the snapshot at {out_path} holds only the errors")

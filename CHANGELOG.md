@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+## [2.3.0-rc.6] - 2026-10-03 (pre-release)
+
 ### Changed
 - **Actions are always available and report failures.** `tandem.import_history` and
   `tandem.capture_diagnostics` are registered when the integration loads, not per entry, and take

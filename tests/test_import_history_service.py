@@ -62,9 +62,11 @@ def _setup_hass_data(hass: HomeAssistant, entry: MockConfigEntry, client: AsyncM
     coordinator = MagicMock(spec=TandemCoordinator)
     coordinator.client = client
     coordinator.timezone = "UTC"
-    coordinator._import_statistics = AsyncMock()
+    coordinator._import_statistics = AsyncMock(return_value=[])
+    coordinator.config_entry = entry
 
     entry.runtime_data = TandemRuntimeData(client=client, coordinator=coordinator)
+    entry.mock_state(hass, ConfigEntryState.LOADED)
     return coordinator
 
 
@@ -273,21 +275,6 @@ class TestImportHistoryServiceErrors:
 # ── Service registration / constant tests ────────────────────────────────────
 
 
-def _tandem_setup_patches(hass: HomeAssistant):
-    """Context manager that patches away network-touching internals of async_setup_entry."""
-    mock_coord = MagicMock()
-    mock_coord.async_config_entry_first_refresh = AsyncMock()
-    # async_setup_entry schedules this as a background task after first refresh.
-    mock_coord.async_backfill_full_history = AsyncMock()
-    mock_coord.data = {}
-
-    return (
-        patch("custom_components.tandem.TandemSourceClient"),
-        patch("custom_components.tandem.TandemCoordinator", return_value=mock_coord),
-        patch.object(hass.config_entries, "async_forward_entry_setups", return_value=None),
-    )
-
-
 class TestImportHistoryServiceRegistration:
     """Tests for service register/unregister lifecycle and module constant."""
 
@@ -374,3 +361,59 @@ class TestServiceValidation:
         _setup_hass_data(hass, _make_entry(hass), _make_mock_client())
         with pytest.raises(ServiceValidationError, match="Invalid date"):
             await _handle_import_history(hass, _make_call("2026-02-30"))
+
+
+class TestImportHistoryFailureReporting:
+    """A failed statistics write or a rejected login must not read as success."""
+
+    async def test_statistics_write_failure_raises(self, hass: HomeAssistant):
+        from custom_components.tandem import _handle_import_history
+
+        entry = _make_entry(hass)
+        client = _make_mock_client()
+        client.get_pump_events = AsyncMock(return_value=[{"event_id": 256, "timestamp": None}])
+        coordinator = _setup_hass_data(hass, entry, client)
+        coordinator._import_statistics = AsyncMock(return_value=["CGM", "IOB"])
+
+        with pytest.raises(HomeAssistantError, match="failed to write: CGM, IOB"):
+            await _handle_import_history(hass, _make_call("2026-03-01", "2026-03-03"))
+
+    async def test_import_crash_keeps_failed_ranges_in_message(self, hass: HomeAssistant):
+        from custom_components.tandem import _handle_import_history
+
+        entry = _make_entry(hass)
+        client = _make_mock_client()
+        good = [{"event_id": 256, "timestamp": datetime(2026, 3, 8, 8, 0), "glucose_mgdl": 110}]
+        client.get_pump_events = AsyncMock(side_effect=[Exception("timeout"), good])
+        coordinator = _setup_hass_data(hass, entry, client)
+        coordinator._import_statistics = AsyncMock(side_effect=RuntimeError("bad tz"))
+
+        with pytest.raises(HomeAssistantError, match="2026-03-01 → 2026-03-07") as exc:
+            await _handle_import_history(hass, _make_call("2026-03-01", "2026-03-10"))
+        assert "bad tz" in str(exc.value)
+
+    async def test_rejected_login_starts_reauth(self, hass: HomeAssistant):
+        from custom_components.tandem import _handle_import_history
+        from custom_components.tandem.exceptions import TandemAuthError
+
+        entry = _make_entry(hass)
+        client = _make_mock_client()
+        client.login = AsyncMock(side_effect=TandemAuthError("Login rejected"))
+        _setup_hass_data(hass, entry, client)
+
+        with (
+            patch.object(entry, "async_start_reauth") as start_reauth,
+            pytest.raises(HomeAssistantError, match="reauthenticate"),
+        ):
+            await _handle_import_history(hass, _make_call("2026-03-01", "2026-03-03"))
+        start_reauth.assert_called_once_with(hass)
+
+    async def test_schema_rejects_missing_start_date(self, hass: HomeAssistant):
+        """Through the real service path, a call without start_date fails validation, not with KeyError."""
+        import voluptuous as vol
+
+        from custom_components.tandem import SERVICE_IMPORT_HISTORY, async_setup
+
+        await async_setup(hass, {})
+        with pytest.raises(vol.Invalid):
+            await hass.services.async_call(DOMAIN, SERVICE_IMPORT_HISTORY, {"end_date": "2026-03-01"}, blocking=True)

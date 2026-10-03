@@ -1187,7 +1187,10 @@ class TandemSourceClient:
         if query_params.get("error", [""])[0] in ("server_error", "temporarily_unavailable"):
             raise TandemApiError(f"Authorization server error: {query_params['error'][0]}")
         if "code" not in query_params:
-            raise TandemAuthError(f"No authorization code in redirect URL: {final_url[:200]}")
+            # The message reaches the UI via the actions: name the query keys, not their values.
+            raise TandemAuthError(
+                f"No authorization code in redirect to {parsed.netloc}{parsed.path} (query keys: {sorted(query_params)})"
+            )
 
         auth_code = query_params["code"][0]
         _LOGGER.debug("Tandem: Got authorization code")

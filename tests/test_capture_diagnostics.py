@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -66,6 +67,8 @@ async def _run_diagnostics(hass, entry_id, mock_call, coordinator, tmp_path):
     entry = MockConfigEntry(domain=DOMAIN, entry_id=entry_id)
     entry.add_to_hass(hass)
     entry.runtime_data = TandemRuntimeData(client=coordinator.client, coordinator=coordinator)
+    entry.mock_state(hass, ConfigEntryState.LOADED)
+    coordinator.config_entry = entry
     out_file = str(tmp_path / "tandem_diagnostics_test.json")
 
     with patch.object(hass.config, "path", return_value=out_file):
@@ -215,3 +218,20 @@ class TestCaptureDiagnosticsMetadataFormats:
         assert snapshot is not None
         assert "pump_events_summary" not in snapshot
         coordinator.client.get_pump_events.assert_not_called()
+
+
+class TestCaptureDiagnosticsFailureReporting:
+    """A snapshot made only of errors is reported; a skipped section says why."""
+
+    async def test_all_fetches_failed_raises_after_writing(self, hass: HomeAssistant, mock_call, entry_id, tmp_path):
+        coordinator = _make_coordinator_mock(
+            metadata_error=Exception("token expired"), pumper_error=Exception("token expired")
+        )
+        with pytest.raises(HomeAssistantError, match="Every Tandem fetch failed"):
+            await _run_diagnostics(hass, entry_id, mock_call, coordinator, tmp_path)
+        assert os.listdir(tmp_path)
+
+    async def test_missing_device_id_recorded(self, hass: HomeAssistant, mock_call, entry_id, tmp_path):
+        coordinator = _make_coordinator_mock(metadata_list=[{"serialNumber": "1"}])
+        snapshot = await _run_diagnostics(hass, entry_id, mock_call, coordinator, tmp_path)
+        assert snapshot["pump_events_skipped"] == "no tconnectDeviceId in pump metadata"

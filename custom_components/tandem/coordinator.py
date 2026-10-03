@@ -2931,11 +2931,13 @@ class TandemCoordinator(DataUpdateCoordinator):
 
     # ── Long-term statistics import ──────────────────────────────────
 
-    async def _import_statistics(self, pump_events: list[dict[str, Any]]) -> None:
+    async def _import_statistics(self, pump_events: list[dict[str, Any]]) -> list[str]:
         """Import pump events as HA long-term statistics.
 
         Creates correctly-timestamped 5-minute statistics entries so
-        Statistics Graph cards show accurate historical data.
+        Statistics Graph cards show accurate historical data. Returns the
+        statistic types that failed to import (empty on success); the poll
+        path ignores it, the import_history action raises on it.
         """
         try:
             from homeassistant.components.recorder.statistics import (
@@ -2948,7 +2950,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             )
         except ImportError:
             _LOGGER.debug("Tandem: Recorder statistics API not available, skipping")
-            return
+            return ["all (recorder statistics API unavailable)"]
 
         tz = ZoneInfo(self.timezone)
 
@@ -3084,6 +3086,7 @@ class TandemCoordinator(DataUpdateCoordinator):
             ("correction_bolus", "Correction bolus", "units", "correction", correction_stats),
         ]
 
+        failed: list[str] = []
         for stat_id_suffix, name, unit, log_label, stats in stat_types:
             if not stats:
                 continue
@@ -3102,6 +3105,8 @@ class TandemCoordinator(DataUpdateCoordinator):
                 _LOGGER.info("[Tandem] Imported %d %s statistics", len(stats), log_label)
             except Exception as e:
                 _LOGGER.warning("Tandem: Failed to import %s statistics: %s", log_label, e)
+                failed.append(log_label)
+        return failed
 
 
 # ═══════════════════════════════════════════════════════════════════════════

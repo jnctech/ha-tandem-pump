@@ -33,8 +33,8 @@ Updated per review. Read this file first in every PR review session (~30 lines).
 | HACS-AUTH1 | Critical | FIXED | feature/iss-012-hacs-compliance | Carelink login+fetch combined — auth failures now routed to reauth via `ConfigEntryAuthFailed` |
 | HACS-ENT1 | Medium | FIXED | feature/iss-012-hacs-compliance | Entity `unique_id` lacked `entry_id` — multi-entry collisions. Added `coordinator.entry_id` |
 | SFH-1 | High | OPEN | — | Therapy parse failure leaves coordinator data dict in partial state |
-| SFH-3 | High | OPEN | — | import_history service silently returns on failure, no user feedback |
-| SFH-4 | Medium | OPEN | — | capture_diagnostics service silently returns on failure |
+| SFH-3 | High | FIXED | feat/quality-silver | import_history service silently returns on failure, no user feedback — now raises ServiceValidationError / HomeAssistantError, incl. failed chunks and statistics writes |
+| SFH-4 | Medium | FIXED | feat/quality-silver | capture_diagnostics service silently returns on failure — now raises on login, write, or every fetch failing |
 | B-2 | Low | OPEN | — | carb_ratio 1000x multiplier from tconnectsync spec — cannot validate without real capture |
 | D-1 | Medium | OPEN | — | No binary event fixture |
 | C-1 | High | FIXED | feature/cgm-g7-libre2-phase3 | Magic event IDs in coordinator — replaced ALL with EVT_* constants from tandem_api |

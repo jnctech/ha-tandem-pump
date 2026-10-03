@@ -52,11 +52,14 @@ SERVICE_CAPTURE_DIAGNOSTICS = "capture_diagnostics"
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-_ENTRY_FIELD = {vol.Optional("config_entry_id"): cv.string}
 IMPORT_HISTORY_SCHEMA = vol.Schema(
-    {vol.Required("start_date"): cv.date, vol.Optional("end_date"): cv.date, **_ENTRY_FIELD}
+    {
+        vol.Required("start_date"): cv.date,
+        vol.Optional("end_date"): cv.date,
+        vol.Optional("config_entry_id"): cv.string,
+    }
 )
-CAPTURE_DIAGNOSTICS_SCHEMA = vol.Schema(_ENTRY_FIELD)
+CAPTURE_DIAGNOSTICS_SCHEMA = vol.Schema({vol.Optional("config_entry_id"): cv.string})
 
 
 def _get_tandem_data(hass: HomeAssistant, call: ServiceCall) -> TandemRuntimeData:
@@ -103,7 +106,8 @@ async def _login(hass: HomeAssistant, coordinator: TandemCoordinator) -> None:
     try:
         await coordinator.client.login()
     except TandemAuthError as err:
-        coordinator.config_entry.async_start_reauth(hass)
+        if entry := coordinator.config_entry:
+            entry.async_start_reauth(hass)
         raise HomeAssistantError(f"Tandem rejected the login; reauthenticate the integration: {err}") from err
     except Exception as err:
         raise HomeAssistantError(f"Tandem login failed: {err}") from err

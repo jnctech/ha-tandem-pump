@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+## [2.3.0-rc.5] - 2026-10-03 (pre-release)
+
 ### Changed
 - **Daily carbs reads 0 g on a day without carb entries**, as Tandem Source shows it, once the pump
   has logged anything that day (basal or bolus). Before any pump data for the day it stays unknown.

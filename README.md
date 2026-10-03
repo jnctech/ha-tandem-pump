@@ -153,7 +153,7 @@ HA's Statistics Graph card. Import months of history with `tandem.import_history
 
 - Tandem t:slim X2 with an active [Tandem Source](https://source.tandemdiabetes.com) account
 - Tandem mobile app installed on Android or iOS and syncing regularly
-- Home Assistant 2023.1.0+ with HACS installed
+- Home Assistant 2026.2.0+ with HACS installed
 
 ---
 
@@ -206,8 +206,11 @@ Import months of CGM, insulin, carb, and correction bolus history into the Stati
 |---|---|---|
 | `start_date` | Yes | First date to import (date picker or YYYY-MM-DD) |
 | `end_date` | No | Last date to import — defaults to today |
+| `config_entry_id` | No | Which Tandem account — needed only when more than one is set up |
 
 Data is fetched in 7-day chunks. The action is idempotent — safe to run multiple times.
+If a chunk fails, the rest are still imported and the action reports an error naming the
+missing date ranges, so you can run it again for just those.
 
 | Scenario | Suggested range |
 |---|---|
@@ -244,6 +247,20 @@ migrate the old `carelink` config entry. If you ran any pre-2.0 (`carelink`-doma
 
 Entities are `sensor.tandem_*`; update any dashboards/automations that
 referenced the old ids.
+
+## Removing the integration
+
+1. **Settings → Devices & Services → Tandem t:slim Pump** → ⋮ → **Delete**.
+   This removes the entry, its device and entities. Nothing is changed on your
+   Tandem Source account or pump.
+2. If you installed with HACS: **HACS → Tandem t:slim Pump → ⋮ → Remove**, then
+   restart Home Assistant. For a manual install, delete
+   `config/custom_components/tandem/` and restart.
+
+Long-term statistics already recorded (glucose, insulin, carbs) stay in the
+recorder database until you delete them under **Developer Tools → Statistics**.
+Diagnostic snapshots written by `tandem.capture_diagnostics`
+(`config/tandem_diagnostics_*.json`) are not removed either; delete them by hand.
 
 ---
 

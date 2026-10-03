@@ -2,7 +2,7 @@
 #
 # Target tier:      platinum (aspirational — see docs/quality-gates.md)
 # Declared tier:    bronze  (manifest.json `quality_scale: bronze`)
-# Statuses below are CODE-VERIFIED against the source as of v2.1.0.
+# Statuses below are CODE-VERIFIED against the source as of v2.3.0-rc.5.
 #
 # The maintainer deliberately UNDER-TIERS: the platinum technical trio
 # (async-dependency, inject-websession, strict-typing) is already met, but
@@ -16,11 +16,11 @@
 rules:
   # ─── Bronze ────────────────────────────────────────────────────────────
   action-setup:
-    status: todo
+    status: done
     comment: >-
-      import_history / capture_diagnostics are registered in async_setup_entry
-      (__init__.py _register_services), not async_setup; the integration has no
-      async_setup, so actions are unavailable until an entry loads.
+      import_history / capture_diagnostics are registered once in async_setup
+      (__init__.py) and resolve the target entry per call (optional
+      config_entry_id); an unloaded entry raises ServiceValidationError.
   appropriate-polling:
     status: done
     comment: >-
@@ -28,10 +28,10 @@ rules:
       default 300); a maxDateWithEvents metadata check short-circuits the heavy
       pumpevents fetch when nothing changed (coordinator.py).
   brands:
-    status: todo
+    status: done
     comment: >-
-      Not registered in home-assistant/brands (no icon/logo PR merged). Known
-      blocker for a hacs/default submission.
+      In-repo custom_components/tandem/brand/icon.png (served by HA 2026.3+ for
+      custom integrations); no home-assistant/brands PR needed.
   common-modules:
     status: done
     comment: coordinator.py (TandemCoordinator) and entity.py (TandemEntity) present.
@@ -44,8 +44,8 @@ rules:
   dependency-transparency:
     status: done
     comment: >-
-      manifest requirements pinned exactly (aiofiles==24.1.0, certifi==2024.12.14,
-      httpx==0.28.1); tandem_api client is in-repo.
+      manifest requirements: [] — the in-repo tandem_api client uses only httpx,
+      which Home Assistant core ships; no third-party package is installed.
   docs-actions:
     status: done
     comment: services.yaml documents import_history and capture_diagnostics with fields.
@@ -56,10 +56,8 @@ rules:
     status: done
     comment: README "Add to HACS" flow + info.md install steps.
   docs-removal-instructions:
-    status: todo
-    comment: >-
-      README/info.md cover migrating off the OLD carelink integration, but there
-      is no dedicated "removing this integration from Home Assistant" section.
+    status: done
+    comment: README "Removing the integration" (entry, HACS files, leftover statistics and snapshots).
   entity-event-setup:
     status: done
     comment: >-
@@ -90,11 +88,11 @@ rules:
 
   # ─── Silver ────────────────────────────────────────────────────────────
   action-exceptions:
-    status: todo
+    status: done
     comment: >-
-      Service handlers (import_history / capture_diagnostics) log errors and
-      return instead of raising ServiceValidationError/HomeAssistantError, so
-      failures are not surfaced to the caller.
+      Bad input / no loaded entry raise ServiceValidationError; login, metadata,
+      failed import chunks and snapshot write failures raise HomeAssistantError
+      (__init__.py service handlers).
   config-entry-unloading:
     status: done
     comment: >-
@@ -128,11 +126,11 @@ rules:
     status: done
     comment: config_flow async_step_reauth / async_step_reauth_confirm; coordinator raises ConfigEntryAuthFailed.
   test-coverage:
-    status: done
+    status: todo
     comment: >-
-      L0/L1/L2 suite (logic, snapshot goldens, flow tests); coverage gate
-      fail_under=80 in CI. Note: below HA's 95%/100%-config-flow bar, but a real
-      enforced suite exists.
+      Measured 2026-10-03 (HA 2026.2.3, 568 tests): 89% overall; config_flow.py
+      63% (reauth/reconfigure steps untested), tandem_api.py 84%, coordinator.py
+      91%. HA's bar is >95%. CI gate is fail_under=80. Last Silver blocker.
 
   # ─── Gold ──────────────────────────────────────────────────────────────
   devices:
@@ -184,7 +182,7 @@ rules:
   entity-disabled-by-default:
     status: todo
     comment: >-
-      All 76 sensors are enabled by default; no noisy/rarely-used entities set
+      All sensors are enabled by default; no noisy/rarely-used entities set
       entity_registry_enabled_default=False.
   entity-translations:
     status: todo

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.core import HomeAssistant, ServiceCall
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -67,11 +68,8 @@ async def _run_diagnostics(hass, entry_id, mock_call, coordinator, tmp_path):
     entry.runtime_data = TandemRuntimeData(client=coordinator.client, coordinator=coordinator)
     out_file = str(tmp_path / "tandem_diagnostics_test.json")
 
-    with (
-        patch.object(hass.config, "path", return_value=out_file),
-        patch.dict("sys.modules", {"aiofiles": None}),
-    ):
-        await _handle_capture_diagnostics(hass, entry_id, mock_call)
+    with patch.object(hass.config, "path", return_value=out_file):
+        await _handle_capture_diagnostics(hass, mock_call)
 
     if os.path.exists(out_file):
         return json.loads(open(out_file).read())
@@ -80,8 +78,10 @@ async def _run_diagnostics(hass, entry_id, mock_call, coordinator, tmp_path):
 
 @pytest.fixture
 def mock_call():
-    """Return a mock ServiceCall."""
-    return MagicMock(spec=ServiceCall)
+    """Return a mock ServiceCall with no config_entry_id (the one loaded entry is used)."""
+    call = MagicMock(spec=ServiceCall)
+    call.data = {}
+    return call
 
 
 @pytest.fixture
@@ -90,14 +90,15 @@ def entry_id():
 
 
 class TestCaptureDiagnosticsLoginFailure:
-    """Test early return when login fails."""
+    """A login failure is raised to the caller, and nothing is written."""
 
-    async def test_login_failure_returns_early(self, hass: HomeAssistant, mock_call, entry_id, tmp_path):
+    async def test_login_failure_raises(self, hass: HomeAssistant, mock_call, entry_id, tmp_path):
         coordinator = _make_coordinator_mock(login_error=Exception("auth failed"))
-        result = await _run_diagnostics(hass, entry_id, mock_call, coordinator, tmp_path)
+        with pytest.raises(HomeAssistantError, match="login failed"):
+            await _run_diagnostics(hass, entry_id, mock_call, coordinator, tmp_path)
 
-        assert result is None
         coordinator.client.get_pump_event_metadata.assert_not_called()
+        assert not os.listdir(tmp_path)
 
 
 class TestCaptureDiagnosticsHappyPath:

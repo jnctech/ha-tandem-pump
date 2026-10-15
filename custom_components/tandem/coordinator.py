@@ -1555,14 +1555,11 @@ class TandemCoordinator(DataUpdateCoordinator):
             data[TANDEM_SENSOR_KEY_ESTIMATED_INSULIN_REMAINING] = UNAVAILABLE
 
         # ── Site change ───────────────────────────────────────────────
-        # The Tandem Source API does not return CANNULA_FILLED (event 61)
-        # for cartridge/site changes. The web UI shows "Cartridge/Site Change"
-        # as a single combined event. We derive site change from the cartridge
-        # fill timestamp, falling back to cannula fill if present.
+        # Only a real cannula fill (event 61) counts. Tandem Source has not been seen
+        # to send it, and a cartridge change is not a site change (users skip site
+        # changes), so without event 61 this stays unavailable rather than guessing (#111).
         if cannula_fills:
             data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = cannula_fills[-1]["timestamp"].replace(tzinfo=tz)
-        elif cartridge_fills:
-            data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = cartridge_fills[-1]["timestamp"].replace(tzinfo=tz)
         else:
             data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] = UNAVAILABLE
 

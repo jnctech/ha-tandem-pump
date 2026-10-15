@@ -681,6 +681,17 @@ class TestNewEventSensors:
         coordinator = await _setup_coordinator(hass, data)
         assert coordinator.data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] is not UNAVAILABLE
 
+    async def test_site_change_not_guessed_from_cartridge(self, hass: HomeAssistant):
+        # A cartridge change is not a site change; without event 61, unavailable (#111).
+        events = [
+            _make_cgm_event(1, 120),
+            _make_cartridge_event(2, 200.0),
+        ]
+        data = _make_pump_events_data(events)
+        coordinator = await _setup_coordinator(hass, data)
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_CARTRIDGE_CHANGE] is not UNAVAILABLE
+        assert coordinator.data[TANDEM_SENSOR_KEY_LAST_SITE_CHANGE] is UNAVAILABLE
+
     async def test_last_tubing_change(self, hass: HomeAssistant):
         events = [
             _make_cgm_event(1, 120),

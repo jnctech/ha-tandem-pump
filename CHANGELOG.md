@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+### Fixed
+- **Last site change no longer guesses from cartridge changes.** Tandem Source doesn't report
+  cannula fills, so the sensor fell back to the last cartridge change, which is wrong whenever a
+  cartridge is changed without a site change. It now shows a time only from a real cannula-fill
+  event and is otherwise unavailable. Use *Last cartridge change* for the cartridge time (#111).
+
 ## [2.3.0-rc.7] - 2026-10-15 (pre-release)
 
 ### Fixed

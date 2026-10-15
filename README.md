@@ -114,7 +114,7 @@ using your existing Tandem Source account. No extra hardware required.
 | Cartridge insulin | Remaining insulin (units) |
 | Last cartridge fill amount | Fill volume from API (units) |
 | Last cartridge change | Timestamp of last cartridge fill |
-| Last site change | Timestamp (derived from cartridge fill) |
+| Last site change | Timestamp of a cannula fill; unavailable when Tandem Source doesn't report one (it currently never does) |
 | Last tubing change | Timestamp of last tubing prime |
 | CGM sensor type | G6 / G7 / Libre 2 / None |
 

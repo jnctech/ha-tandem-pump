@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+### Fixed
+- **Insulin on board no longer shows an old value as current.** Tandem Source reports IOB only
+  on bolus events and the value is not decayed, so between boluses the sensor held the IOB from
+  the last bolus — hours old, and after a pump reboot it could read several units while the pump
+  showed 0. IOB now goes unavailable once the bolus that reported it is more than 60 minutes old
+  (logged once at INFO). It also no longer falls back to an older bolus's IOB when the newest
+  bolus has none. A continuous IOB source is tracked in #99. The legacy last-bolus attribute
+  `iob` is renamed `iob_at_bolus`, so a template can't read it as current IOB.
+
 ## [2.3.0-rc.6] - 2026-10-03 (pre-release)
 
 ### Changed

@@ -24,6 +24,10 @@ of truth:
 - **Decision-input sensors go `unavailable`** when the pump upload is older than
   `TANDEM_DATA_STALE_TIMEDELTA` (6 h). HA then stops recording them and does not present a stale
   value as current.
+- **IOB has its own, shorter gate** (2026-10-15): Tandem Source reports IOB only on bolus events
+  and does not decay it, so it goes `unavailable` once the bolus that carried it is older than
+  `TANDEM_IOB_MAX_AGE` (60 min), even when the upload is fresh. Found live: a 4 h-old IOB read
+  several units while the pump showed 0 after a reboot.
 - **Timestamp / settings sensors stay available** (`TANDEM_SENSORS_ALWAYS_AVAILABLE`) so the user
   can always see *when* data last arrived and what pump is connected.
 - **A named health surface:** `binary_sensor.tandem_data_stale` (`device_class=problem`,

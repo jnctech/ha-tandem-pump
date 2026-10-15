@@ -401,3 +401,8 @@ TANDEM_SENSOR_KEY_LOW_INSULIN_ALERT = "tandem_low_insulin_alert"
 # while still catching genuine sync failures within a reasonable window.
 TANDEM_DATA_STALE_MINUTES = 360
 TANDEM_DATA_STALE_TIMEDELTA = timedelta(minutes=TANDEM_DATA_STALE_MINUTES)
+
+# IOB is reported only on bolus events and is not decayed, so it goes stale long
+# before the upload does. Unavailable once the bolus that carried it is older than
+# this (operator 2026-10-15). A continuous IOB source is #99 (event 81).
+TANDEM_IOB_MAX_AGE = timedelta(minutes=60)

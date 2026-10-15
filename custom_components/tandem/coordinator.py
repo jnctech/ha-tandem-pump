@@ -952,7 +952,8 @@ class TandemCoordinator(DataUpdateCoordinator):
                     "requested_insulin": last_bolus.get("RequestedInsulin"),
                     "carbs": last_bolus.get("CarbSize"),
                     "bg": last_bolus.get("BG"),
-                    "iob": last_bolus.get("IOB"),
+                    # Named for its time so templates can't read it as current IOB.
+                    "iob_at_bolus": last_bolus.get("IOB"),
                     "completion_status": last_bolus.get("CompletionStatusID", ""),
                 }
 
@@ -1384,18 +1385,10 @@ class TandemCoordinator(DataUpdateCoordinator):
                     "completion_status": last_bolus.get("completion_status"),
                 }
 
-                # IOB from BOLUS_COMPLETED event
+                # IOB from the last BOLUS_COMPLETED event only — its age is gated
+                # on LAST_BOLUS_TIMESTAMP, so an older bolus's IOB must not stand in.
                 iob = last_bolus.get("iob")
-                if iob is not None:
-                    data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = round(float(iob), 2)
-                else:
-                    # Try to find IOB from any completed bolus
-                    for b in reversed(bolus_completed):
-                        if b.get("iob") is not None:
-                            data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = round(float(b["iob"]), 2)
-                            break
-                    else:
-                        data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = UNAVAILABLE
+                data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] = round(float(iob), 2) if iob is not None else UNAVAILABLE
 
                 # Meal bolus detection (bolus with carb flag)
                 # In binary format, bolus_type bitmask bit 4 = Carb bolus

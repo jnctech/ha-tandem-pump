@@ -287,6 +287,20 @@ class TestParsePumpEventsBolus:
 
         assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] == 5.3
 
+    async def test_iob_not_taken_from_older_bolus(self, hass: HomeAssistant):
+        """Newest bolus without IOB → UNAVAILABLE, never an older bolus's IOB.
+
+        IOB age is gated on the newest bolus's timestamp, so an older bolus's
+        IOB would be shown as current (live 2026-10-15 stale-IOB finding).
+        """
+        events = [
+            _make_bolus_completed_event(seq=1, insulin_delivered=2.0, iob=5.3, minutes_ago=30),
+            _make_bolus_completed_event(seq=2, insulin_delivered=1.0, iob=None, minutes_ago=5),  # type: ignore[arg-type]
+        ]
+        coordinator = await _setup_coordinator(hass, _make_pump_events_data(events))
+
+        assert coordinator.data[TANDEM_SENSOR_KEY_ACTIVE_INSULIN] is UNAVAILABLE
+
     async def test_meal_bolus_detection(self, hass: HomeAssistant):
         """Test meal bolus is detected from bolus_type bit 4."""
         events = [

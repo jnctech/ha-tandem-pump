@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.util import dt as dt_util
 
@@ -14,6 +14,8 @@ from .const import (
     DEVICE_PUMP_SERIAL,
     DOMAIN,
     TANDEM_DATA_STALE_TIMEDELTA,
+    TANDEM_IOB_MAX_AGE,
+    TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP,
     TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP,
     TANDEM_SENSOR_KEY_SOFTWARE_VERSION,
 )
@@ -32,17 +34,28 @@ def is_data_stale(coordinator_data: dict[str, Any] | None) -> bool:
     """
     if not coordinator_data:
         return True
+    return _older_than(coordinator_data.get(TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP), TANDEM_DATA_STALE_TIMEDELTA)
 
-    last_sg_time = coordinator_data.get(TANDEM_SENSOR_KEY_LASTSG_TIMESTAMP)
-    if last_sg_time is None or last_sg_time == STATE_UNAVAILABLE:
+
+def is_iob_stale(coordinator_data: dict[str, Any] | None) -> bool:
+    """Check whether the IOB value is too old to show as current.
+
+    IOB comes from the last bolus event and is not decayed, so its age is the
+    age of that bolus. Missing timestamp counts as stale (null-not-guess).
+    """
+    if not coordinator_data:
         return True
+    return _older_than(coordinator_data.get(TANDEM_SENSOR_KEY_LAST_BOLUS_TIMESTAMP), TANDEM_IOB_MAX_AGE)
 
+
+def _older_than(ts: Any, max_age: timedelta) -> bool:
+    """True if ``ts`` is not a datetime (missing/unavailable/malformed) or at least ``max_age`` old."""
+    if not isinstance(ts, datetime):
+        return True
     now = dt_util.utcnow()
-
-    if last_sg_time.tzinfo is None:
-        last_sg_time = last_sg_time.replace(tzinfo=now.tzinfo)
-
-    return bool((now - last_sg_time) >= TANDEM_DATA_STALE_TIMEDELTA)
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=now.tzinfo)
+    return bool((now - ts) >= max_age)
 
 
 def pump_device_info(coordinator: TandemCoordinator) -> DeviceInfo:

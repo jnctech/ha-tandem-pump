@@ -15,6 +15,7 @@ intent (const.py:667-674) and makes it the single source of truth.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from homeassistant.const import EntityCategory
@@ -23,12 +24,14 @@ from homeassistant.helpers.entity import EntityDescription
 from homeassistant.helpers.typing import UndefinedType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import ATTRIBUTION, DOMAIN
-from .helpers import is_data_stale, pump_device_info
+from .const import ATTRIBUTION, DOMAIN, TANDEM_IOB_MAX_AGE, TANDEM_SENSOR_KEY_ACTIVE_INSULIN
+from .helpers import is_data_stale, is_iob_stale, pump_device_info
 from .sensor_types import TANDEM_SENSORS_ALWAYS_AVAILABLE
 
 if TYPE_CHECKING:
     from .coordinator import TandemCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 # The coordinator centralises all polling; entity updates perform no per-entity
 # device I/O, so no parallelism limit is needed.
@@ -53,6 +56,7 @@ class TandemEntity(CoordinatorEntity["TandemCoordinator"]):
         super().__init__(coordinator)
         self.coordinator = coordinator
         self.sensor_description = sensor_description
+        self._iob_gated = False
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -97,4 +101,15 @@ class TandemEntity(CoordinatorEntity["TandemCoordinator"]):
             return False
         if self.sensor_description.key in TANDEM_SENSORS_ALWAYS_AVAILABLE:
             return True
-        return not is_data_stale(self.coordinator.data)
+        if is_data_stale(self.coordinator.data):
+            return False
+        if self.sensor_description.key == TANDEM_SENSOR_KEY_ACTIVE_INSULIN:
+            iob_stale = is_iob_stale(self.coordinator.data)
+            if iob_stale and not self._iob_gated:
+                _LOGGER.info(
+                    "Tandem: IOB unavailable — the last pump IOB (from the last bolus) is older than %s",
+                    TANDEM_IOB_MAX_AGE,
+                )
+            self._iob_gated = iob_stale
+            return not iob_stale
+        return True

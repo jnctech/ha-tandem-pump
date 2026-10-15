@@ -164,6 +164,10 @@ No data is lost. All entities remain under the active device. If both devices sh
   keep showing an old value as if it were current — a safety choice, so a stale
   reading is never mistaken for a live one. Timestamp/settings sensors stay
   visible, and `binary_sensor.tandem_data_stale` turns **on** to flag it.
+- **Insulin on board** is unavailable most of the time between boluses. Tandem
+  Source only reports IOB with a bolus and does not count it down, so the
+  sensor shows it for 60 minutes after the bolus, then goes unavailable rather
+  than show an old figure as current. The pump screen is the live IOB.
 
 **If updates are slower than expected**:
 1. Check [Mobile App Settings](#mobile-app-settings) — battery restrictions are the most common cause

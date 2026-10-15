@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - develop
 
+## [2.3.0-rc.7] - 2026-10-15 (pre-release)
+
 ### Fixed
 - **Insulin on board no longer shows an old value as current.** Tandem Source reports IOB only
   on bolus events and the value is not decayed, so between boluses the sensor held the IOB from

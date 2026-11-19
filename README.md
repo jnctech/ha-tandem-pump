@@ -233,6 +233,16 @@ This is an early mock-up — future releases will include more templates and das
 See [`examples/simple-dashboard.yaml`](examples/simple-dashboard.yaml) and
 [`examples/template_sensors.yaml`](examples/template_sensors.yaml) for details.
 
+For a single glucose card without template sensors, [SugarTV Card](https://github.com/wiltodelta/homeassistant-sugartv-card) (HACS) works with this integration out of the box. It derives the trend arrow from `*_cgm_rate_of_change`, reads `*_last_glucose_update`, and can show active insulin:
+
+```yaml
+type: custom:sugartv-card
+glucose_value: sensor.tandem_last_glucose_level_mg_dl
+insulin_value: sensor.tandem_active_insulin_iob # optional
+```
+
+![SugarTV Card in a wide and a tall dashboard slot](https://raw.githubusercontent.com/wiltodelta/homeassistant-sugartv-card/v0.22.0/sugartv-card-layouts.png)
+
 ## Upgrading from the old `carelink`-domain releases
 
 **v2.0.0 is a fresh start.** The integration moved to the `tandem` domain and
